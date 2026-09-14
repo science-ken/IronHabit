@@ -29,6 +29,11 @@ class ExerciseRepositoryImpl @Inject constructor(
             .map { entities -> entities.map(ExerciseMapper::toDomain) }
             .flowOn(ioDispatcher)
 
+    override fun observeInactive(): Flow<List<Exercise>> =
+        exerciseDao.observeInactive()
+            .map { entities -> entities.map(ExerciseMapper::toDomain) }
+            .flowOn(ioDispatcher)
+
     override fun observeByCategory(category: ExerciseCategory): Flow<List<Exercise>> =
         exerciseDao.observeByCategory(category)
             .map { entities -> entities.map(ExerciseMapper::toDomain) }

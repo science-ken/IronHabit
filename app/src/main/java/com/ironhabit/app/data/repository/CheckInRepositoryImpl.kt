@@ -41,6 +41,12 @@ class CheckInRepositoryImpl @Inject constructor(
     override suspend fun getForExerciseOnDate(exerciseId: Long, epochDay: Long): CheckIn? =
         checkInDao.getForExerciseOnDate(exerciseId, epochDay)?.let(CheckInMapper::toDomain)
 
+    /**
+     * 幂等 upsert（**禁用 `REPLACE`**）。
+     *
+     * 走 DAO 的显式 upsert：命中已有行 → `UPDATE`（保留原 `id`），未命中 → `INSERT`。
+     * 与 `week_plans` 同模式，避免 `REPLACE` 的 `DELETE` + `INSERT` 重建行 id。
+     */
     override suspend fun upsert(checkIn: CheckIn): Long =
         checkInDao.upsert(CheckInMapper.toEntity(checkIn))
 

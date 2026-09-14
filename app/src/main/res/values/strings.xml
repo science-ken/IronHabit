@@ -225,6 +225,7 @@
     <string name="label_rpe_short">RPE %1$d</string>
     <string name="cd_set_index">第 %1$d 组</string>
     <string name="label_user_edited">已改</string>
+    <string name="label_disabled_exercises">已停用</string>
     <string name="action_reset_recommended">恢复为推荐</string>
     <string name="action_add_to_day">添加到这天</string>
     <string name="empty_plan_add_hint">点「添加动作」把动作排进这一天</string>

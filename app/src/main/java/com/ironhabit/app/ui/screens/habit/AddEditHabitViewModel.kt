@@ -67,10 +67,6 @@ private const val DEFAULT_COLOR_HEX = "#2196F3"
 private const val DEFAULT_REMINDER_HOUR = 20
 private const val DEFAULT_REMINDER_MINUTE = 0
 
-/** 目标值 → 表单文本（整数去掉小数点，避免回显成 "8.0"）。 */
-private fun formatTarget(value: Double): String =
-    if (value % 1.0 == 0.0) value.toLong().toString() else value.toString()
-
 /**
  * 「新增 / 编辑习惯」ViewModel。
  *
@@ -95,7 +91,13 @@ class AddEditHabitViewModel @Inject constructor(
         load()
     }
 
-    /** 编辑态：读取旧习惯填充表单；新增态直接进入可编辑。 */
+    /**
+     * 编辑态：读取旧习惯**完整回填**表单；新增态直接进入可编辑。
+     *
+     * ⚠️ 必须回填 `note` / `targetValue` / `targetUnit`：否则 `onSave()` 会用空表单值
+     * 覆盖已保存的目标值与备注（「只改 emoji 保存 → 目标值/备注被静默清空」的数据丢失 bug）。
+     * `target_value` 是 `REAL?`，空值回填为空字符串（而非 `0.0`），整数不带小数点（`8.0 → "8"`）。
+     */
     private fun load() {
         if (habitId == 0L) {
             _uiState.update { it.copy(isLoading = false, isEditing = false) }
@@ -123,6 +125,14 @@ class AddEditHabitViewModel @Inject constructor(
                                 reminderEnabled = habit.reminderEnabled,
                                 reminderHour = habit.reminderHour ?: DEFAULT_REMINDER_HOUR,
                                 reminderMinute = habit.reminderMinute ?: DEFAULT_REMINDER_MINUTE,
+                                note = habit.note.orEmpty(),
+                                // 空值还原为空字符串（而非 "0.0"）；整数去掉小数点，避免回显成 "8.0"。
+                                targetValue = habit.targetValue
+                                    ?.let { value ->
+                                        if (value % 1.0 == 0.0) value.toLong().toString() else value.toString()
+                                    }
+                                    .orEmpty(),
+                                targetUnit = habit.targetUnit.orEmpty(),
                             )
                         }
                     }

@@ -12,6 +12,14 @@ interface ExerciseRepository {
     /** 观察全部启用动作（按 `sortOrder`、`name` 升序）。 */
     fun observeActive(): Flow<List<Exercise>>
 
+    /**
+     * 观察全部**已停用**动作（`isActive = false`）。
+     *
+     * 供「已停用」分组恢复用：停用后动作从 [observeActive] 消失，必须另有出口，
+     * 否则「误关动作」不可逆。
+     */
+    fun observeInactive(): Flow<List<Exercise>>
+
     /** 观察某分类下的启用动作。 */
     fun observeByCategory(category: ExerciseCategory): Flow<List<Exercise>>
 

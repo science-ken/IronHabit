@@ -17,6 +17,15 @@ interface ExerciseDao {
     @Query("SELECT * FROM exercises WHERE is_active = 1 ORDER BY sort_order, name")
     fun observeActive(): Flow<List<ExerciseEntity>>
 
+    /**
+     * 观察全部**已停用**动作（`is_active = 0`）。
+     *
+     * 供训练页「已停用」分组使用：停用即从启用列表消失，必须有出口才能一键恢复，
+     * 否则「误关动作」将不可逆（需重装 App）。
+     */
+    @Query("SELECT * FROM exercises WHERE is_active = 0 ORDER BY sort_order, name")
+    fun observeInactive(): Flow<List<ExerciseEntity>>
+
     @Query("SELECT * FROM exercises WHERE is_active = 1 AND category = :category ORDER BY sort_order, name")
     fun observeByCategory(category: ExerciseCategory): Flow<List<ExerciseEntity>>
 

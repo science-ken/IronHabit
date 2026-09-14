@@ -66,13 +66,15 @@ class TrainViewModel @Inject constructor(
     private val dataState: StateFlow<TrainUiState> = combine(
         plansFlow,
         exerciseRepository.observeActive(),
+        exerciseRepository.observeInactive(),
         historyFlow,
-    ) { dayPlans, exercises, history ->
+    ) { dayPlans, exercises, disabledExercises, history ->
         TrainUiState(
             isLoading = false,
             selectedDay = dayPlans.first,
             plans = dayPlans.second,
             exercises = exercises,
+            disabledExercises = disabledExercises,
             exerciseNameById = exercises.associate { exercise -> exercise.id to exercise.name },
             history = history,
         )

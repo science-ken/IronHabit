@@ -90,8 +90,10 @@
    ```
 3. **为什么要保留这个冗余列（而不是删掉）**：`StatsDao` 的聚合查询依赖 `SUM(completed_sets)` 这类 SQL 汇总，而 **SQLite 里做位计数极不现实**。保留一个 Int 冗余列，可以让**所有 v1 已有的统计查询一行都不用改**。这是**有意的反范式**，不是设计失误。
 
-**不变量（invariant）**：对任意一行，恒有 `completed_sets == completed_sets_mask.countOneBits()`。
-→ **迁移必须让存量数据也满足这个不变量**，做法见 §7（`mask = (1 << completed_sets) - 1`）。
+**不变量（invariant，⚠️ 有条件成立）**：当每行 `completed_sets ≤ 31` 时，恒有
+`completed_sets == completed_sets_mask.countOneBits()`；当 `completed_sets > 31` 时，mask 只容纳低 31 位
+（`Int.MAX_VALUE`，popcount = 31），`completed_sets` 会被按 31 **截断登记** —— 该行**不再满足严格相等**（已有意登记）。
+→ **迁移必须让存量数据在 `≤ 31` 范围内满足这个不变量**，做法见 §7（`mask = (1 << MIN(completed_sets, 31)) - 1`）。
 
 ### 2.3 字段定义
 
@@ -283,7 +285,7 @@ UPDATE week_plans SET is_active = 0, is_user_edited = 1 WHERE id = :id
 
 **为什么 `completed_sets_mask` 的存量值要这么灌**：
 若简单填 `0`，则老行会违反 §2.2 的不变量（`completed_sets = 3` 但 `mask = 0` → 派生值 0，历史组数丢失）。
-`(1 << n) - 1` 把"做了 3 组"变成 `0b111`，**不变量对全表成立，历史零丢失**。
+`(1 << n) - 1` 把"做了 3 组"变成 `0b111`，在 `n ≤ 31` 时**不变量成立、历史零丢失**（`n > 31` 时按 31 截断并在注释登记）。
 `MIN(completed_sets, 31)` 是上限钳制，避免 `1 << 31` 溢出 Kotlin `Int`（`31` 组时 mask = `2147483647` = `Int.MAX_VALUE`，正好不溢出）。
 
 ### 7.2 完整迁移代码
@@ -326,8 +328,9 @@ val MIGRATION_1_2: Migration = object : Migration(1, 2) {
             "ALTER TABLE check_ins ADD COLUMN rpe INTEGER DEFAULT NULL"
         )
         // 存量回填：把"做了 n 组"展开为低 n 位全 1，保证
-        //   completed_sets == completed_sets_mask.countOneBits()
-        // 这个不变量对全表成立（历史组数零丢失）。MIN(...,31) 防 Int 溢出。
+        //   当 n ≤ 31 时 completed_sets == completed_sets_mask.countOneBits()；
+        // 当 n > 31 时按 31 截断（mask = Int.MAX_VALUE，popcount = 31），该行不再满足严格相等。
+        // MIN(...,31) 防 `1 << 31` 触发 Kotlin Int 溢出。
         db.execSQL(
             "UPDATE check_ins SET completed_sets_mask = " +
                 "CASE WHEN completed_sets > 0 " +
@@ -363,14 +366,14 @@ companion object {
 }
 ```
 
-**② `DatabaseModule.kt:42` —— 注册迁移**
+**② `DatabaseModule.kt:43` —— 注册迁移**
 ```kotlin
 ): AppDatabase = Room.databaseBuilder(
     context,
     AppDatabase::class.java,
     DATABASE_NAME,
 )
-    .addMigration(MIGRATION_1_2)                    // ← 新增
+    .addMigrations(MIGRATION_1_2)                   // ← 新增
     .fallbackToDestructiveMigrationOnDowngrade()    // 保留，不动
     .build()
 ```
@@ -415,7 +418,7 @@ companion object {
 | `domain/model/Habit.kt` | +`note` +`targetValue` +`targetUnit`（均已拍板） |
 | `domain/model/WeekPlan.kt` | +`isUserEdited` |
 | `domain/repository/*.kt` | 对应接口补方法 |
-| `di/DatabaseModule.kt` | `.addMigration(MIGRATION_1_2)`（`DatabaseModule.kt:42`） |
+| `di/DatabaseModule.kt` | `.addMigrations(MIGRATION_1_2)`（`DatabaseModule.kt:43`） |
 | `ui/components/ExerciseCheckCard.kt` | 逐组勾选 UI（①②③④） |
 | `ui/screens/today/TodayScreen.kt` / `TodayViewModel.kt` | 日期栏 + chip + 左右滑动切换；逐组打卡回调 |
 | `ui/screens/discipline/DisciplineScreen.kt` / VM | 习惯编辑态（✎ / ✕ / +新建） |
@@ -604,7 +607,7 @@ suspend fun regenerateWeek(suggestions: List<WeekPlan>) {
 
 | ID | 任务 | 涉及文件 | 依赖 | 优先级 |
 |----|------|---------|------|-------|
-| **S1** | **Schema 迁移落地**：Entity 加列 + `Migrations.kt` + `VERSION=2` + `addMigration` | 4 个 Entity、`Migrations.kt`(新)、`AppDatabase.kt:63`、`DatabaseModule.kt:42` | 无 | P0 |
+| **S1** | **Schema 迁移落地**：Entity 加列 + `Migrations.kt` + `VERSION=2` + `addMigrations` | 4 个 Entity、`Migrations.kt`(新)、`AppDatabase.kt:63`、`DatabaseModule.kt:43` | 无 | P0 |
 | **S2** | **Domain 模型与 Mapper**：`ExerciseSource`、`completedSetsMask`/派生 getter、`isUserEdited`、`note` | 4 个 domain model、4 个 mapper | S1 | P0 |
 | **S3** | **DAO + Repository**：bitmask 同写、软删除、显式 upsert、`observePlannedWeekdays`、习惯排序 | 4 个 DAO、3 个 RepositoryImpl | S2 | P0 |
 | **S4** | **UseCase**：`ToggleSet`、`UpdateExercise`(→CUSTOM)、计划 upsert/软删/重置、习惯增删改排序 | 7 个 UseCase（多数新增） | S3 | P0 |

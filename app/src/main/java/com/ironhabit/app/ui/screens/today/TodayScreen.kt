@@ -36,10 +36,14 @@ import com.ironhabit.app.ui.components.SkeletonCard
 import com.ironhabit.app.ui.screens.checkin.CheckInSheet
 
 /**
- * Tab1「今日」页面：进度环 + 训练打卡卡片 + 习惯勾选行。
+ * Tab1「今日」页面：进度环 + 日期栏 + 训练打卡卡片 + 习惯勾选行。
  *
  * 三态齐全：加载中 → 骨架屏；加载失败 → 空态 + 「重试」；空数据 → 空态 + 「去创建」。
  * 写操作结果通过全局 [LocalSnackbarHostState] 反馈；补录详情由 [CheckInSheet]（`ModalBottomSheet`）承载。
+ *
+ * **日期切换**：顶部 [PlanDateStrip] 让用户点日期 chip（或 `‹ ›` 跨周）切换查看的日期；
+ * 切换只改 ViewModel 的日期游标（[TodayViewModel.onSelectEpochDay]），
+ * 计划 / 习惯 / 打卡状态随游标经 Room 数据流自动刷新（schema-v2 §6.1 / §6.3 坑 1）。
  *
  * @param onCreatePlan 今日无计划时「去创建」回调
  * @param onCreateHabit 今日无习惯时「去创建」回调
@@ -102,6 +106,26 @@ fun TodayScreen(
             }
 
             else -> {
+                // ---- 日期栏：切换查看日期（`‹ ›` 跨周；chip = 有计划的星期模板）----
+                val selectedEpochDay = uiState.dateEpochDay
+                if (selectedEpochDay > 0L) {
+                    val weekStartEpochDay =
+                        selectedEpochDay - (DateUtils.weekdayMon1(selectedEpochDay) - 1)
+                    PlanDateStrip(
+                        weekStartEpochDay = weekStartEpochDay,
+                        selectedEpochDay = selectedEpochDay,
+                        todayEpochDay = uiState.todayEpochDay,
+                        plannedWeekdays = uiState.plannedWeekdays,
+                        onSelectEpochDay = viewModel::onSelectEpochDay,
+                        onPreviousWeek = {
+                            viewModel.onSelectEpochDay(selectedEpochDay - DAYS_PER_WEEK)
+                        },
+                        onNextWeek = {
+                            viewModel.onSelectEpochDay(selectedEpochDay + DAYS_PER_WEEK)
+                        },
+                    )
+                }
+
                 if (uiState.isRestDay) {
                     Text(
                         text = stringResource(R.string.msg_rest_day),

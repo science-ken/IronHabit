@@ -259,7 +259,8 @@ private fun LibrarySection(
     onAddExercise: () -> Unit,
     onOpenExercise: (Long) -> Unit,
 ) {
-    if (uiState.exercises.isEmpty()) {
+    // 启用与已停用都为空才显示空态；否则即便启用列表为空，也要让「已停用」分组可见（可恢复）。
+    if (uiState.exercises.isEmpty() && uiState.disabledExercises.isEmpty()) {
         EmptyState(
             text = stringResource(R.string.empty_exercise),
             actionText = stringResource(R.string.action_create),
@@ -285,6 +286,18 @@ private fun LibrarySection(
                         onToggleActive = { active -> onToggleActive(exercise.id, active) },
                     )
                 }
+            }
+        }
+
+        // 「已停用」分组：误关动作后在此把 Switch 打开即可恢复（无需重装 App）。
+        if (uiState.disabledExercises.isNotEmpty()) {
+            CategoryHeader(text = stringResource(R.string.label_disabled_exercises))
+            uiState.disabledExercises.forEach { exercise ->
+                ExerciseRow(
+                    exercise = exercise,
+                    onClick = { onOpenExercise(exercise.id) },
+                    onToggleActive = { active -> onToggleActive(exercise.id, active) },
+                )
             }
         }
     }

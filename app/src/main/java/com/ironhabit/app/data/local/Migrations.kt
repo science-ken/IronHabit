@@ -10,7 +10,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * `RENAME COLUMN`（需 SQLite 3.25 / API 28）。故本次一律 `ADD COLUMN`；
  * 废弃列（[ExerciseEntity.isBuiltIn]）只停止读写，不做物理删除。
  *
- * 不变量：迁移后对全表恒有 `completed_sets == completed_sets_mask.countOneBits()`。
+ * ⚠️ 不变量**有条件成立**：当存量 `completed_sets ≤ 31` 时，迁移后该行
+ * `completed_sets == completed_sets_mask.countOneBits()`；当 `completed_sets > 31` 时，
+ * mask 只能容纳低 31 位（`Int.MAX_VALUE`，popcount = 31），`completed_sets` 会被按 31
+ * **截断登记** —— 此时该行**不再满足严格相等**（原值 > popcount），属已知、有意的截断。
  */
 val MIGRATION_1_2: Migration = object : Migration(1, 2) {
 
@@ -36,9 +39,11 @@ val MIGRATION_1_2: Migration = object : Migration(1, 2) {
         db.execSQL(
             "ALTER TABLE check_ins ADD COLUMN rpe INTEGER DEFAULT NULL"
         )
-        // 存量回填：把「做了 n 组」展开为低 n 位全 1，保证
-        //   completed_sets == completed_sets_mask.countOneBits()
-        // 该不变量对全表成立（历史组数零丢失）。MIN(...,31) 防 `1 << 31` 溢出 Kotlin Int。
+        // 存量回填：把「做了 n 组」展开为低 n 位全 1。
+        // 当 n ≤ 31 时满足不变量 completed_sets == completed_sets_mask.countOneBits()；
+        // 当 n > 31 时按 31 截断（mask = Int.MAX_VALUE，popcount = 31），此时
+        // completed_sets（原值）≠ countOneBits()，为已知、有意的截断（历史组数登记为 31）。
+        // MIN(...,31) 同时防止 `1 << 31` 触到符号位。
         db.execSQL(
             "UPDATE check_ins SET completed_sets_mask = " +
                 "CASE WHEN completed_sets > 0 " +
