@@ -17,6 +17,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 /** DataStore 单例扩展（按文件声明，保证只有一个 DataStore 实例）。 */
@@ -80,6 +81,23 @@ class SettingsDataStore @Inject constructor(
         context.settingsDataStore.edit { it[Keys.FIRST_LAUNCH] = false }
     }
 
+    /**
+     * 是否仍需向用户申请通知权限（API 33+）。
+     *
+     * 只要弹过一次系统授权框就不再主动弹，避免反复打扰；
+     * 用户后续可在设置页的引导卡里手动再次申请。
+     */
+    suspend fun shouldAskNotificationPermission(): Boolean =
+        context.settingsDataStore.data
+            .catch { emit(emptyPreferences()) }
+            .map { preferences -> preferences[Keys.NOTIFICATION_PERM_ASKED] != true }
+            .first()
+
+    /** 标记「已申请过通知权限」。 */
+    suspend fun markNotificationPermissionAsked() {
+        context.settingsDataStore.edit { it[Keys.NOTIFICATION_PERM_ASKED] = true }
+    }
+
     private object Keys {
         val THEME_MODE = stringPreferencesKey("theme_mode")
         val UNIT_SYSTEM = stringPreferencesKey("unit_system")
@@ -87,6 +105,7 @@ class SettingsDataStore @Inject constructor(
         val REMINDER_HOUR = intPreferencesKey("reminder_hour")
         val REMINDER_MINUTE = intPreferencesKey("reminder_minute")
         val FIRST_LAUNCH = booleanPreferencesKey("first_launch")
+        val NOTIFICATION_PERM_ASKED = booleanPreferencesKey("notification_permission_asked")
     }
 
     companion object {
