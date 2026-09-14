@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  IronHabit 基础色值（供启动图、通知小图标等 XML 场景使用）。
+  说明：Compose 界面的配色走 M3 colorScheme（见 ui/theme/Color.kt），不在此处硬编码。
+-->
+<resources>
+    <!-- 启动图标背景（深炭黑，衬托橙色哑铃） -->
+    <color name="ic_launcher_background">#FF1B1B1F</color>
+
+    <!-- 品牌主色（活力橙） -->
+    <color name="brand_orange">#FFFF7043</color>
+
+    <!-- 启动图窗口底色（与图标背景一致，避免白屏闪烁） -->
+    <color name="splash_background">#FF1B1B1F</color>
+
+    <!-- 通用黑白 -->
+    <color name="white">#FFFFFFFF</color>
+    <color name="black">#FF000000</color>
+
+    <!-- 通知小图标色（单色，系统按通知样式染色） -->
+    <color name="notification_icon_color">#FFFFFFFF</color>
+</resources>

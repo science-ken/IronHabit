@@ -1,0 +1,123 @@
+%% =====================================================================
+%% 链路①：「今日一键打卡」写入链路
+%% =====================================================================
+sequenceDiagram
+    autonumber
+    actor U as 用户
+    participant S as TodayScreen
+    participant VM as TodayViewModel
+    participant UC as QuickCheckInUseCase
+    participant CR as CheckInRepository
+    participant DAO as CheckInDao
+    participant DB as Room(SQLite)
+    participant EX as ExerciseDao
+
+    U->>S: 点击卡片「一键打卡」
+    S->>VM: onQuickCheckIn(item)
+    VM->>UC: invoke(plan)
+    activate UC
+    UC->>UC: 取 plan.targetSets / targetReps 作默认实际值
+    UC->>CR: upsert(CheckIn(exerciseId, planId, todayEpochDay,<br/>sets=targetSets, reps=targetReps, isQuick=true,<br/>dateStartMillis=startOfDayMillis(today)))
+    CR->>DAO: upsert(entity)
+    DAO->>DB: INSERT ... ON CONFLICT(exercise_id, date_epoch_day) DO UPDATE
+    Note over DAO,DB: UNIQUE(exercise_id, date_epoch_day) 保证幂等<br/>重复点击只更新，不产生脏数据
+    DB-->>DAO: rowId
+    UC->>EX: bumpUsage(exerciseId)
+    EX->>DB: UPDATE exercises SET times_used = times_used + 1 WHERE id = :id
+    UC-->>VM: Unit
+    deactivate UC
+    Note over VM,DB: 关键：DAO 返回 Flow，Room 自动重新发射
+    DB-->>VM: check_ins 表变化 → observeByDate / observeActiveDaysSince 重新发射
+    VM->>VM: 重算 TodayOverview（含 streak）→ 更新 TodayUiState
+    VM-->>S: StateFlow<TodayUiState> 新值
+    S-->>U: 卡片置灰打勾 + 进度环前进 + Snackbar「已完成 ✓」
+
+%% =====================================================================
+%% 链路②：「streak 计算与更新」链路（含跨天/补卡边界）
+%% =====================================================================
+sequenceDiagram
+    autonumber
+    participant VM as TodayViewModel
+    participant GU as GetTodayOverviewUseCase
+    participant CR as CheckInRepository
+    participant DAO as CheckInDao
+    participant CU as CalculateStreakUseCase
+    participant SC as StreakCalculator
+    participant DU as DateUtils
+
+    Note over VM,SC: 触发时机：①首页进入 ②任意打卡/撤销/补卡后 Flow 重发射
+    VM->>GU: invoke(todayEpochDay)
+    GU->>DU: todayEpochDay(clock, tz)
+    DU-->>GU: 20500  (例：2026-02-21)
+    GU->>CR: observeActiveDaysSince(0L)
+    CR->>DAO: SELECT DISTINCT date_epoch_day WHERE date_epoch_day >= :sinceEpochDay ORDER BY date_epoch_day DESC
+    DAO-->>CR: [20500, 20499, 20498, 20496, 20495, ...]
+    CR-->>GU: Flow<List<Long>>(降序)
+    GU->>CU: invoke(sortedDesc)
+    CU->>SC: calculate(sortedDesc, todayEpochDay=20500)
+    activate SC
+    Note over SC: 纯函数规则（无 Android 依赖，可单测）：
+    Note over SC: 1) head 必须是 today 或 today-1，否则 current=0
+    Note over SC: 2) 依次比较相邻差值：差=1 → current++；差>1 → 中断
+    Note over SC: 3) 用 diffDays<=1 判定连续，兼容补卡后序列补全
+    Note over SC: 4) best = 全序列最长连续段（历史最长永久保留）
+    SC-->>CU: StreakInfo(current=4, best=4, lastActive=20500)
+    deactivate SC
+    CU-->>GU: StreakInfo
+    GU-->>VM: TodayOverview(trainingStreak=StreakInfo)
+    VM-->>VM: TodayUiState.streak 更新
+    Note over VM,SC: 边界：<br/>• 次日 00:00 后打开 → todayEpochDay+1，未打卡 current 保持<br/>• 隔两天未打卡 → head<today-1 → current=0，best 不变<br/>• 对 20497 补卡 → 序列补全 → current 回升<br/>• 撤销唯一打卡 → 序列空 → current=0，best 按剩余历史重算
+    VM->>VM: Snackbar「连续 N 天 🔥」/「已断档，重新开始」
+
+%% =====================================================================
+%% 链路③：「本地通知提醒」调度链路
+%% =====================================================================
+sequenceDiagram
+    autonumber
+    actor U as 用户
+    participant ST as SettingsScreen
+    participant SVM as SettingsViewModel
+    participant SU as ScheduleReminderUseCase
+    participant SR as SettingsRepository
+    participant RS as ReminderSchedulerImpl
+    participant AM as AlarmManager(系统)
+    participant RR as ReminderReceiver
+    participant NH as NotificationHelper
+    participant OS as 系统通知栏
+
+    U->>ST: 打开提醒开关 / 设定 20:00
+    ST->>SVM: setReminder(enabled=true, hour=20, minute=0)
+    SVM->>SU: invoke()
+    SU->>SR: settings() 读取最新设置
+    SR-->>SU: AppSettings(reminderEnabled=true, 20:00)
+    SU->>RS: schedule(ReminderType.TRAINING, 20, 0)
+    activate RS
+    RS->>RS: 计算 triggerAt = 今天20:00；若已过则 +1 天
+    RS->>AM: setExactAndAllowWhileIdle(RTC_WAKEUP, triggerAt,<br/>PendingIntent(ReminderReceiver, reqCode=1, IMMUTABLE))
+    Note over RS,AM: API 31+ 且无 SCHEDULE_EXACT_ALARM 权限时<br/>自动降级 setAndAllowWhileIdle（不精确但可用）
+    RS-->>SU: Unit
+    deactivate RS
+    SU-->>SVM: Unit
+    SVM-->>ST: Snackbar「提醒已设置：每天 20:00」
+
+    Note over AM,OS: —— 到点触发（可能发生在杀进程/离线状态）——
+    AM->>RR: onReceive(intent, hour, minute)
+    RR->>NH: showReminder(type)
+    NH->>NH: 检查 POST_NOTIFICATIONS 权限（API 33+）
+    NH->>NH: buildNotification(channel="ironhabit_reminder",<br/>title="该训练啦 🏋️", text="今天的计划还在等你",<br/>contentIntent=MainActivity)
+    NH->>OS: notify(NOTIFICATION_ID)
+    OS-->>U: 通知栏弹出 + 震动
+    RR->>RS: scheduleNext(ReminderType.TRAINING, hour, minute)
+    Note over RR,RS: 自续期：一次性精确闹钟 + 触发后再排明天，<br/>规避 setRepeating 在 API19+ 被批处理导致的漂移
+    RS->>AM: setExactAndAllowWhileIdle(明天同一时刻)
+
+    Note over U,RS: —— 手机重启后 ——
+    AM->>RR: (系统) BOOT_COMPLETED → BootReceiver.onReceive
+    RR->>SR: settings()
+    SR-->>RR: reminderEnabled=true, 20:00
+    alt 提醒已开启
+        RR->>RS: rescheduleAll()
+        RS->>AM: 重排训练 + 习惯两类闹钟
+    else 提醒已关闭
+        RR->>RS: cancel(ALL)
+    end

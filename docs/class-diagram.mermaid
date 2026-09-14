@@ -1,0 +1,381 @@
+classDiagram
+    %% ================= 领域模型 =================
+    class Exercise {
+        +Long id
+        +String name
+        +ExerciseCategory category
+        +String? muscleGroup
+        +Boolean isBuiltIn
+        +Boolean isActive
+        +Int? defaultSets
+        +Int? defaultReps
+        +Int? defaultDurationSec
+        +Int sortOrder
+        +Int timesUsed
+        +Long createdAt
+    }
+    class ExerciseCategory {
+        <<enumeration>>
+        BODYWEIGHT
+        STRENGTH
+        CARDIO
+        CUSTOM
+    }
+    class WeekPlan {
+        +Long id
+        +Long exerciseId
+        +Int dayOfWeek
+        +Int targetSets
+        +Int targetReps
+        +Float? targetWeightKg
+        +Int? targetDurationMin
+        +Int sortOrder
+        +Boolean isActive
+        +Long createdAt
+    }
+    class CheckIn {
+        +Long id
+        +Long exerciseId
+        +Long? planId
+        +Long dateEpochDay
+        +Long dateStartMillis
+        +Int completedSets
+        +Int completedReps
+        +Float? weightKg
+        +Int? durationMinutes
+        +String? notes
+        +Boolean isQuick
+        +Long loggedAtMillis
+        +Long createdAt
+    }
+    class Habit {
+        +Long id
+        +String name
+        +String emoji
+        +String colorHex
+        +HabitFrequency frequency
+        +Int weeklyDaysMask
+        +Boolean reminderEnabled
+        +Int? reminderHour
+        +Int? reminderMinute
+        +Boolean isActive
+        +Int sortOrder
+        +Long createdAt
+    }
+    class HabitFrequency {
+        <<enumeration>>
+        DAILY
+        WEEKLY
+    }
+    class HabitLog {
+        +Long id
+        +Long habitId
+        +Long dateEpochDay
+        +Long dateStartMillis
+        +Boolean isCompleted
+        +String? note
+        +Long loggedAtMillis
+        +Long createdAt
+    }
+    class BodyMetric {
+        +Long id
+        +BodyMetricType type
+        +Float value
+        +String unit
+        +Long dateEpochDay
+        +Long dateStartMillis
+        +String? note
+        +Long createdAt
+    }
+    class BodyMetricType {
+        <<enumeration>>
+        WEIGHT
+        BODY_FAT
+        MUSCLE_MASS
+        WAIST
+        CHEST
+        ARM
+        HIP
+    }
+    class ThemeMode {
+        <<enumeration>>
+        LIGHT
+        DARK
+        SYSTEM
+    }
+    class UnitSystem {
+        <<enumeration>>
+        METRIC
+        IMPERIAL
+    }
+    class AppSettings {
+        +ThemeMode themeMode
+        +UnitSystem unitSystem
+        +Boolean reminderEnabled
+        +Int reminderHour
+        +Int reminderMinute
+        +Boolean isFirstLaunch
+    }
+    class TrendPoint {
+        +Long epochDay
+        +Int count
+    }
+    class CategoryShare {
+        +ExerciseCategory category
+        +Int count
+        +Float ratio
+    }
+    class HeatmapCell {
+        +Long epochDay
+        +Int count
+        +Int level
+    }
+    class StreakInfo {
+        +Int current
+        +Int best
+        +Long? lastActiveEpochDay
+    }
+    class TodayOverview {
+        +Long dateEpochDay
+        +List~TodayPlanItem~ plans
+        +List~HabitItem~ habits
+        +Int completedCount
+        +Int totalCount
+        +StreakInfo trainingStreak
+    }
+    class TodayPlanItem {
+        +WeekPlan plan
+        +Exercise exercise
+        +Boolean isCompleted
+        +CheckIn? checkIn
+    }
+    class HabitItem {
+        +Habit habit
+        +Boolean isCompletedToday
+        +StreakInfo streak
+    }
+
+    Exercise --> ExerciseCategory
+    WeekPlan --> Exercise
+    CheckIn --> Exercise
+    Habit --> HabitFrequency
+    HabitLog --> Habit
+    BodyMetric --> BodyMetricType
+    CategoryShare --> ExerciseCategory
+    AppSettings --> ThemeMode
+    AppSettings --> UnitSystem
+    TodayOverview --> TodayPlanItem
+    TodayOverview --> HabitItem
+    TodayOverview --> StreakInfo
+    TodayPlanItem --> WeekPlan
+    TodayPlanItem --> CheckIn
+    HabitItem --> Habit
+    HabitItem --> StreakInfo
+
+    %% ================= 仓库接口 =================
+    class ExerciseRepository {
+        <<interface>>
+        +observeActive() Flow~List~Exercise~~
+        +observeByCategory(category) Flow~List~Exercise~~
+        +getById(id) Exercise?
+        +upsert(exercise) Long
+        +setActive(id, active)
+        +nameExists(name, excludeId) Boolean
+        +bumpUsage(exerciseId)
+        +seedBuiltIns() Int
+    }
+    class PlanRepository {
+        <<interface>>
+        +observePlansForDay(dayOfWeek) Flow~List~WeekPlan~~
+        +observeAll() Flow~List~WeekPlan~~
+        +upsert(plan) Long
+        +delete(id)
+    }
+    class CheckInRepository {
+        <<interface>>
+        +observeByDate(epochDay) Flow~List~CheckIn~~
+        +observeByExercise(exerciseId) Flow~List~CheckIn~~
+        +observeBetween(startEpochDay, endEpochDay) Flow~List~CheckIn~~
+        +getForExerciseOnDate(exerciseId, epochDay) CheckIn?
+        +upsert(checkIn) Long
+        +delete(exerciseId, epochDay)
+        +observeActiveDaysSince(epochDay) Flow~List~Long~~
+    }
+    class HabitRepository {
+        <<interface>>
+        +observeActiveHabits() Flow~List~Habit~~
+        +observeLogsBetween(startEpochDay, endEpochDay) Flow~List~HabitLog~~
+        +observeActiveDays(habitId) Flow~List~Long~~
+        +getLogOnDate(habitId, epochDay) HabitLog?
+        +upsertHabit(habit) Long
+        +setLog(habitId, epochDay, done, note?)
+    }
+    class StatsRepository {
+        <<interface>>
+        +trendPoints(days) List~TrendPoint~
+        +categoryShare() List~CategoryShare~~
+        +heatmap(days) List~HeatmapCell~~
+        +completionRate(startEpochDay, endEpochDay) Float
+    }
+    class BodyMetricRepository {
+        <<interface>>
+        +observeByType(type) Flow~List~BodyMetric~~
+        +latest(type) BodyMetric?
+        +upsert(metric) Long
+        +delete(id)
+    }
+    class SettingsRepository {
+        <<interface>>
+        +settings() Flow~AppSettings~~
+        +setTheme(mode)
+        +setUnit(system)
+        +setReminderEnabled(enabled)
+        +setReminderTime(hour, minute)
+        +markFirstLaunchCompleted()
+    }
+    class BackupRepository {
+        <<interface>>
+        +export(): String
+        +import(json) Result~Unit~
+    }
+    class ReminderType {
+        <<enumeration>>
+        TRAINING
+        HABIT
+    }
+    class ReminderScheduler {
+        <<interface>>
+        +schedule(type, hour, minute)
+        +scheduleNext(type, hour, minute)
+        +cancel(type)
+        +cancelAll()
+        +rescheduleAll()
+    }
+
+    ExerciseRepository ..> Exercise
+    PlanRepository ..> WeekPlan
+    CheckInRepository ..> CheckIn
+    HabitRepository ..> Habit
+    HabitRepository ..> HabitLog
+    StatsRepository ..> TrendPoint
+    StatsRepository ..> CategoryShare
+    StatsRepository ..> HeatmapCell
+    ReminderScheduler ..> ReminderType
+    StatsRepository ..> TodayOverview
+    BodyMetricRepository ..> BodyMetric
+
+    %% ================= UseCase =================
+    class GetTodayOverviewUseCase {
+        +invoke(epochDay) Flow~TodayOverview~
+    }
+    class QuickCheckInUseCase {
+        +invoke(plan: WeekPlan) Unit
+        +invoke(item: TodayPlanItem) Unit
+    }
+    class DetailedCheckInUseCase {
+        +invoke(input: DetailedCheckInInput) Unit
+        +invoke(exerciseId, planId, epochDay, sets, reps, weightKg, durationMinutes, notes) Unit
+    }
+    class UndoCheckInUseCase {
+        +invoke(exerciseId, epochDay) Unit
+    }
+    class BackfillCheckInUseCase {
+        +invoke(exerciseId, epochDay, sets, reps) Unit
+    }
+    class ToggleHabitUseCase {
+        +invoke(habitId, epochDay, done) Unit
+    }
+    class CalculateStreakUseCase {
+        +invoke(epochDays) StreakInfo
+    }
+    class ScheduleReminderUseCase {
+        +invoke() Unit
+    }
+    class GetStatsUseCase {
+        +invoke(days: Int = 30) StatsBundle
+    }
+    class GetHeatmapUseCase {
+        +invoke(days: Int = 90) List~HeatmapCell~
+    }
+    class SeedExercisesUseCase {
+        +invoke() Int
+    }
+    class StatsBundle {
+        +trend: List~TrendPoint~
+        +categoryShare: List~CategoryShare~
+        +comparison: PeriodComparison
+    }
+    class PeriodComparison {
+        +currentTotal: Int
+        +previousTotal: Int
+        +deltaPercent: Float
+    }
+    class ExportDataUseCase {
+        +invoke() Uri
+    }
+    class ImportDataUseCase {
+        +invoke(uri: Uri) Result~Unit~
+    }
+    class StreakCalculator {
+        <<object>>
+        +calculate(sortedDescEpochDays: List~Long~, todayEpochDay: Long) StreakInfo
+    }
+    class DateUtils {
+        <<object>>
+        +todayEpochDay(clock, tz) Long
+        +startOfDayMillis(epochDay, tz) Long
+        +weekdayMon1(epochDay) Int
+    }
+
+    GetTodayOverviewUseCase --> PlanRepository
+    GetTodayOverviewUseCase --> CheckInRepository
+    GetTodayOverviewUseCase --> HabitRepository
+    GetTodayOverviewUseCase --> ExerciseRepository
+    GetTodayOverviewUseCase --> CalculateStreakUseCase
+    QuickCheckInUseCase --> CheckInRepository
+    QuickCheckInUseCase --> ExerciseRepository
+    DetailedCheckInUseCase --> CheckInRepository
+    DetailedCheckInUseCase --> ExerciseRepository
+    UndoCheckInUseCase --> CheckInRepository
+    BackfillCheckInUseCase --> CheckInRepository
+    ToggleHabitUseCase --> HabitRepository
+    CalculateStreakUseCase --> StreakCalculator
+    ScheduleReminderUseCase --> SettingsRepository
+    ScheduleReminderUseCase --> ReminderScheduler
+    CalculateStreakUseCase --> DateUtils
+    GetStatsUseCase --> StatsRepository
+    GetStatsUseCase ..> StatsBundle
+    StatsBundle ..> TrendPoint
+    StatsBundle ..> CategoryShare
+    StatsBundle ..> PeriodComparison
+    GetHeatmapUseCase --> StatsRepository
+    SeedExercisesUseCase --> ExerciseRepository
+    ExportDataUseCase --> BackupRepository
+    ImportDataUseCase --> BackupRepository
+
+    %% ================= ViewModel =================
+    class TodayViewModel {
+        +uiState StateFlow~TodayUiState~
+        +onQuickCheckIn(item)
+        +onToggleHabit(habit)
+    }
+    class TrainViewModel {
+        +uiState StateFlow~TrainUiState~
+        +onAddPlan(...)
+        +onDeletePlan(id)
+    }
+    class DisciplineViewModel {
+        +uiState StateFlow~DisciplineUiState~
+        +onToggle(habitId, epochDay, done)
+    }
+    class ProfileViewModel {
+        +uiState StateFlow~ProfileUiState~
+    }
+    TodayViewModel --> GetTodayOverviewUseCase
+    TodayViewModel --> QuickCheckInUseCase
+    TodayViewModel --> ToggleHabitUseCase
+    TrainViewModel --> PlanRepository
+    TrainViewModel --> ExerciseRepository
+    DisciplineViewModel --> ToggleHabitUseCase
+    ProfileViewModel --> GetStatsUseCase
+    ProfileViewModel --> SettingsRepository

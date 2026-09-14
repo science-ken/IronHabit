@@ -1,0 +1,22 @@
+# =============================================================================
+# IronHabit — Git 忽略规则
+# =============================================================================
+*.iml
+.gradle/
+/local.properties
+/keystore.properties
+*.jks
+*.keystore
+.idea/
+.DS_Store
+build/
+/app/build/
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+*.hprof
+
+# Gradle Wrapper 的 jar 必须纳入版本管理，切勿忽略
+!gradle/wrapper/gradle-wrapper.jar

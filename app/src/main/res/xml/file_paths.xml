@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  FileProvider 可共享路径（用于备份 JSON 导出后通过其它应用分享）。
+  authority：${applicationId}.fileprovider  →  com.ironhabit.app.fileprovider
+-->
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 应用私有 files/exports 目录下的导出文件 -->
+    <files-path
+        name="exports"
+        path="exports/" />
+    <!-- 缓存目录下的导出文件（临时分享） -->
+    <cache-path
+        name="cache_exports"
+        path="exports/" />
+    <!-- 外部私有目录（若无 SD 卡亦可用） -->
+    <external-files-path
+        name="ext_exports"
+        path="exports/" />
+</paths>

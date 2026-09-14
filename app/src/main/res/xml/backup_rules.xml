@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 11 及以下（fullBackupContent）：
+  允许备份本地数据库与 DataStore，实现换机不丢数据。
+  Android 12+ 的对应规则见 data_extraction_rules.xml。
+-->
+<full-backup-content>
+    <!-- Room 数据库（唯一真源） -->
+    <include domain="database" path="." />
+    <!-- DataStore 设置（主题/单位/提醒开关等） -->
+    <include domain="file" path="datastore" />
+    <!-- SharedPreferences（如有） -->
+    <include domain="sharedpref" path="." />
+</full-backup-content>

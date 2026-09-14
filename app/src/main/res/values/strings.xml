@@ -1,0 +1,217 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  IronHabit 全部用户可见文案（简体中文）。
+  命名规范（架构 §7.5）：tab_* / empty_* / action_* / notif_* / title_* / label_* / hint_* / msg_* / error_*
+  代码内【禁止】硬编码中文字符串（BuiltInExercises 的预置动作名除外）。
+-->
+<resources>
+
+    <!-- ===== 应用与品牌 ===== -->
+    <string name="app_name">自律健身</string>
+    <string name="app_slogan">自律给你自由</string>
+
+    <!-- ===== 底部导航 Tab ===== -->
+    <string name="tab_today">今日</string>
+    <string name="tab_train">训练</string>
+    <string name="tab_discipline">自律</string>
+    <string name="tab_profile">我的</string>
+
+    <!-- ===== 通用操作按钮 ===== -->
+    <string name="action_quick_checkin">一键打卡</string>
+    <string name="action_checkin">打卡</string>
+    <string name="action_undo">撤销</string>
+    <string name="action_undo_checkin">撤销打卡</string>
+    <string name="action_backfill">补卡</string>
+    <string name="action_detailed">补录详情</string>
+    <string name="action_save">保存</string>
+    <string name="action_cancel">取消</string>
+    <string name="action_delete">删除</string>
+    <string name="action_edit">编辑</string>
+    <string name="action_add">新增</string>
+    <string name="action_confirm">确定</string>
+    <string name="action_retry">重试</string>
+    <string name="action_close">关闭</string>
+    <string name="action_export">导出</string>
+    <string name="action_import">导入</string>
+    <string name="action_share">分享</string>
+    <string name="action_create">去创建</string>
+    <string name="action_start">开始</string>
+
+    <!-- ===== 今日页 ===== -->
+    <string name="title_today">今日</string>
+    <string name="title_today_train">今日训练</string>
+    <string name="title_today_habits">今日习惯</string>
+    <string name="title_progress">今日完成</string>
+    <string name="label_streak_days">连续 %1$d 天</string>
+    <string name="label_streak_best">历史最长 %1$d 天</string>
+    <string name="label_progress_ratio">%1$d / %2$d</string>
+    <string name="label_today_done">已完成 ✓</string>
+    <string name="label_today_pending">待完成</string>
+    <string name="msg_checkin_done">已完成 ✓</string>
+    <string name="msg_streak_up">连续 %1$s 天 🔥</string>
+    <string name="msg_streak_broken">已断档，重新开始</string>
+    <string name="msg_rest_day">今天是休息日，好好放松 😌</string>
+    <string name="empty_today_plan">今天还没有安排，去「训练」页添加计划吧</string>
+    <string name="empty_today_habits">还没有习惯，去「自律」页添加一个吧</string>
+
+    <!-- ===== 训练页 ===== -->
+    <string name="title_train">训练</string>
+    <string name="section_week_plan">周计划</string>
+    <string name="section_exercise_library">动作库</string>
+    <string name="section_history">打卡历史</string>
+    <string name="title_week_plan_by_day">周计划 · %1$s</string>
+    <string name="title_add_plan">新增计划</string>
+    <string name="title_edit_plan">编辑计划</string>
+    <string name="title_add_exercise">新增动作</string>
+    <string name="title_edit_exercise">编辑动作</string>
+    <string name="title_exercise_detail">动作详情</string>
+    <string name="empty_plan">这一天还没有计划，点右上角「+」添加</string>
+    <string name="empty_exercise">动作库为空，点右上角「+」创建自定义动作</string>
+    <string name="empty_history">还没有打卡记录</string>
+
+    <!-- 星期（周一~周日，1..7） -->
+    <string name="weekday_mon">周一</string>
+    <string name="weekday_tue">周二</string>
+    <string name="weekday_wed">周三</string>
+    <string name="weekday_thu">周四</string>
+    <string name="weekday_fri">周五</string>
+    <string name="weekday_sat">周六</string>
+    <string name="weekday_sun">周日</string>
+    <string name="weekday_short_mon">一</string>
+    <string name="weekday_short_tue">二</string>
+    <string name="weekday_short_wed">三</string>
+    <string name="weekday_short_thu">四</string>
+    <string name="weekday_short_fri">五</string>
+    <string name="weekday_short_sat">六</string>
+    <string name="weekday_short_sun">日</string>
+
+    <!-- 动作分类 -->
+    <string name="category_all">全部</string>
+    <string name="category_bodyweight">自重</string>
+    <string name="category_strength">力量</string>
+    <string name="category_cardio">有氧</string>
+    <string name="category_custom">自定义</string>
+
+    <!-- 表单字段 -->
+    <string name="hint_exercise_name">动作名称</string>
+    <string name="hint_category">分类</string>
+    <string name="hint_muscle_group">目标肌群（可选）</string>
+    <string name="hint_default_sets">默认组数</string>
+    <string name="hint_default_reps">默认每组次数</string>
+    <string name="hint_default_duration_sec">默认时长（秒）</string>
+    <string name="hint_target_sets">目标组数</string>
+    <string name="hint_target_reps">目标次数</string>
+    <string name="hint_target_weight_kg">目标重量（kg，可选）</string>
+    <string name="hint_target_duration_min">目标时长（分钟，可选）</string>
+    <string name="hint_completed_sets">实际组数</string>
+    <string name="hint_completed_reps">实际次数</string>
+    <string name="hint_weight_kg">重量（kg）</string>
+    <string name="hint_duration_minutes">时长（分钟）</string>
+    <string name="hint_notes">备注（可选）</string>
+    <string name="hint_pick_exercise">选择动作</string>
+
+    <!-- ===== 自律页（习惯）===== -->
+    <string name="title_discipline">自律</string>
+    <string name="title_add_habit">新增习惯</string>
+    <string name="title_edit_habit">编辑习惯</string>
+    <string name="title_habits">习惯</string>
+    <string name="title_heatmap">打卡热力图</string>
+    <string name="title_discipline_summary">本月小结</string>
+    <string name="hint_habit_name">习惯名称</string>
+    <string name="hint_habit_emoji">图标（emoji）</string>
+    <string name="hint_habit_color">主题色</string>
+    <string name="hint_frequency">频率</string>
+    <string name="hint_weekly_days">重复日</string>
+    <string name="label_frequency_daily">每天</string>
+    <string name="label_frequency_weekly">每周指定日</string>
+    <string name="label_reminder_switch">提醒</string>
+    <string name="label_reminder_time">提醒时间</string>
+    <string name="empty_habit">还没有习惯，点右上角「+」添加第一个吧</string>
+    <string name="empty_heatmap">暂无打卡数据</string>
+    <string name="label_completion_rate">区间完成率</string>
+
+    <!-- ===== 我的页 ===== -->
+    <string name="title_profile">我的</string>
+    <string name="title_trend_chart">近 30 天趋势</string>
+    <string name="title_category_chart">训练类型占比</string>
+    <string name="title_body_metrics">身体数据</string>
+    <string name="title_settings">设置</string>
+    <string name="title_backup">数据备份</string>
+    <string name="title_about">关于</string>
+    <string name="entry_body_metrics">身体数据</string>
+    <string name="entry_settings">设置</string>
+    <string name="entry_backup">数据备份</string>
+    <string name="empty_charts">数据还不够，继续打卡就能看到趋势啦</string>
+    <string name="empty_body_metrics">还没有身体数据，点「+」记录第一条</string>
+
+    <!-- 身体数据 -->
+    <string name="title_add_body_metric">记录身体数据</string>
+    <string name="hint_metric_type">指标类型</string>
+    <string name="hint_metric_value">数值</string>
+    <string name="hint_metric_unit">单位</string>
+    <string name="metric_weight">体重</string>
+    <string name="metric_body_fat">体脂率</string>
+    <string name="metric_muscle">肌肉量</string>
+    <string name="metric_chest">胸围</string>
+    <string name="metric_waist">腰围</string>
+    <string name="metric_hip">臀围</string>
+    <string name="metric_arm">臂围</string>
+
+    <!-- ===== 设置页 ===== -->
+    <string name="settings_theme">主题</string>
+    <string name="settings_theme_light">浅色</string>
+    <string name="settings_theme_dark">深色</string>
+    <string name="settings_theme_system">跟随系统</string>
+    <string name="settings_unit">单位制</string>
+    <string name="settings_unit_metric">公制（kg/km）</string>
+    <string name="settings_unit_imperial">英制（lb/mi）</string>
+    <string name="settings_reminder">每日训练提醒</string>
+    <string name="settings_reminder_time">提醒时间</string>
+    <string name="settings_reminder_hint">提醒为本地通知，飞行模式下同样生效</string>
+    <string name="settings_exact_alarm_tip">未开启「精确闹钟」权限，提醒时间可能有偏差。点此去设置</string>
+    <string name="settings_notification_permission_tip">通知权限未开启，无法收到提醒</string>
+    <string name="settings_version">版本 %1$s</string>
+    <string name="settings_privacy">本应用完全离线运行，不联网、不采集任何数据</string>
+
+    <!-- ===== 备份页 ===== -->
+    <string name="backup_export_title">导出备份</string>
+    <string name="backup_import_title">导入备份</string>
+    <string name="backup_export_desc">将全部数据导出为 JSON 文件，可保存到本地或用其它应用分享</string>
+    <string name="backup_import_desc">从 JSON 文件恢复数据，将【覆盖】当前全部数据，请谨慎操作</string>
+    <string name="msg_export_success">导出成功</string>
+    <string name="msg_export_failed">导出失败，请重试</string>
+    <string name="msg_import_success">导入成功</string>
+    <string name="msg_import_failed">导入失败：文件格式不正确</string>
+    <string name="dialog_import_confirm_title">确认导入？</string>
+    <string name="dialog_import_confirm_message">导入会覆盖当前全部数据且不可撤销，确定继续吗？</string>
+
+    <!-- ===== 通知 ===== -->
+    <string name="notif_channel_training_name">训练提醒</string>
+    <string name="notif_channel_training_desc">每日训练计划到点提醒</string>
+    <string name="notif_channel_habit_name">习惯提醒</string>
+    <string name="notif_channel_habit_desc">习惯打卡到点提醒</string>
+    <string name="notif_training_title">该训练啦 🏋️</string>
+    <string name="notif_training_text">今天的计划还在等你</string>
+    <string name="notif_habit_title">别断了连续记录 🔥</string>
+    <string name="notif_habit_text">今天的习惯还没打卡哦</string>
+
+    <!-- ===== 提示与错误（用户可见，一律中文，禁止暴露英文堆栈）===== -->
+    <string name="msg_saved">已保存</string>
+    <string name="msg_deleted">已删除</string>
+    <string name="msg_undo_done">已撤销</string>
+    <string name="msg_reminder_set">提醒已设置：每天 %1$s</string>
+    <string name="msg_reminder_off">提醒已关闭</string>
+    <string name="error_load_failed">加载失败，请重试</string>
+    <string name="error_save_failed">保存失败，请重试</string>
+    <string name="error_name_empty">名称不能为空</string>
+    <string name="error_name_exists">该名称已存在</string>
+    <string name="error_invalid_number">请输入有效的数字</string>
+    <string name="error_generic">出错了，请稍后再试</string>
+
+    <!-- ===== 无障碍 / 通用 ===== -->
+    <string name="cd_checkin_done">已完成</string>
+    <string name="cd_checkin_undone">未完成</string>
+    <string name="cd_navigate_back">返回</string>
+    <string name="label_optional">（可选）</string>
+
+</resources>

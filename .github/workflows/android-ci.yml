@@ -1,0 +1,58 @@
+name: Android CI
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: 零网络红线校验
+        run: |
+          if grep -RE "retrofit|okhttp|ktor|firebase|play-services|volley" \
+               app/build.gradle.kts gradle/libs.versions.toml; then
+            echo "::error::检测到网络/云服务依赖，违反纯离线约束"
+            exit 1
+          fi
+          if grep -q "android.permission.INTERNET" app/src/main/AndroidManifest.xml; then
+            echo "::error::AndroidManifest 声明了 INTERNET 权限，违反纯离线约束"
+            exit 1
+          fi
+          echo "零网络约束校验通过 ✅"
+
+      - name: Run unit tests
+        run: ./gradlew testDebugUnitTest --stacktrace
+
+      - name: Build debug APK
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ironhabit-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error

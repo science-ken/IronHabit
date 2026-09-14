@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  通知小图标（必须单色；系统会按通知样式着色）。
+  内容：极简哑铃，透明背景，白色填充。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="#FFFFFFFF">
+
+    <!-- 左侧外片 -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M4,9 h2 v6 h-2 z" />
+    <!-- 左侧主片 -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M6,6 h2.5 v12 h-2.5 z" />
+    <!-- 中间横杠 -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M8.5,10.75 h7 v2.5 h-7 z" />
+    <!-- 右侧主片 -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M15.5,6 h2.5 v12 h-2.5 z" />
+    <!-- 右侧外片 -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M18,9 h2 v6 h-2 z" />
+
+</vector>

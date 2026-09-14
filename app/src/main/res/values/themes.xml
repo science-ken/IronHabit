@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  IronHabit 宿主主题（XML 层）。
+  真正的界面配色由 Compose 的 IronHabitTheme（ui/theme/Theme.kt）负责；
+  此处仅定义窗口级主题与启动图主题（core-splashscreen）。
+-->
+<resources>
+
+    <!-- 应用主主题：无 ActionBar（界面由 Compose 全权绘制） -->
+    <style name="Theme.IronHabit" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/splash_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+
+    <!-- 启动图主题（Android 12+ 原生启动动画由 core-splashscreen 统一） -->
+    <style name="Theme.IronHabit.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/splash_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/Theme.IronHabit</item>
+    </style>
+
+</resources>

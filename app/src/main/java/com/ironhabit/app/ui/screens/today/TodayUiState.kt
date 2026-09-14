@@ -1,0 +1,37 @@
+package com.ironhabit.app.ui.screens.today
+
+import com.ironhabit.app.domain.model.HabitItem
+import com.ironhabit.app.domain.model.StreakInfo
+import com.ironhabit.app.domain.model.TodayPlanItem
+
+/**
+ * 「今日」页 UI 状态（不可变）。
+ *
+ * 文案一律用**资源 id**（[errorRes] / [snackbarRes]）承载，避免在 UiState 中硬编码中文字符串，
+ * 由 Compose 侧 `stringResource(...)` 解析（架构 §7.5）。
+ *
+ * @property isLoading 首帧加载中（显示骨架屏）
+ * @property dateEpochDay 今日日期口径（`LocalDate.toEpochDays()`）
+ * @property plans 今日训练项
+ * @property habits 今日习惯项
+ * @property completedCount 已完成项数（训练 + 习惯）
+ * @property totalCount 总项数
+ * @property trainingStreak 训练连续打卡信息（进度环大字）
+ * @property isRestDay 今日无计划也无习惯（显示休息日提示）
+ * @property errorRes 页面级错误文案资源 id，`null` 表示无错误
+ * @property snackbarRes 一次性 Snackbar 文案资源 id，用后置 `null`
+ * @property snackbarArgs Snackbar 文案的格式化参数（如连续天数）
+ */
+data class TodayUiState(
+    val isLoading: Boolean = true,
+    val dateEpochDay: Long = 0L,
+    val plans: List<TodayPlanItem> = emptyList(),
+    val habits: List<HabitItem> = emptyList(),
+    val completedCount: Int = 0,
+    val totalCount: Int = 0,
+    val trainingStreak: StreakInfo = StreakInfo(0, 0, null),
+    val isRestDay: Boolean = false,
+    val errorRes: Int? = null,
+    val snackbarRes: Int? = null,
+    val snackbarArgs: List<String> = emptyList(),
+)

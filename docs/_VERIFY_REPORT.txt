@@ -1,0 +1,74 @@
+==============================================================================
+IronHabit 工程交叉一致性核验报告
+==============================================================================
+
+【1】施工图文件落盘核验（预期 171 个）
+    已落盘 = 171 / 171
+    OK 无缺失
+
+【2】Kotlin package 声明与目录一致性
+    检查 133 个 .kt 文件
+    OK 全部一致
+
+【3】零网络红线：AndroidManifest INTERNET 权限
+    OK 未声明 INTERNET 权限
+    已声明权限: POST_NOTIFICATIONS, RECEIVE_BOOT_COMPLETED, SCHEDULE_EXACT_ALARM, USE_EXACT_ALARM, VIBRATE
+
+【4】依赖清单禁用库扫描
+    gradle/libs.versions.toml -> OK 无网络库
+    app/build.gradle.kts -> OK 无网络库
+
+【5】Hilt @Binds 引用的实现类是否存在
+    AppModule.kt             @Binds 0 个 OK
+    DatabaseModule.kt        @Binds 0 个 OK
+    NotificationModule.kt    @Binds 1 个 OK
+    Qualifiers.kt            @Binds 0 个 OK
+    RepositoryModule.kt      @Binds 8 个 OK
+
+【6】Repository 实现 vs 接口 方法覆盖
+    BackupRepository             接口  2 方法 / 实现  2 OK
+    BodyMetricRepository         接口  4 方法 / 实现  4 OK
+    CheckInRepository            接口  7 方法 / 实现  7 OK
+    ExerciseRepository           接口  8 方法 / 实现  8 OK
+    HabitRepository              接口  6 方法 / 实现  6 OK
+    PlanRepository               接口  4 方法 / 实现  4 OK
+    -- ReminderSchedulerImpl.kt 未创建（可能属他人任务）
+    SettingsRepository           接口  6 方法 / 实现  6 OK
+    StatsRepository              接口  4 方法 / 实现  4 OK
+
+【7】内置动作库条数（要求 >=40）
+    动作条目数(按 ExerciseCategory.XXX 计) = 48
+    ex(...) 辅助构造调用 = 48
+    OK 满足 >=40 要求
+
+【8】占位符 / 未完成标记扫描
+    OK 未发现占位符
+
+【9】R.string 引用 vs strings.xml 定义（无编译器环境下的关键检查）
+    strings.xml 定义 176 个 key；代码引用 163 个 key
+    OK 全部有定义
+    (提示) 已定义但未被代码引用 13 个: action_backfill, action_checkin, action_close, action_share, action_start, action_undo_checkin, app_name, app_slogan, category_all, cd_checkin_undone, label_optional, title_progress, title_week_plan_by_day
+
+【10】ui 层调用的 UseCase 类是否已落盘
+    domain/usecase 已落盘 13 个类；ui 层引用 11 个
+    OK 全部存在
+
+【11】委托属性智能转换风险（编译错误扫描）
+    OK 未发现委托属性上的智能转换
+
+【12】格式化占位符 vs 实参类型（运行时崩溃扫描）
+    含整数占位符(%d)的 key 共 3 个: label_progress_ratio, label_streak_best, label_streak_days
+    动态实参渲染点(toTypedArray) 出现在 2 个文件
+    OK 未发现整数占位符与字符串列表实参混用
+
+【13】常用类型 import 缺失扫描（Unresolved reference）
+    OK 未发现常用类型缺 import
+
+【14】Manifest 与主题引用的资源是否存在（资源链接失败扫描）
+    OK 全部有定义（共检查 19 处引用）
+
+==============================================================================
+汇总：落盘 171/171 ｜ 缺失 0 ｜ 空文件 0 ｜ package 不一致 0 ｜ 占位符文件 0
+      缺失字符串 key 0 ｜ 缺失用例 0 ｜ 委托属性智能转换 0 ｜ 占位符类型错配 0 ｜ 缺 import 0
+      资源引用缺失 0
+==============================================================================
