@@ -93,6 +93,7 @@ fun DisciplineScreen(
                                 )
                             },
                             onEdit = { onEditHabit(item.habit.id) },
+                            onDelete = { viewModel.onDeleteHabit(item.habit.id) },
                         )
                     }
                 }

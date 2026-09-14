@@ -49,6 +49,23 @@ interface CheckInDao {
     @Query("DELETE FROM check_ins WHERE exercise_id = :exerciseId AND date_epoch_day = :epochDay")
     suspend fun deleteOn(exerciseId: Long, epochDay: Long)
 
+    /**
+     * 逐组勾选：`mask` 与派生列 `completed_sets` **必须同写**（同一条 UPDATE），
+     * 以保证不变量 `completed_sets == completed_sets_mask.countOneBits()`。
+     */
+    @Query(
+        "UPDATE check_ins SET completed_sets_mask = :mask, completed_sets = :completedSets " +
+            "WHERE exercise_id = :exerciseId AND date_epoch_day = :epochDay"
+    )
+    suspend fun updateSetMask(exerciseId: Long, epochDay: Long, mask: Int, completedSets: Int)
+
+    /** 写入 / 清除 RPE（`1..10`，可空）。 */
+    @Query(
+        "UPDATE check_ins SET rpe = :rpe " +
+            "WHERE exercise_id = :exerciseId AND date_epoch_day = :epochDay"
+    )
+    suspend fun updateRpe(exerciseId: Long, epochDay: Long, rpe: Int?)
+
     @Query("SELECT COUNT(*) FROM check_ins WHERE date_epoch_day = :epochDay")
     suspend fun countOn(epochDay: Long): Int
 

@@ -80,7 +80,7 @@ class ExerciseDetailViewModel @Inject constructor(
                         exerciseId = exercise.id,
                         exerciseName = exercise.name,
                         category = exercise.category,
-                        muscleGroup = exercise.muscleGroup,
+                        muscleGroup = exercise.primaryMuscleGroup,
                         timesUsed = exercise.timesUsed,
                         history = checkIns,
                     )

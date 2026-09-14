@@ -14,6 +14,10 @@ import kotlinx.coroutines.flow.map
 
 /**
  * [PlanRepository] 的 data 层实现。
+ *
+ * v2 起：删除 = **软删除**（`is_active = 0` + `is_user_edited = 1`），
+ * 用户新增/修改 = **显式 upsert**（禁用 `REPLACE`）并置 `isUserEdited = true`，
+ * 以避免 AI 下次生成时静默撤销用户改动（架构 schema-v2 §6.3 坑 3/4/6）。
  */
 @Singleton
 class PlanRepositoryImpl @Inject constructor(
@@ -31,10 +35,24 @@ class PlanRepositoryImpl @Inject constructor(
             .map { entities -> entities.map(PlanMapper::toDomain) }
             .flowOn(ioDispatcher)
 
+    override fun observePlannedWeekdays(): Flow<List<Int>> =
+        weekPlanDao.observePlannedWeekdays().flowOn(ioDispatcher)
+
+    /**
+     * 显式 upsert 并置 `isUserEdited = true`。
+     *
+     * 命中已有行（含软删行）→ `UPDATE`（保 `is_active` 等由调用方给定），未命中 → `INSERT`；
+     * **绝不使用 `OnConflictStrategy.REPLACE`**，否则会重建整行冲掉 flags（§6.3 坑 4）。
+     */
     override suspend fun upsert(plan: WeekPlan): Long =
-        weekPlanDao.upsert(PlanMapper.toEntity(plan))
+        weekPlanDao.upsertExplicit(PlanMapper.toEntity(plan).copy(isUserEdited = true))
+
+    override suspend fun resetToRecommended(id: Long) {
+        weekPlanDao.resetToRecommended(id)
+    }
 
     override suspend fun delete(id: Long) {
-        weekPlanDao.deleteById(id)
+        // 软删除：保留唯一索引槽位 + 阻止 AI 复活；不影响历史打卡记录。
+        weekPlanDao.softDelete(id)
     }
 }

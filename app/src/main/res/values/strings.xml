@@ -214,4 +214,21 @@
     <string name="cd_navigate_back">返回</string>
     <string name="label_optional">（可选）</string>
 
+    <!-- ===== v2 增量（逐组打卡 / RPE / 多肌群 / 备注 / 目标值 / 计划软删）===== -->
+    <string name="label_muscle_group_title">目标肌群（首个为主肌群）</string>
+    <string name="hint_exercise_note">动作备注（可选）</string>
+    <string name="hint_habit_note">习惯备注（可选）</string>
+    <string name="hint_target_value">目标值（可选，如 8）</string>
+    <string name="hint_target_unit">目标单位（可选，如 杯/分钟/步）</string>
+    <string name="hint_rpe">RPE 强度（1-10，可选）</string>
+    <string name="label_sets_progress">%1$d / %2$d 组</string>
+    <string name="label_rpe_short">RPE %1$d</string>
+    <string name="cd_set_index">第 %1$d 组</string>
+    <string name="label_user_edited">已改</string>
+    <string name="action_reset_recommended">恢复为推荐</string>
+    <string name="action_add_to_day">添加到这天</string>
+    <string name="empty_plan_add_hint">点「添加动作」把动作排进这一天</string>
+    <string name="cd_previous_week">上一周</string>
+    <string name="cd_next_week">下一周</string>
+
 </resources>

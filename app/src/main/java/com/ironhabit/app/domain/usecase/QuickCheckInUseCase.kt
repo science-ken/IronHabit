@@ -33,7 +33,7 @@ class QuickCheckInUseCase @Inject constructor(
             planId = plan.id.takeIf { it > 0L },
             dateEpochDay = today,
             dateStartMillis = DateUtils.startOfDayMillis(today, timeZone),
-            completedSets = plan.targetSets,
+            completedSetsMask = CheckIn.maskFromCount(plan.targetSets),
             completedReps = plan.targetReps,
             weightKg = plan.targetWeightKg,
             durationMinutes = plan.targetDurationMin,

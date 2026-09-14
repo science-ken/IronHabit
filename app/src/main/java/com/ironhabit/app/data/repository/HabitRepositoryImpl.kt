@@ -68,4 +68,15 @@ class HabitRepositoryImpl @Inject constructor(
 
     override fun observeActiveDays(habitId: Long): Flow<List<Long>> =
         habitLogDao.observeActiveDays(habitId).flowOn(ioDispatcher)
+
+    override suspend fun deleteHabit(habitId: Long) {
+        // 软删除：保留历史日志关联，仅置 is_active = 0。
+        habitDao.softDelete(habitId)
+    }
+
+    override suspend fun reorderHabits(orderedIds: List<Long>) {
+        orderedIds.forEachIndexed { index, id ->
+            habitDao.updateSortOrder(id, index)
+        }
+    }
 }

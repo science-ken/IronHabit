@@ -9,6 +9,7 @@ import com.ironhabit.app.domain.repository.CheckInRepository
 import com.ironhabit.app.domain.repository.HabitRepository
 import com.ironhabit.app.domain.repository.StatsRepository
 import com.ironhabit.app.domain.usecase.CalculateStreakUseCase
+import com.ironhabit.app.domain.usecase.DeleteHabitUseCase
 import com.ironhabit.app.domain.usecase.GetHeatmapUseCase
 import com.ironhabit.app.domain.usecase.ToggleHabitUseCase
 import com.ironhabit.app.domain.util.DateUtils
@@ -45,6 +46,7 @@ class DisciplineViewModel @Inject constructor(
     private val getHeatmap: GetHeatmapUseCase,
     private val statsRepository: StatsRepository,
     private val toggleHabit: ToggleHabitUseCase,
+    private val deleteHabit: DeleteHabitUseCase,
     private val habitRepository: HabitRepository,
     private val checkInRepository: CheckInRepository,
     private val calculateStreak: CalculateStreakUseCase,
@@ -121,6 +123,18 @@ class DisciplineViewModel @Inject constructor(
             try {
                 toggleHabit(habitId = habitId, epochDay = epochDay, done = done)
                 _uiState.update { state -> state.copy(snackbarRes = R.string.msg_saved) }
+            } catch (throwable: Throwable) {
+                _uiState.update { state -> state.copy(errorRes = R.string.error_generic) }
+            }
+        }
+    }
+
+    /** 删除习惯（软删除，保留历史日志）。 */
+    fun onDeleteHabit(habitId: Long) {
+        viewModelScope.launch {
+            try {
+                deleteHabit(habitId)
+                _uiState.update { state -> state.copy(snackbarRes = R.string.msg_deleted) }
             } catch (throwable: Throwable) {
                 _uiState.update { state -> state.copy(errorRes = R.string.error_generic) }
             }

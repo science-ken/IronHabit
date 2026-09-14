@@ -47,6 +47,17 @@ data class HabitEntity(
     @ColumnInfo(name = "reminder_minute")
     val reminderMinute: Int = 0,
 
+    @ColumnInfo(name = "note")
+    val note: String? = null,
+
+    /** 目标数值。`null` = 纯勾选型习惯；非 `null` = 计量型（如每天 8 杯水）。 */
+    @ColumnInfo(name = "target_value")
+    val targetValue: Double? = null,
+
+    /** 目标单位文案（杯 / 分钟 / 步）。 */
+    @ColumnInfo(name = "target_unit")
+    val targetUnit: String? = null,
+
     @ColumnInfo(name = "is_active")
     val isActive: Boolean = true,
 

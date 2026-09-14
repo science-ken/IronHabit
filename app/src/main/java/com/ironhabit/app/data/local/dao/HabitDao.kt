@@ -34,6 +34,14 @@ interface HabitDao {
     @Query("DELETE FROM habits WHERE id = :id")
     suspend fun deleteById(id: Long)
 
+    /** 软删除（`is_active = 0`），不做物理 DELETE，保留历史日志关联。 */
+    @Query("UPDATE habits SET is_active = 0 WHERE id = :id")
+    suspend fun softDelete(id: Long)
+
+    /** 写排序值（习惯排序）。 */
+    @Query("UPDATE habits SET sort_order = :sortOrder WHERE id = :id")
+    suspend fun updateSortOrder(id: Long, sortOrder: Int)
+
     @Query("DELETE FROM habits")
     suspend fun clearAll()
 }

@@ -19,6 +19,7 @@ object PlanMapper {
         targetDurationMin = entity.targetDurationMin,
         sortOrder = entity.sortOrder,
         isActive = entity.isActive,
+        isUserEdited = entity.isUserEdited,
         createdAt = entity.createdAt,
     )
 
@@ -33,6 +34,7 @@ object PlanMapper {
         targetDurationMin = domain.targetDurationMin,
         sortOrder = domain.sortOrder,
         isActive = domain.isActive,
+        isUserEdited = domain.isUserEdited,
         createdAt = domain.createdAt,
     )
 }

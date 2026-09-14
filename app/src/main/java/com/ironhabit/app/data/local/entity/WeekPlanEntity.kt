@@ -57,6 +57,10 @@ data class WeekPlanEntity(
     @ColumnInfo(name = "is_active")
     val isActive: Boolean = true,
 
+    /** 行级：本条（某天 × 某动作）被用户手动改过 → AI 生成时整行跳过（含软删除行）。 */
+    @ColumnInfo(name = "is_user_edited")
+    val isUserEdited: Boolean = false,
+
     @ColumnInfo(name = "created_at")
     val createdAt: Long = 0L,
 )

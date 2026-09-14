@@ -119,11 +119,20 @@ fun AddEditExerciseScreen(
                     onSelect = viewModel::onCategoryChange,
                 )
 
+                Text(
+                    text = stringResource(R.string.label_muscle_group_title),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                MuscleGroupChips(
+                    selected = uiState.muscleGroups,
+                    onToggle = viewModel::onToggleMuscleGroup,
+                )
+
                 OutlinedTextField(
-                    value = uiState.muscleGroup,
-                    onValueChange = viewModel::onMuscleGroupChange,
-                    label = { Text(text = stringResource(R.string.hint_muscle_group)) },
-                    singleLine = true,
+                    value = uiState.note,
+                    onValueChange = viewModel::onNoteChange,
+                    label = { Text(text = stringResource(R.string.hint_exercise_note)) },
                     modifier = Modifier.fillMaxWidth(),
                 )
 
@@ -199,6 +208,28 @@ private fun CategoryChips(
                 onClick = { onSelect(category) },
                 enabled = enabled,
                 label = { Text(text = stringResource(categoryLabelRes(category))) },
+            )
+        }
+    }
+}
+
+/** 肌群多选：横向可滚动的 [FilterChip] 组，**选中顺序即主→辅**（首个 = 主肌群）。 */
+@Composable
+private fun MuscleGroupChips(
+    selected: List<String>,
+    onToggle: (String) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        PRESET_MUSCLE_GROUPS.forEach { group ->
+            FilterChip(
+                selected = group in selected,
+                onClick = { onToggle(group) },
+                label = { Text(text = group) },
             )
         }
     }

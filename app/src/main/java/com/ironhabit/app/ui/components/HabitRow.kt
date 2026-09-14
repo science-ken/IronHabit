@@ -24,7 +24,7 @@ import com.ironhabit.app.domain.model.HabitItem
  * 习惯勾选行。
  *
  * 左侧显示 emoji 与习惯名（下方小字显示连续天数 `label_streak_days`），
- * 右侧为 [Checkbox]（勾选/取消 → [onToggle]）与编辑按钮（→ [onEdit]）。
+ * 右侧为 [Checkbox]（勾选/取消 → [onToggle]）与编辑按钮（→ [onEdit]）、删除按钮（→ [onDelete]）。
  */
 @Composable
 fun HabitRow(
@@ -32,6 +32,7 @@ fun HabitRow(
     onToggle: (Boolean) -> Unit,
     onEdit: () -> Unit,
     modifier: Modifier = Modifier,
+    onDelete: () -> Unit = {},
 ) {
     val colorScheme = MaterialTheme.colorScheme
 
@@ -64,6 +65,15 @@ fun HabitRow(
                     style = MaterialTheme.typography.labelMedium,
                     color = colorScheme.onSurfaceVariant,
                 )
+                // v2：计量型习惯显示目标值（如「8杯」「30分钟」）；纯勾选型无目标值则不显示。
+                val targetValue = item.habit.targetValue
+                if (targetValue != null) {
+                    Text(
+                        text = formatTarget(targetValue) + item.habit.targetUnit.orEmpty(),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colorScheme.primary,
+                    )
+                }
             }
         }
 
@@ -81,3 +91,7 @@ fun HabitRow(
         }
     }
 }
+
+/** 目标值 → 展示文本（整数去掉小数点，避免显示成 "8.0"）。 */
+private fun formatTarget(value: Double): String =
+    if (value % 1.0 == 0.0) value.toLong().toString() else value.toString()

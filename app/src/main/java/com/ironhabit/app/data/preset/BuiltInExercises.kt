@@ -2,14 +2,15 @@ package com.ironhabit.app.data.preset
 
 import com.ironhabit.app.domain.model.Exercise
 import com.ironhabit.app.domain.model.ExerciseCategory
+import com.ironhabit.app.domain.model.ExerciseSource
 
 /**
  * 内置动作静态清单（**共 48 个**，≥ 40 要求）。
  *
  * 三类：自重 16 + 力量 20 + 有氧 12。
  * 说明：动作名与肌群标签为**数据预置**，按架构 §7.5 允许直接写在 Kotlin 中（唯一例外）。
- * 所有动作 `isBuiltIn = true`、`isActive = true`、`id = 0`（交给 Room 自增），
- * `sortOrder` = 列表下标 + 1。
+ * v2 起所有动作 `source = BUILT_IN`、`isActive = true`、`id = 0`（交给 Room 自增），
+ * `muscleGroups` 为「主肌群」单元素列表，`sortOrder` = 列表下标 + 1。
  */
 object BuiltInExercises {
 
@@ -87,8 +88,9 @@ object BuiltInExercises {
         id = 0L,
         name = name,
         category = category,
-        muscleGroup = muscleGroup,
-        isBuiltIn = true,
+        source = ExerciseSource.BUILT_IN,
+        muscleGroups = listOf(muscleGroup),
+        note = null,
         isActive = true,
         defaultSets = sets,
         defaultReps = reps,

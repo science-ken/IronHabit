@@ -23,7 +23,8 @@ import com.ironhabit.app.data.local.entity.WeekPlanEntity
  *
  * - 6 张实体表 + 1 组 TypeConverter。
  * - `exportSchema = true`：schema JSON 输出到 `app/schemas/`，纳入版本管理。
- * - 版本 1 无需 Migration；破坏性迁移仅在**降级**时启用
+ * - 版本 2：由 [MIGRATION_1_2] 从 v1 升级（逐组打卡 bitmask / RPE / 动作三态来源 / 多肌群 /
+ *   习惯目标值 / 计划用户改动标记）。破坏性迁移仅在**降级**时启用
  *   （由 `DatabaseModule` 构建时的 `fallbackToDestructiveMigrationOnDowngrade()` 提供）。
  */
 @Database(
@@ -60,6 +61,6 @@ abstract class AppDatabase : RoomDatabase() {
         const val DATABASE_NAME: String = "ironhabit.db"
 
         /** 当前 schema 版本。 */
-        const val VERSION: Int = 1
+        const val VERSION: Int = 2
     }
 }

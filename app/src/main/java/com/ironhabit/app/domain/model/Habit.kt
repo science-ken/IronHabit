@@ -37,6 +37,11 @@ data class Habit(
     val reminderEnabled: Boolean = false,
     val reminderHour: Int? = null,
     val reminderMinute: Int? = null,
+    val note: String? = null,
+    /** 目标数值。`null` = 纯勾选型习惯；非 `null` = 计量型（如每天 8 杯水）。 */
+    val targetValue: Double? = null,
+    /** 目标单位文案（杯 / 分钟 / 步）。 */
+    val targetUnit: String? = null,
     val isActive: Boolean = true,
     val sortOrder: Int = 0,
     val createdAt: Long = 0L,

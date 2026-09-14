@@ -3,6 +3,7 @@ package com.ironhabit.app.data.local.entity
 import androidx.room.TypeConverter
 import com.ironhabit.app.domain.model.BodyMetricType
 import com.ironhabit.app.domain.model.ExerciseCategory
+import com.ironhabit.app.domain.model.ExerciseSource
 import com.ironhabit.app.domain.model.HabitFrequency
 import kotlinx.datetime.LocalDate
 
@@ -30,6 +31,15 @@ class Converters {
     @TypeConverter
     fun toExerciseCategory(value: String?): ExerciseCategory? =
         value?.let { runCatching { ExerciseCategory.valueOf(it) }.getOrNull() }
+
+    // ---- ExerciseSource ↔ String ----
+
+    @TypeConverter
+    fun fromExerciseSource(source: ExerciseSource?): String? = source?.name
+
+    @TypeConverter
+    fun toExerciseSource(value: String?): ExerciseSource? =
+        value?.let { runCatching { ExerciseSource.valueOf(it) }.getOrNull() }
 
     // ---- HabitFrequency ↔ String ----
 

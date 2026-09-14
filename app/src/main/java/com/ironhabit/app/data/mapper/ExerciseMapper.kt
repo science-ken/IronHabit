@@ -2,19 +2,25 @@ package com.ironhabit.app.data.mapper
 
 import com.ironhabit.app.data.local.entity.ExerciseEntity
 import com.ironhabit.app.domain.model.Exercise
+import com.ironhabit.app.domain.model.ExerciseSource
 
 /**
  * `ExerciseEntity ⇄ domain.Exercise` 互转。
+ *
+ * `exercises.muscle_group` 是**有序 CSV**（首个 = 主肌群），在本地解码为 `List<String>`。
  */
 object ExerciseMapper {
+
+    private const val CSV_SEPARATOR = ","
 
     /** 实体 → 领域模型（`defaultDurationSec = 0` 视作未设置，转为 `null`）。 */
     fun toDomain(entity: ExerciseEntity): Exercise = Exercise(
         id = entity.id,
         name = entity.name,
         category = entity.category,
-        muscleGroup = entity.muscleGroup,
-        isBuiltIn = entity.isBuiltIn,
+        source = entity.source,
+        muscleGroups = decodeMuscleGroups(entity.muscleGroup),
+        note = entity.note,
         isActive = entity.isActive,
         defaultSets = entity.defaultSets,
         defaultReps = entity.defaultReps,
@@ -24,13 +30,20 @@ object ExerciseMapper {
         createdAt = entity.createdAt,
     )
 
-    /** 领域模型 → 实体（可空字段回落到数据库默认值）。 */
+    /**
+     * 领域模型 → 实体（可空字段回落到数据库默认值）。
+     *
+     * 废弃列 `is_built_in` 由 [ExerciseSource] 派生，保持与 v1 数据语义一致。
+     */
+    @Suppress("DEPRECATION")
     fun toEntity(domain: Exercise): ExerciseEntity = ExerciseEntity(
         id = domain.id,
         name = domain.name,
         category = domain.category,
-        muscleGroup = domain.muscleGroup,
-        isBuiltIn = domain.isBuiltIn,
+        muscleGroup = encodeMuscleGroups(domain.muscleGroups),
+        source = domain.source,
+        note = domain.note,
+        isBuiltIn = domain.source == ExerciseSource.BUILT_IN,
         isActive = domain.isActive,
         defaultSets = domain.defaultSets ?: 0,
         defaultReps = domain.defaultReps ?: 0,
@@ -39,4 +52,17 @@ object ExerciseMapper {
         sortOrder = domain.sortOrder,
         createdAt = domain.createdAt,
     )
+
+    /** 有序 CSV → 有序列表（去空白、丢空项；顺序即主→辅）。 */
+    fun decodeMuscleGroups(csv: String?): List<String> =
+        csv.orEmpty()
+            .split(CSV_SEPARATOR)
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+
+    /** 有序列表 → 有序 CSV；空列表返回 `null`。 */
+    fun encodeMuscleGroups(groups: List<String>): String? {
+        val cleaned = groups.map { it.trim() }.filter { it.isNotEmpty() }
+        return cleaned.takeIf { it.isNotEmpty() }?.joinToString(CSV_SEPARATOR)
+    }
 }

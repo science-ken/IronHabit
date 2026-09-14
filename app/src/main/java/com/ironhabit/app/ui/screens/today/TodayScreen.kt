@@ -24,11 +24,13 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.TodayPlanItem
+import com.ironhabit.app.domain.util.DateUtils
 import com.ironhabit.app.ui.components.EmptyState
 import com.ironhabit.app.ui.components.ExerciseCheckCard
 import com.ironhabit.app.ui.components.HabitRow
 import com.ironhabit.app.ui.components.LoadingSkeleton
 import com.ironhabit.app.ui.components.LocalSnackbarHostState
+import com.ironhabit.app.ui.components.PlanDateStrip
 import com.ironhabit.app.ui.components.ProgressRing
 import com.ironhabit.app.ui.components.SkeletonCard
 import com.ironhabit.app.ui.screens.checkin.CheckInSheet
@@ -124,6 +126,8 @@ fun TodayScreen(
                             onUndo = { viewModel.onUndoCheckIn(item) },
                             onOpenDetail = { onOpenExerciseDetail(item.exercise.id) },
                             onOpenSheet = { sheetItem = item },
+                            onToggleSet = { setIndex -> viewModel.onToggleSet(item, setIndex) },
+                            onSetRpe = { rpe -> viewModel.onSetRpe(item, rpe) },
                         )
                     }
                 }
@@ -179,3 +183,6 @@ private fun SectionTitle(text: String) {
         modifier = Modifier.fillMaxWidth(),
     )
 }
+
+/** 一周 7 天（日期栏 `‹ ›` 跨周步长）。 */
+private const val DAYS_PER_WEEK: Long = 7L

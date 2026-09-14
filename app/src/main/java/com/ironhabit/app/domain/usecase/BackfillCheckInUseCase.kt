@@ -29,7 +29,7 @@ class BackfillCheckInUseCase @Inject constructor(
             planId = null,
             dateEpochDay = epochDay,
             dateStartMillis = DateUtils.startOfDayMillis(epochDay, timeZone),
-            completedSets = sets,
+            completedSetsMask = CheckIn.maskFromCount(sets),
             completedReps = reps,
             weightKg = null,
             durationMinutes = null,

@@ -7,10 +7,13 @@ import com.ironhabit.app.domain.model.HabitItem
 import com.ironhabit.app.domain.model.TodayOverview
 import com.ironhabit.app.domain.model.TodayPlanItem
 import com.ironhabit.app.domain.repository.CheckInRepository
+import com.ironhabit.app.domain.repository.PlanRepository
 import com.ironhabit.app.domain.usecase.DetailedCheckInUseCase
 import com.ironhabit.app.domain.usecase.GetTodayOverviewUseCase
 import com.ironhabit.app.domain.usecase.QuickCheckInUseCase
+import com.ironhabit.app.domain.usecase.SetRpeUseCase
 import com.ironhabit.app.domain.usecase.ToggleHabitUseCase
+import com.ironhabit.app.domain.usecase.ToggleSetUseCase
 import com.ironhabit.app.domain.usecase.UndoCheckInUseCase
 import com.ironhabit.app.domain.util.DateUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -21,6 +24,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -32,9 +36,10 @@ import kotlinx.datetime.TimeZone
 /**
  * 「今日」页 ViewModel。
  *
- * 数据源：以 [CheckInRepository.observeActiveDaysSince]（传 `0L` 取全量降序）作为**变更触发器**，
- * `flatMapLatest { getTodayOverview(今天) }` 组装聚合视图。任何写库（打卡/撤销/勾选）都会让 Room 重发射，
- * 于是卡片自动置灰、进度环自动前进——**UI 无需手动刷新**。
+ * 数据源：以 `selectedEpochDay`（日期游标，默认今天）驱动，内部
+ * `checkInRepository.observeActiveDaysSince(0L)` 作为**变更触发器**，
+ * `flatMapLatest { combine(getTodayOverview(selectedDay), planRepository.observePlannedWeekdays()) }`
+ * 组装聚合视图。任何写库（打卡/撤销/逐组勾选/RPE）都会让 Room 重发射，于是卡片、进度环、日期栏自动刷新。
  *
  * 采用 `stateIn(viewModelScope, WhileSubscribed(5_000), initial)` 把数据流转为 StateFlow，
  * 再合并到内部 [MutableStateFlow]（承载一次性 Snackbar / 错误覆盖），对外只暴露 `asStateFlow()`。
@@ -47,7 +52,10 @@ class TodayViewModel @Inject constructor(
     private val detailedCheckIn: DetailedCheckInUseCase,
     private val undoCheckIn: UndoCheckInUseCase,
     private val toggleHabit: ToggleHabitUseCase,
+    private val toggleSet: ToggleSetUseCase,
+    private val setRpe: SetRpeUseCase,
     private val checkInRepository: CheckInRepository,
+    private val planRepository: PlanRepository,
     private val clock: Clock,
     private val timeZone: TimeZone,
 ) : ViewModel() {
@@ -55,15 +63,27 @@ class TodayViewModel @Inject constructor(
     /** 对外状态：数据字段来自 [overviewState]，瞬态字段（Snackbar/错误）由动作写入。 */
     private val _uiState = MutableStateFlow(TodayUiState())
 
-    /** 数据流（Room 触发 → 聚合视图 → UiState），按 `stateIn` 转为冷启动的 StateFlow；支持手动重试。 */
+    /** 数据流重订阅触发器（失败重试）。 */
     private val retryTrigger = MutableStateFlow(0L)
 
+    /** 日期游标：默认今天；由日期栏 chip / `‹ ›` 跨周改写。 */
+    private val selectedEpochDay = MutableStateFlow(todayEpochDay())
+
+    private val plannedWeekdaysFlow = planRepository.observePlannedWeekdays()
+
+    /** 数据流（Room 触发 → 聚合视图 → UiState），按 `stateIn` 转为冷启动的 StateFlow；支持手动重试。 */
     private val overviewState: StateFlow<TodayUiState> =
-        retryTrigger
-            .flatMapLatest {
+        combine(retryTrigger, selectedEpochDay) { _, day -> day }
+            .flatMapLatest { day ->
                 checkInRepository.observeActiveDaysSince(TRIGGER_SINCE_EPOCH_DAY)
-                    .flatMapLatest { getTodayOverview(todayEpochDay()) }
-                    .map { overview: TodayOverview -> overview.toUiState() }
+                    .flatMapLatest {
+                        combine(
+                            getTodayOverview(day),
+                            plannedWeekdaysFlow,
+                        ) { overview, weekdays ->
+                            overview.toUiState().copy(plannedWeekdays = weekdays)
+                        }
+                    }
                     .catch {
                         // 加载失败：给页面级错误态，不再向上抛
                         emit(TodayUiState(isLoading = false, errorRes = R.string.error_load_failed))
@@ -110,7 +130,7 @@ class TodayViewModel @Inject constructor(
                 detailedCheckIn(
                     exerciseId = item.exercise.id,
                     planId = item.plan.id.takeIf { it > 0L },
-                    epochDay = _uiState.value.dateEpochDay.let { if (it > 0L) it else todayEpochDay() },
+                    epochDay = currentEpochDay(),
                     sets = sets,
                     reps = reps,
                     weightKg = weightKg,
@@ -128,10 +148,37 @@ class TodayViewModel @Inject constructor(
             block = {
                 undoCheckIn(
                     exerciseId = item.exercise.id,
-                    epochDay = _uiState.value.dateEpochDay.let { if (it > 0L) it else todayEpochDay() },
+                    epochDay = currentEpochDay(),
                 )
             },
         )
+    }
+
+    /** 勾选 / 取消某组（v2）。静默写入，不弹 Snackbar（连续点选时避免打扰）。 */
+    fun onToggleSet(item: TodayPlanItem, setIndex: Int) {
+        performSilentWrite {
+            toggleSet(
+                exerciseId = item.exercise.id,
+                epochDay = currentEpochDay(),
+                setIndex = setIndex,
+            )
+        }
+    }
+
+    /** 写入 RPE（v2）。静默写入。 */
+    fun onSetRpe(item: TodayPlanItem, rpe: Int) {
+        performSilentWrite {
+            setRpe(
+                exerciseId = item.exercise.id,
+                epochDay = currentEpochDay(),
+                rpe = rpe,
+            )
+        }
+    }
+
+    /** 切换查看日期（日期栏 chip / `‹ ›` 跨周）。 */
+    fun onSelectEpochDay(epochDay: Long) {
+        selectedEpochDay.value = epochDay
     }
 
     /** 勾选 / 取消习惯。 */
@@ -141,7 +188,7 @@ class TodayViewModel @Inject constructor(
             block = {
                 toggleHabit(
                     habitId = item.habit.id,
-                    epochDay = _uiState.value.dateEpochDay.let { if (it > 0L) it else todayEpochDay() },
+                    epochDay = currentEpochDay(),
                     done = !item.isCompletedToday,
                 )
             },
@@ -177,6 +224,21 @@ class TodayViewModel @Inject constructor(
         }
     }
 
+    /** 静默写操作：成功不提示，失败给 error_generic（用于高频、细粒度的逐组/RPE 操作）。 */
+    private fun performSilentWrite(block: suspend () -> Unit) {
+        viewModelScope.launch {
+            try {
+                block()
+            } catch (throwable: Throwable) {
+                _uiState.update { state -> state.copy(errorRes = R.string.error_generic) }
+            }
+        }
+    }
+
+    /** 当前写入口径：优先数据流已加载的日期，否则回落到今天。 */
+    private fun currentEpochDay(): Long =
+        _uiState.value.dateEpochDay.let { if (it > 0L) it else todayEpochDay() }
+
     /** 合并数据流：数据字段整体覆盖；Snackbar 由 streak 变化或写操作决定；错误优先取数据流的。 */
     private fun applyData(data: TodayUiState) {
         if (data.isLoading) {
@@ -210,6 +272,8 @@ class TodayViewModel @Inject constructor(
                 totalCount = data.totalCount,
                 trainingStreak = data.trainingStreak,
                 isRestDay = data.isRestDay,
+                plannedWeekdays = data.plannedWeekdays,
+                todayEpochDay = todayEpochDay(),
                 errorRes = null,
                 snackbarRes = streakRes ?: state.snackbarRes,
                 snackbarArgs = if (streakRes == R.string.msg_streak_up) {

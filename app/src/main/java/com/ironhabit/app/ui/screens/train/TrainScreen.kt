@@ -124,6 +124,7 @@ fun TrainScreen(
                 uiState = uiState,
                 onSelectDay = viewModel::onSelectDay,
                 onDeletePlan = viewModel::onDeletePlan,
+                onResetPlan = viewModel::onResetPlan,
                 onAddPlan = { onAddPlan(uiState.selectedDay) },
                 onEditPlan = { planId -> onEditPlan(planId, uiState.selectedDay) },
             )
@@ -150,6 +151,7 @@ private fun PlanSection(
     uiState: TrainUiState,
     onSelectDay: (Int) -> Unit,
     onDeletePlan: (Long) -> Unit,
+    onResetPlan: (Long) -> Unit,
     onAddPlan: () -> Unit,
     onEditPlan: (Long) -> Unit,
 ) {
@@ -188,6 +190,7 @@ private fun PlanSection(
                     exerciseName = uiState.exerciseNameById[plan.exerciseId].orEmpty(),
                     onClick = { onEditPlan(plan.id) },
                     onDelete = { onDeletePlan(plan.id) },
+                    onReset = { onResetPlan(plan.id) },
                 )
             }
         }
@@ -200,6 +203,7 @@ private fun PlanRow(
     exerciseName: String,
     onClick: () -> Unit,
     onDelete: () -> Unit,
+    onReset: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -210,16 +214,32 @@ private fun PlanRow(
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = exerciseName,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = exerciseName,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                // 行级「已改」角标：被用户改过的行，AI 生成时整行跳过（schema-v2 §6.2）。
+                if (plan.isUserEdited) {
+                    Text(
+                        text = stringResource(R.string.label_user_edited),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(start = 8.dp),
+                    )
+                }
+            }
             Text(
                 text = "${plan.targetSets} × ${plan.targetReps}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+        if (plan.isUserEdited) {
+            TextButton(onClick = onReset) {
+                Text(text = stringResource(R.string.action_reset_recommended))
+            }
         }
         IconButton(onClick = onDelete) {
             Icon(
@@ -303,7 +323,7 @@ private fun ExerciseRow(
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurface,
             )
-            val muscle = exercise.muscleGroup
+            val muscle = exercise.primaryMuscleGroup
             if (!muscle.isNullOrBlank()) {
                 Text(
                     text = muscle,

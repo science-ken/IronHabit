@@ -24,5 +24,12 @@ data class WeekPlan(
     val targetDurationMin: Int? = null,
     val sortOrder: Int = 0,
     val isActive: Boolean = true,
+    /**
+     * 行级标记：这一条（某天 × 某动作）被用户手动改过。
+     *
+     * AI 重新生成整周计划时，`isUserEdited = true` 的行（**含软删除行**）
+     * 完全跳过 —— 不更新、不插入、不复活。
+     */
+    val isUserEdited: Boolean = false,
     val createdAt: Long = 0L,
 )

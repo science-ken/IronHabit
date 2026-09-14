@@ -7,6 +7,7 @@ import com.ironhabit.app.domain.model.WeekPlan
 import com.ironhabit.app.domain.repository.CheckInRepository
 import com.ironhabit.app.domain.repository.ExerciseRepository
 import com.ironhabit.app.domain.repository.PlanRepository
+import com.ironhabit.app.domain.usecase.ResetPlanItemUseCase
 import com.ironhabit.app.domain.util.DateUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -33,6 +34,7 @@ import kotlinx.datetime.TimeZone
 @HiltViewModel
 class TrainViewModel @Inject constructor(
     private val planRepository: PlanRepository,
+    private val resetPlanItem: ResetPlanItemUseCase,
     private val exerciseRepository: ExerciseRepository,
     private val checkInRepository: CheckInRepository,
     private val clock: Clock,
@@ -95,9 +97,14 @@ class TrainViewModel @Inject constructor(
         selectedDay.value = dayOfWeek.coerceIn(MIN_DAY_OF_WEEK, MAX_DAY_OF_WEEK)
     }
 
-    /** 删除计划条目。 */
+    /** 删除计划条目（软删除：`is_active = 0` + `is_user_edited = 1`，阻止 AI 复活）。 */
     fun onDeletePlan(planId: Long) {
         persist(R.string.msg_deleted) { planRepository.delete(planId) }
+    }
+
+    /** 恢复为 AI 推荐（`is_user_edited = 0`，交还 AI 接管）。 */
+    fun onResetPlan(planId: Long) {
+        persist(R.string.msg_saved) { resetPlanItem(planId) }
     }
 
     /** 启用 / 停用动作。 */

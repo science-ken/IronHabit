@@ -34,6 +34,9 @@ import kotlinx.datetime.Clock
  * @property reminderEnabled 是否提醒
  * @property reminderHour 提醒小时（`0..23`）
  * @property reminderMinute 提醒分钟（`0..59`）
+ * @property note 备注（v2）
+ * @property targetValue 目标数值文本（v2）。空 = 纯勾选型习惯；非空 = 计量型（如 8 杯水）
+ * @property targetUnit 目标单位文案（v2，如 杯 / 分钟 / 步）
  * @property nameErrorRes 名称校验错误资源 id
  * @property errorRes 页面级错误资源 id
  * @property snackbarRes 一次性 Snackbar 资源 id
@@ -50,6 +53,9 @@ data class AddEditHabitUiState(
     val reminderEnabled: Boolean = false,
     val reminderHour: Int = DEFAULT_REMINDER_HOUR,
     val reminderMinute: Int = DEFAULT_REMINDER_MINUTE,
+    val note: String = "",
+    val targetValue: String = "",
+    val targetUnit: String = "",
     @StringRes val nameErrorRes: Int? = null,
     @StringRes val errorRes: Int? = null,
     @StringRes val snackbarRes: Int? = null,
@@ -60,6 +66,10 @@ private const val DEFAULT_EMOJI = "\u2705"
 private const val DEFAULT_COLOR_HEX = "#2196F3"
 private const val DEFAULT_REMINDER_HOUR = 20
 private const val DEFAULT_REMINDER_MINUTE = 0
+
+/** 目标值 → 表单文本（整数去掉小数点，避免回显成 "8.0"）。 */
+private fun formatTarget(value: Double): String =
+    if (value % 1.0 == 0.0) value.toLong().toString() else value.toString()
 
 /**
  * 「新增 / 编辑习惯」ViewModel。
@@ -147,6 +157,12 @@ class AddEditHabitViewModel @Inject constructor(
     fun onReminderTimeChange(hour: Int, minute: Int) =
         _uiState.update { it.copy(reminderHour = hour, reminderMinute = minute) }
 
+    fun onNoteChange(value: String) = _uiState.update { it.copy(note = value) }
+
+    fun onTargetValueChange(value: String) = _uiState.update { it.copy(targetValue = value) }
+
+    fun onTargetUnitChange(value: String) = _uiState.update { it.copy(targetUnit = value) }
+
     fun onConsumeSnackbar() = _uiState.update { it.copy(snackbarRes = null) }
 
     fun onRetry() {
@@ -169,6 +185,14 @@ class AddEditHabitViewModel @Inject constructor(
             Habit.WEEKLY_DAYS_ALL
         }
 
+        val targetInput = state.targetValue.trim()
+        val targetValue = targetInput.toDoubleOrNull()
+        if (targetInput.isNotEmpty() && targetValue == null) {
+            _uiState.update { it.copy(snackbarRes = R.string.error_invalid_number) }
+            return
+        }
+        val targetUnit = state.targetUnit.trim().takeIf { it.isNotEmpty() }
+
         viewModelScope.launch {
             try {
                 val existing = if (habitId != 0L) {
@@ -187,6 +211,10 @@ class AddEditHabitViewModel @Inject constructor(
                     reminderEnabled = state.reminderEnabled,
                     reminderHour = state.reminderHour.takeIf { state.reminderEnabled },
                     reminderMinute = state.reminderMinute.takeIf { state.reminderEnabled },
+                    note = state.note.trim().takeIf { it.isNotEmpty() },
+                    targetValue = targetValue,
+                    // 纯勾选型习惯（无目标值）不保留单位，避免出现「无目标却有单位」的脏数据。
+                    targetUnit = if (targetValue != null) targetUnit else null,
                     isActive = existing?.isActive ?: true,
                     sortOrder = existing?.sortOrder ?: 0,
                     createdAt = existing?.createdAt?.takeIf { it > 0L } ?: nowMillis,

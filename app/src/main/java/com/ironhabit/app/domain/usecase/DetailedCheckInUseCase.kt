@@ -84,7 +84,7 @@ class DetailedCheckInUseCase @Inject constructor(
             planId = planId?.takeIf { it > 0L },
             dateEpochDay = epochDay,
             dateStartMillis = DateUtils.startOfDayMillis(epochDay, timeZone),
-            completedSets = sets,
+            completedSetsMask = CheckIn.maskFromCount(sets),
             completedReps = reps,
             weightKg = weightKg,
             durationMinutes = durationMinutes,

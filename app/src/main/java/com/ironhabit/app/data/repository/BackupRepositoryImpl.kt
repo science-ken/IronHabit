@@ -19,9 +19,11 @@ import com.ironhabit.app.domain.model.AppSettings
 import com.ironhabit.app.domain.model.BackupPayload
 import com.ironhabit.app.domain.model.BodyMetricBackup
 import com.ironhabit.app.domain.model.BodyMetricType
+import com.ironhabit.app.domain.model.CheckIn
 import com.ironhabit.app.domain.model.CheckInBackup
 import com.ironhabit.app.domain.model.ExerciseBackup
 import com.ironhabit.app.domain.model.ExerciseCategory
+import com.ironhabit.app.domain.model.ExerciseSource
 import com.ironhabit.app.domain.model.HabitBackup
 import com.ironhabit.app.domain.model.HabitFrequency
 import com.ironhabit.app.domain.model.HabitLogBackup
@@ -120,11 +122,14 @@ class BackupRepositoryImpl @Inject constructor(
 
 // ============================ 实体 ⇄ 备份 DTO 互转（本文件私有） ============================
 
+@Suppress("DEPRECATION")
 private fun ExerciseEntity.toBackup(): ExerciseBackup = ExerciseBackup(
     id = id,
     name = name,
     category = category.name,
     muscleGroup = muscleGroup,
+    source = source.name,
+    note = note,
     isBuiltIn = isBuiltIn,
     isActive = isActive,
     defaultSets = defaultSets,
@@ -134,20 +139,28 @@ private fun ExerciseEntity.toBackup(): ExerciseBackup = ExerciseBackup(
     timesUsed = timesUsed,
 )
 
-private fun ExerciseBackup.toEntity(): ExerciseEntity = ExerciseEntity(
-    id = id,
-    name = name,
-    category = parseCategory(category),
-    muscleGroup = muscleGroup,
-    isBuiltIn = isBuiltIn,
-    isActive = isActive,
-    defaultSets = defaultSets ?: 0,
-    defaultReps = defaultReps ?: 0,
-    defaultDurationSec = defaultDurationSec ?: 0,
-    timesUsed = timesUsed,
-    sortOrder = sortOrder,
-    createdAt = 0L,
-)
+@Suppress("DEPRECATION")
+private fun ExerciseBackup.toEntity(): ExerciseEntity {
+    // v2 备份直接用 source；v1 老备份 source 为空 → 由 isBuiltIn 推导三态来源。
+    val resolvedSource = parseExerciseSource(source)
+        ?: if (isBuiltIn) ExerciseSource.BUILT_IN else ExerciseSource.CUSTOM
+    return ExerciseEntity(
+        id = id,
+        name = name,
+        category = parseCategory(category),
+        muscleGroup = muscleGroup,
+        source = resolvedSource,
+        note = note,
+        isBuiltIn = resolvedSource == ExerciseSource.BUILT_IN,
+        isActive = isActive,
+        defaultSets = defaultSets ?: 0,
+        defaultReps = defaultReps ?: 0,
+        defaultDurationSec = defaultDurationSec ?: 0,
+        timesUsed = timesUsed,
+        sortOrder = sortOrder,
+        createdAt = 0L,
+    )
+}
 
 private fun WeekPlanEntity.toBackup(): WeekPlanBackup = WeekPlanBackup(
     id = id,
@@ -159,6 +172,7 @@ private fun WeekPlanEntity.toBackup(): WeekPlanBackup = WeekPlanBackup(
     targetDurationMin = targetDurationMin,
     sortOrder = sortOrder,
     isActive = isActive,
+    isUserEdited = isUserEdited,
 )
 
 private fun WeekPlanBackup.toEntity(): WeekPlanEntity = WeekPlanEntity(
@@ -171,6 +185,7 @@ private fun WeekPlanBackup.toEntity(): WeekPlanEntity = WeekPlanEntity(
     targetDurationMin = targetDurationMin,
     sortOrder = sortOrder,
     isActive = isActive,
+    isUserEdited = isUserEdited,
     createdAt = 0L,
 )
 
@@ -181,6 +196,8 @@ private fun CheckInEntity.toBackup(): CheckInBackup = CheckInBackup(
     dateEpochDay = dateEpochDay,
     dateStartMillis = dateStartMillis,
     completedSets = completedSets,
+    completedSetsMask = completedSetsMask,
+    rpe = rpe,
     completedReps = completedReps,
     weightKg = weightKg,
     durationMinutes = durationMinutes,
@@ -189,21 +206,27 @@ private fun CheckInEntity.toBackup(): CheckInBackup = CheckInBackup(
     loggedAtMillis = loggedAtMillis,
 )
 
-private fun CheckInBackup.toEntity(): CheckInEntity = CheckInEntity(
-    id = id,
-    exerciseId = exerciseId,
-    planId = planId,
-    dateEpochDay = dateEpochDay,
-    dateStartMillis = dateStartMillis,
-    completedSets = completedSets,
-    completedReps = completedReps,
-    weightKg = weightKg,
-    durationMinutes = durationMinutes,
-    notes = notes,
-    isQuick = isQuick,
-    loggedAtMillis = loggedAtMillis,
-    createdAt = 0L,
-)
+private fun CheckInBackup.toEntity(): CheckInEntity {
+    // 唯一真源是 mask；老备份（mask == null）由 completedSets 折算为低 n 位全 1。
+    val mask = completedSetsMask ?: CheckIn.maskFromCount(completedSets)
+    return CheckInEntity(
+        id = id,
+        exerciseId = exerciseId,
+        planId = planId,
+        dateEpochDay = dateEpochDay,
+        dateStartMillis = dateStartMillis,
+        completedSets = mask.countOneBits(),
+        completedSetsMask = mask,
+        rpe = rpe,
+        completedReps = completedReps,
+        weightKg = weightKg,
+        durationMinutes = durationMinutes,
+        notes = notes,
+        isQuick = isQuick,
+        loggedAtMillis = loggedAtMillis,
+        createdAt = 0L,
+    )
+}
 
 private fun HabitEntity.toBackup(): HabitBackup = HabitBackup(
     id = id,
@@ -215,6 +238,9 @@ private fun HabitEntity.toBackup(): HabitBackup = HabitBackup(
     reminderEnabled = reminderEnabled,
     reminderHour = reminderHour.takeIf { reminderEnabled },
     reminderMinute = reminderMinute.takeIf { reminderEnabled },
+    note = note,
+    targetValue = targetValue,
+    targetUnit = targetUnit,
     isActive = isActive,
     sortOrder = sortOrder,
 )
@@ -229,6 +255,9 @@ private fun HabitBackup.toEntity(): HabitEntity = HabitEntity(
     reminderEnabled = reminderEnabled,
     reminderHour = reminderHour ?: 0,
     reminderMinute = reminderMinute ?: 0,
+    note = note,
+    targetValue = targetValue,
+    targetUnit = targetUnit,
     isActive = isActive,
     sortOrder = sortOrder,
     createdAt = 0L,
@@ -286,6 +315,10 @@ private fun AppSettings.toBackup(): SettingsBackup = SettingsBackup(
 
 private fun parseCategory(value: String): ExerciseCategory =
     runCatching { ExerciseCategory.valueOf(value) }.getOrNull() ?: ExerciseCategory.CUSTOM
+
+/** 解析三态来源；无法识别（含旧备份的空值）返回 `null`，由调用方按 `isBuiltIn` 推导。 */
+private fun parseExerciseSource(value: String?): ExerciseSource? =
+    value?.let { runCatching { ExerciseSource.valueOf(it) }.getOrNull() }
 
 private fun parseFrequency(value: String): HabitFrequency =
     runCatching { HabitFrequency.valueOf(value) }.getOrNull() ?: HabitFrequency.DAILY

@@ -49,8 +49,20 @@ data class CheckInEntity(
     @ColumnInfo(name = "date_start_millis")
     val dateStartMillis: Long,
 
+    /**
+     * **派生冗余列**：恒等于 [completedSetsMask] 的置位数，禁止独立赋值。
+     * 保留它是为了不改动 v1 已有的 `SUM(completed_sets)` 聚合查询。
+     */
     @ColumnInfo(name = "completed_sets")
     val completedSets: Int = 0,
+
+    /** 逐组完成 bitmask（**唯一真源**）：bit i（0-based）= 第 i+1 组完成。 */
+    @ColumnInfo(name = "completed_sets_mask")
+    val completedSetsMask: Int = 0,
+
+    /** 主观强度 RPE `1..10`，可空（渐进超负荷输入源）。 */
+    @ColumnInfo(name = "rpe")
+    val rpe: Int? = null,
 
     @ColumnInfo(name = "completed_reps")
     val completedReps: Int = 0,

@@ -18,6 +18,8 @@ import com.ironhabit.app.domain.model.TodayPlanItem
  * @property totalCount 总项数
  * @property trainingStreak 训练连续打卡信息（进度环大字）
  * @property isRestDay 今日无计划也无习惯（显示休息日提示）
+ * @property plannedWeekdays 「有计划的日子」（`1..7`，升序）→ 日期栏 chip 行（v2）
+ * @property todayEpochDay 真正的「今天」（用于日期栏高亮，与 [dateEpochDay] 游标区分）
  * @property errorRes 页面级错误文案资源 id，`null` 表示无错误
  * @property snackbarRes 一次性 Snackbar 文案资源 id，用后置 `null`
  * @property snackbarArgs Snackbar 文案的格式化参数（如连续天数）
@@ -31,6 +33,8 @@ data class TodayUiState(
     val totalCount: Int = 0,
     val trainingStreak: StreakInfo = StreakInfo(0, 0, null),
     val isRestDay: Boolean = false,
+    val plannedWeekdays: List<Int> = emptyList(),
+    val todayEpochDay: Long = 0L,
     val errorRes: Int? = null,
     val snackbarRes: Int? = null,
     val snackbarArgs: List<String> = emptyList(),

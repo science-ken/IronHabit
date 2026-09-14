@@ -36,4 +36,10 @@ interface HabitRepository {
      * 因此"表中有记录"≠"已完成"。查询侧的 `AND is_completed = 1` 是必需过滤，不可移除。
      */
     fun observeActiveDays(habitId: Long): Flow<List<Long>>
+
+    /** 软删除习惯（`isActive = false`），保留其历史日志。 */
+    suspend fun deleteHabit(habitId: Long)
+
+    /** 习惯排序：按 [orderedIds] 的顺序依次写 `sortOrder`（`0, 1, 2, …`）。 */
+    suspend fun reorderHabits(orderedIds: List<Long>)
 }

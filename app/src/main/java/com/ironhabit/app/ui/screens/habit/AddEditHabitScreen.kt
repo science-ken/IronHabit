@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -38,6 +39,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -129,6 +131,35 @@ fun AddEditHabitScreen(
                     onValueChange = viewModel::onEmojiChange,
                     label = { Text(text = stringResource(R.string.hint_habit_emoji)) },
                     singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                // 目标值 / 单位（v2）：留空 = 纯勾选型习惯；填写 = 计量型（如每天 8 杯水）。
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    OutlinedTextField(
+                        value = uiState.targetValue,
+                        onValueChange = viewModel::onTargetValueChange,
+                        label = { Text(text = stringResource(R.string.hint_target_value)) },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.weight(1f),
+                    )
+                    OutlinedTextField(
+                        value = uiState.targetUnit,
+                        onValueChange = viewModel::onTargetUnitChange,
+                        label = { Text(text = stringResource(R.string.hint_target_unit)) },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+
+                OutlinedTextField(
+                    value = uiState.note,
+                    onValueChange = viewModel::onNoteChange,
+                    label = { Text(text = stringResource(R.string.hint_habit_note)) },
                     modifier = Modifier.fillMaxWidth(),
                 )
 

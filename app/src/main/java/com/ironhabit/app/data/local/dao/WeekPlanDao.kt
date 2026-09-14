@@ -4,6 +4,8 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
+import androidx.room.Update
 import com.ironhabit.app.data.local.entity.WeekPlanEntity
 import kotlinx.coroutines.flow.Flow
 
@@ -26,17 +28,63 @@ interface WeekPlanDao {
     @Query("SELECT * FROM week_plans WHERE is_active = 1 ORDER BY day_of_week, sort_order")
     fun observeAll(): Flow<List<WeekPlanEntity>>
 
+    /** 「有计划的日子」→ 预览里的 chip 行（周一/周二/周四/周六…）。 */
+    @Query("SELECT DISTINCT day_of_week FROM week_plans WHERE is_active = 1 ORDER BY day_of_week")
+    fun observePlannedWeekdays(): Flow<List<Int>>
+
     @Query("SELECT * FROM week_plans ORDER BY day_of_week, sort_order")
     suspend fun getAll(): List<WeekPlanEntity>
 
     @Query("SELECT * FROM week_plans WHERE id = :id")
     suspend fun getById(id: Long): WeekPlanEntity?
 
+    @Query("SELECT * FROM week_plans WHERE day_of_week = :dayOfWeek AND exercise_id = :exerciseId LIMIT 1")
+    suspend fun getByDayAndExercise(dayOfWeek: Int, exerciseId: Long): WeekPlanEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(entity: WeekPlanEntity): Long
 
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insert(entity: WeekPlanEntity): Long
+
+    @Update
+    suspend fun update(entity: WeekPlanEntity)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(entities: List<WeekPlanEntity>): List<Long>
+
+    /**
+     * 显式 upsert（**禁用 `OnConflictStrategy.REPLACE`**）。
+     *
+     * `week_plans` 有 `UNIQUE(day_of_week, exercise_id)`，软删除行仍占唯一槽位；
+     * `REPLACE` 会重建整行、把 `is_active` / `is_user_edited` 冲掉（架构 §6.3 坑 4）。
+     * 故：命中已有行 → `UPDATE`（保留 flags，由调用方在 `entity` 里给定新 flags），未命中 → `INSERT`。
+     */
+    @Transaction
+    suspend fun upsertExplicit(entity: WeekPlanEntity): Long {
+        val existing = getByDayAndExercise(entity.dayOfWeek, entity.exerciseId)
+        return if (existing == null) {
+            insert(entity)
+        } else {
+            update(entity.copy(id = existing.id))
+            existing.id
+        }
+    }
+
+    /** 软删除：保留唯一索引槽位 + 阻止 AI 复活。**禁止用 `DELETE`**（架构 §6.3 坑 3）。 */
+    @Query("UPDATE week_plans SET is_active = 0, is_user_edited = 1 WHERE id = :id")
+    suspend fun softDelete(id: Long)
+
+    /** 用户点「恢复为推荐」→ 交还 AI 接管。 */
+    @Query("UPDATE week_plans SET is_user_edited = 0 WHERE id = :id")
+    suspend fun resetToRecommended(id: Long)
+
+    /** AI 生成前的保护判定：该「天 × 动作」是否被用户动过（**含软删行**）。 */
+    @Query(
+        "SELECT EXISTS(SELECT 1 FROM week_plans " +
+            "WHERE day_of_week = :dayOfWeek AND exercise_id = :exerciseId AND is_user_edited = 1)"
+    )
+    suspend fun hasUserEdited(dayOfWeek: Int, exerciseId: Long): Boolean
 
     @Query("DELETE FROM week_plans WHERE id = :id")
     suspend fun deleteById(id: Long)
