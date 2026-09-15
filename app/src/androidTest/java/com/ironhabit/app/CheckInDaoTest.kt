@@ -55,11 +55,13 @@ class CheckInDaoTest {
 
     @Test
     fun upsertIsIdempotentOnSameExerciseAndDay() = runBlocking {
-        checkIn(exerciseAId, day = 100L, sets = 3)
-        checkIn(exerciseAId, day = 100L, sets = 5)
+        val firstId = checkIn(exerciseAId, day = 100L, sets = 3)
+        val secondId = checkIn(exerciseAId, day = 100L, sets = 5)
 
         assertEquals(1, checkInDao.countOn(100L))
-        // REPLACE 语义：后写覆盖前写。
+        // v2 显式 upsert：命中已有唯一槽位 → UPDATE（**非** REPLACE/DELETE+INSERT）。
+        // 后写覆盖前写，且**主键 id 保持不变**（REPLACE 会重建行 id，此处已不再如此）。
+        assertEquals(firstId, secondId)
         assertEquals(5, checkInDao.getForExerciseOnDate(exerciseAId, 100L)?.completedSets)
     }
 
@@ -111,16 +113,21 @@ class CheckInDaoTest {
         assertEquals(listOf(100L, 101L, 102L), all.map { it.dateEpochDay })
     }
 
-    /** 便捷插入一条打卡记录。 */
-    private suspend fun checkIn(exerciseId: Long, day: Long, sets: Int) {
+    /** 便捷插入一条打卡记录，返回行 id（用于验证 upsert 命中时 id 稳定）。 */
+    private suspend fun checkIn(exerciseId: Long, day: Long, sets: Int): Long =
         checkInDao.upsert(
             CheckInEntity(
                 exerciseId = exerciseId,
                 dateEpochDay = day,
                 dateStartMillis = day * 86_400_000L,
                 completedSets = sets,
+                // 维护 v2 不变量：completed_sets == completed_sets_mask.countOneBits()
+                completedSetsMask = maskOf(sets),
                 completedReps = 10,
             ),
         )
-    }
+
+    /** 由完成组数折算低 n 位全 1 的 bitmask（与 `CheckIn.maskFromCount` 口径一致）。 */
+    private fun maskOf(sets: Int): Int =
+        if (sets <= 0) 0 else if (sets >= 31) Int.MAX_VALUE else (1 shl sets) - 1
 }

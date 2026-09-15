@@ -65,18 +65,21 @@ class AppDatabaseTest {
         val epochDay = 20_500L
 
         repeat(2) { round ->
+            val sets = round + 1
             database.checkInDao().upsert(
                 CheckInEntity(
                     exerciseId = exerciseId,
                     dateEpochDay = epochDay,
                     dateStartMillis = epochDay * 86_400_000L,
-                    completedSets = round + 1,
+                    completedSets = sets,
+                    // 维护 v2 不变量：completed_sets == completed_sets_mask.countOneBits()
+                    completedSetsMask = if (sets <= 0) 0 else (1 shl sets) - 1,
                     completedReps = 10,
                 ),
             )
         }
 
-        // 同一动作同一天两次 upsert → 仅 1 条（唯一约束 + REPLACE）。
+        // 同一动作同一天两次 upsert → 仅 1 条（唯一约束 + v2 显式 upsert，命中即 UPDATE，非 REPLACE）。
         assertEquals(1, database.checkInDao().countOn(epochDay))
     }
 
