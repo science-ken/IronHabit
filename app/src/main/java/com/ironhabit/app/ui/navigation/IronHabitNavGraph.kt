@@ -77,6 +77,12 @@ fun IronHabitNavGraph(
         composable(Destinations.AI_COACH) {
             AiCoachScreen(
                 onEditProfile = { navController.navigate(Destinations.SETTINGS) },
+                onAddPlan = { dayOfWeek ->
+                    navController.navigate(Destinations.planAddEdit(dayOfWeek = dayOfWeek))
+                },
+                onEditPlan = { planId, dayOfWeek ->
+                    navController.navigate(Destinations.planAddEdit(planId = planId, dayOfWeek = dayOfWeek))
+                },
             )
         }
         composable(Destinations.PROFILE) {

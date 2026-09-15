@@ -34,6 +34,8 @@ data class GeneratedPlanSummary(
     val notes: List<PlanNote> = emptyList(),
     val source: AdviceSource = AdviceSource.LOCAL_RULES,
     val fallbackReason: RemoteFallbackReason? = null,
+    /** 本次实际写入的计划条目（**含 星期/组数/次数/重量**），供 UI 以卡片形式摊开看。 */
+    val plans: List<WeekPlan> = emptyList(),
 )
 
 /**
@@ -117,6 +119,7 @@ class GenerateTrainingPlanUseCase @Inject constructor(
             notes = proposal.notes,
             source = proposal.source,
             fallbackReason = advisor.lastFallbackReason,
+            plans = drafts,
         )
     }
 }

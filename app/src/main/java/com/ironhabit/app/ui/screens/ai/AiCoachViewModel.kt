@@ -13,6 +13,7 @@ import com.ironhabit.app.domain.model.Gender
 import com.ironhabit.app.domain.model.PlanNote
 import com.ironhabit.app.domain.model.RemoteFallbackReason
 import com.ironhabit.app.domain.model.UserProfile
+import com.ironhabit.app.domain.model.WeekPlan
 import com.ironhabit.app.domain.repository.BodyMetricRepository
 import com.ironhabit.app.domain.repository.ExerciseRepository
 import com.ironhabit.app.domain.repository.SettingsRepository
@@ -42,6 +43,8 @@ data class PlanResultUi(
     val source: AdviceSource = AdviceSource.LOCAL_RULES,
     /** 走本地时的回落原因（`null` = 没有回落）。 */
     val fallbackReason: RemoteFallbackReason? = null,
+    /** 本次写入的计划条目（含 星期/组数/次数/重量），供 UI 卡片化展示。 */
+    val plans: List<WeekPlan> = emptyList(),
 )
 
 /**
@@ -166,6 +169,7 @@ class AiCoachViewModel @Inject constructor(
                                 notes = summary.notes,
                                 source = summary.source,
                                 fallbackReason = summary.fallbackReason,
+                                plans = summary.plans,
                             ),
                             snackbarRes = R.string.ai_plan_written_hint,
                             snackbarArgs = listOf(summary.writtenCount),

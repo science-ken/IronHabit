@@ -1,6 +1,7 @@
 package com.ironhabit.app.ui.screens.plan
 
 import androidx.annotation.StringRes
+import android.database.sqlite.SQLiteConstraintException
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -210,7 +211,14 @@ class AddEditPlanViewModel @Inject constructor(
                 planRepository.upsert(plan)
                 _form.update { it.copy(snackbarRes = R.string.msg_saved, saved = true) }
             } catch (throwable: Throwable) {
-                _form.update { it.copy(snackbarRes = R.string.error_save_failed) }
+                // 改动作/星期时若目标 (天,动作) 槽位已被另一条计划占用 → Room 抛 UNIQUE 冲突，
+                // 给更精准的提示而非笼统"保存失败"。
+                val res = if (throwable is android.database.sqlite.SQLiteConstraintException) {
+                    R.string.error_duplicate_plan
+                } else {
+                    R.string.error_save_failed
+                }
+                _form.update { it.copy(snackbarRes = res) }
             }
         }
     }

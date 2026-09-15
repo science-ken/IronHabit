@@ -13,6 +13,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -168,17 +172,29 @@ private fun PlanSection(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            WEEKDAY_SHORT_RES.forEachIndexed { index, labelRes ->
-                val day = index + 1
-                FilterChip(
-                    selected = uiState.selectedDay == day,
-                    onClick = { onSelectDay(day) },
-                    label = { Text(text = stringResource(labelRes)) },
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                WEEKDAY_SHORT_RES.forEachIndexed { index, labelRes ->
+                    val day = index + 1
+                    FilterChip(
+                        selected = uiState.selectedDay == day,
+                        onClick = { onSelectDay(day) },
+                        label = { Text(text = stringResource(labelRes)) },
+                    )
+                }
+            }
+            IconButton(onClick = onAddPlan) {
+                Icon(
+                    imageVector = Icons.Filled.Add,
+                    contentDescription = stringResource(R.string.action_add),
                 )
             }
         }
@@ -211,28 +227,61 @@ private fun PlanRow(
     onDelete: () -> Unit,
     onReset: () -> Unit,
 ) {
-    Row(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        ),
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = exerciseName,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                // 行级「已改」角标：被用户改过的行，AI 生成时整行跳过（schema-v2 §6.2）。
-                if (plan.isUserEdited) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     Text(
-                        text = stringResource(R.string.label_user_edited),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(start = 8.dp),
+                        text = exerciseName,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    // 行级「已改」角标：被用户改过的行，AI 生成时整行跳过（schema-v2 §6.2）。
+                    if (plan.isUserEdited) {
+                        Text(
+                            text = stringResource(R.string.label_user_edited),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(start = 8.dp),
+                        )
+                    }
+                }
+                // 操作：恢复推荐（仅用户改过）/ 编辑 / 删除
+                if (plan.isUserEdited) {
+                    TextButton(onClick = onReset) {
+                        Text(text = stringResource(R.string.action_reset_recommended))
+                    }
+                }
+                IconButton(onClick = onClick) {
+                    Icon(
+                        imageVector = Icons.Filled.Edit,
+                        contentDescription = stringResource(R.string.action_edit_plan),
+                    )
+                }
+                IconButton(onClick = onDelete) {
+                    Icon(
+                        imageVector = Icons.Filled.Delete,
+                        contentDescription = stringResource(R.string.action_delete),
                     )
                 }
             }
@@ -244,17 +293,6 @@ private fun PlanRow(
                 ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        if (plan.isUserEdited) {
-            TextButton(onClick = onReset) {
-                Text(text = stringResource(R.string.action_reset_recommended))
-            }
-        }
-        IconButton(onClick = onDelete) {
-            Icon(
-                imageVector = Icons.Filled.Delete,
-                contentDescription = stringResource(R.string.action_delete),
             )
         }
     }

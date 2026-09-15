@@ -203,6 +203,7 @@
     <string name="msg_reminder_off">提醒已关闭</string>
     <string name="error_load_failed">加载失败，请重试</string>
     <string name="error_save_failed">保存失败，请重试</string>
+    <string name="error_duplicate_plan">该动作已排在当天计划中，换一个或先删掉原来的</string>
     <string name="error_name_empty">名称不能为空</string>
     <string name="error_name_exists">该名称已存在</string>
     <string name="error_invalid_number">请输入有效的数字</string>
@@ -340,6 +341,11 @@
 
     <!-- 区块②：生成计划 -->
     <string name="ai_section_generate">生成计划</string>
+    <string name="ai_plan_cards_title">本次生成的训练计划</string>
+    <string name="unknown_exercise">未知动作</string>
+    <string name="plan_goal_format">%1$d组 × %2$d次</string>
+    <string name="plan_goal_weight"> · %1$skg</string>
+    <string name="plan_goal_duration"> · 约%1$d分钟</string>
     <string name="ai_generate_plan">生成训练计划</string>
     <string name="ai_regenerate_plan">重新生成训练计划</string>
     <string name="ai_generate_hint">基于你的档案生成，写入后出现在「今日」页</string>

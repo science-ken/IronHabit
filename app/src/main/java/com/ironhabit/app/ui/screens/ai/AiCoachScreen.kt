@@ -12,6 +12,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
@@ -29,6 +31,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.AdviceSource
 import com.ironhabit.app.domain.model.ExerciseSuggestion
@@ -37,6 +41,7 @@ import com.ironhabit.app.domain.model.PlanNoteDetail
 import com.ironhabit.app.domain.model.PlanReason
 import com.ironhabit.app.domain.model.RemoteFallbackReason
 import com.ironhabit.app.domain.model.SuggestionReason
+import com.ironhabit.app.domain.model.WeekPlan
 import com.ironhabit.app.ui.components.AppSnackbarHost
 import com.ironhabit.app.ui.components.EmptyState
 import com.ironhabit.app.ui.components.LoadingSkeleton
@@ -59,6 +64,8 @@ import com.ironhabit.app.ui.components.ProfileSummaryCard
 @Composable
 fun AiCoachScreen(
     onEditProfile: () -> Unit,
+    onAddPlan: (Int) -> Unit = {},
+    onEditPlan: (Long, Int) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
     viewModel: AiCoachViewModel = hiltViewModel(),
 ) {
@@ -111,6 +118,8 @@ fun AiCoachScreen(
                     GeneratePlanBlock(
                         uiState = uiState,
                         onGenerate = viewModel::generatePlan,
+                        onAddPlan = onAddPlan,
+                        onEditPlan = onEditPlan,
                     )
                     ExplainBlock(bmr = viewModel.estimateBmr())
                     SuggestBlock(
@@ -143,6 +152,8 @@ private fun ProfileBlock(
 private fun GeneratePlanBlock(
     uiState: AiCoachUiState,
     onGenerate: () -> Unit,
+    onAddPlan: (Int) -> Unit,
+    onEditPlan: (Long, Int) -> Unit,
 ) {
     SectionTitle(text = stringResource(R.string.ai_section_generate))
     Text(
@@ -178,6 +189,41 @@ private fun GeneratePlanBlock(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         SourceLine(source = result.source, fallback = result.fallbackReason)
+
+        // 本次生成的训练计划：逐条卡片（星期 / 动作 / 组数×次数×重量 / 理由），可编辑。
+        if (result.plans.isNotEmpty()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = stringResource(R.string.ai_plan_cards_title),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = { onAddPlan(1) }) {
+                    Text(text = stringResource(R.string.action_add))
+                }
+            }
+            val notesByExercise = remember(result.notes) {
+                result.notes.associateBy { it.exerciseId }
+            }
+            result.plans
+                .sortedWith(compareBy({ it.dayOfWeek }, { it.sortOrder }, { it.exerciseId }))
+                .forEach { plan ->
+                    val name = uiState.exerciseNames[plan.exerciseId].orEmpty()
+                    val reason = notesByExercise[plan.exerciseId]?.let { planReasonText(it) }.orEmpty()
+                    GeneratedPlanCard(
+                        plan = plan,
+                        exerciseName = name,
+                        reason = reason,
+                        onEdit = { onEditPlan(plan.id, plan.dayOfWeek) },
+                    )
+                }
+        }
+
         if (result.notes.isNotEmpty()) {
             AiOutputCard(
                 notes = result.notes,
@@ -185,6 +231,107 @@ private fun GeneratePlanBlock(
                 source = result.source,
             )
         }
+    }
+}
+
+/**
+ * 「本次生成的训练计划」中的单条动作卡。
+ *
+ * 把规则的产出**可视化成真计划**：星期 + 动作名 + 目标(组数×次数×重量) + 挑选理由，
+ * 右上角可点「编辑」直接进计划编辑页改组数/重量/动作。解决"面板单调、看不出 AI 排了什么"。
+ */
+@Composable
+private fun GeneratedPlanCard(
+    plan: WeekPlan,
+    exerciseName: String,
+    reason: String,
+    onEdit: () -> Unit,
+) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = weekdayLabel(plan.dayOfWeek),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        text = exerciseName.ifEmpty { stringResource(R.string.unknown_exercise) },
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(start = 8.dp),
+                    )
+                    if (plan.isUserEdited) {
+                        Text(
+                            text = stringResource(R.string.label_user_edited),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(start = 8.dp),
+                        )
+                    }
+                }
+                IconButton(onClick = onEdit) {
+                    Icon(
+                        imageVector = Icons.Filled.Edit,
+                        contentDescription = stringResource(R.string.action_edit_plan),
+                    )
+                }
+            }
+            Text(
+                text = planGoalText(plan.targetSets, plan.targetReps, plan.targetWeightKg, plan.targetDurationMin),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            if (reason.isNotEmpty()) {
+                Text(
+                    text = reason,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+    }
+}
+
+/** 星期 → 全名标签（1=周一 … 7=周日）。 */
+@Composable
+private fun weekdayLabel(day: Int): String = stringResource(
+    when (day) {
+        1 -> R.string.weekday_mon
+        2 -> R.string.weekday_tue
+        3 -> R.string.weekday_wed
+        4 -> R.string.weekday_thu
+        5 -> R.string.weekday_fri
+        6 -> R.string.weekday_sat
+        else -> R.string.weekday_sun
+    },
+)
+
+/** 目标文案：N组 × M次 · 重量kg（有氧则为约D分钟）。需在组合内调用（用 stringResource）。 */
+@Composable
+private fun planGoalText(
+    sets: Int,
+    reps: Int,
+    weightKg: Float?,
+    durationMin: Int?,
+): String = buildString {
+    append(stringResource(R.string.plan_goal_format, sets, reps))
+    when {
+        weightKg != null -> append(stringResource(R.string.plan_goal_weight, formatKg(weightKg)))
+        durationMin != null -> append(stringResource(R.string.plan_goal_duration, durationMin))
     }
 }
 
