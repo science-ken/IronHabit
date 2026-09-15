@@ -3,7 +3,10 @@
 > 版本：v1.0 ｜ 作者：高见远（架构师）｜ 上游：主理人（v4/v5/v6 三轮预览需求 + 已核实的现状事实）
 > 交付对象：工程师（施工）、主理人（汇总）
 > **状态：✅ 已定稿**（主理人已拍板 §10 全部事项，可施工）
-> **配套文件**：`docs/ARCHITECTURE.md` 的 §2 / §5.2 文件计数已按本设计同步（171 → 182，新增 §2.9）
+> **配套文件**：`docs/ARCHITECTURE.md` 的 §2 / §5.2 文件计数已按本设计同步（**171 → 183**，新增 §2.9）。
+> **⚠️ 计数更正（以 git 事实为准）**：本行原写「171 → 182」，本文件 §8.2 原写「11 个新增文件」——
+> 经 `git show --name-status 4675d99` 核对（新增 `A` 文件共 **12** 个），**原登记 11 / 182，实际 12 / 183**，
+> **原因：§8.2 的新增清单漏登 `SetRpeUseCase.kt`**（RPE 落库用例，22 行纯新增）。已一并修正。
 > **设计红线**：全本地 CRUD，零网络依赖；禁止 `fallbackToDestructiveMigration()`；不得破坏 `check_ins` 的 `UNIQUE(exercise_id, date_epoch_day)`
 
 ---
@@ -431,6 +434,7 @@ companion object {
 | `data/local/Migrations.kt` | `MIGRATION_1_2`（见 §7.2） |
 | `domain/usecase/ToggleSetUseCase.kt` | 勾选/取消某一组，维护 bitmask 与派生值 |
 | `domain/usecase/UpdateExerciseUseCase.kt` | 改动作并置 `source = CUSTOM` |
+| `domain/usecase/SetRpeUseCase.kt` | **RPE 落库**（`check_ins.rpe`，渐进超负荷算法的输入源）—— **补登**（原清单漏，提交 `4675d99`） |
 | `domain/usecase/UpsertPlanItemUseCase.kt` | 新增/改计划条目并置 `is_user_edited = 1` |
 | `domain/usecase/RemovePlanItemUseCase.kt` | **软删除**（`is_active=0` + `is_user_edited=1`） |
 | `domain/usecase/ResetPlanItemUseCase.kt` | 恢复为推荐（`is_user_edited=0`） |
@@ -440,9 +444,12 @@ companion object {
 | `ui/components/PlanDateStrip.kt` | 日期栏 `‹ 日期 [今天] ›` + weekday chip 行 + 滑动手势 |
 | `app/schemas/com.ironhabit.app.AppDatabase/2.json` | KSP 生成，纳入版本管理 |
 
-> **文件计数影响（主理人已拍板确认）**：上表 **11 个新增文件**会突破 §2 原有的 171 个文件。
-> 已在 `docs/ARCHITECTURE.md` 增补 **§2.9「v2 增量新增文件（11）」**，总数 **171 → 182**，
+> **文件计数影响（主理人已拍板确认）**：上表 **12 个新增文件**会突破 §2 原有的 171 个文件。
+> 已在 `docs/ARCHITECTURE.md` 增补 **§2.9「v2 增量新增文件（12）」**，总数 **171 → 183**，
 > 并同步更新了 §5.2 认领表与 §5.1 依赖图的任务文件数。
+> **⚠️ 计数更正（以 git 事实为准）**：本段原写「11 个新增文件 / 总数 171 → 182」，**实际为 12 / 171 → 183** ——
+> **原因：上述清单漏登 `SetRpeUseCase.kt`**（`domain/usecase/`，Room `updateRpe` 的封装用例，提交 `4675d99` 中 22 行纯新增）；
+> 依据 `git show --name-status 4675d99`（新增 `A` 文件共 12 个；`938210c` 无新增）。**上表已补登该行。**
 >
 > **⭐「171 个文件」红线的适用范围（写清以免后人误判）**：
 > 该红线**仅适用于"只改版本数字 / 只改文档表述、不引入新功能"的变更**（例：compileSdk 34 → 35 那次）。
@@ -610,7 +617,7 @@ suspend fun regenerateWeek(suggestions: List<WeekPlan>) {
 | **S1** | **Schema 迁移落地**：Entity 加列 + `Migrations.kt` + `VERSION=2` + `addMigrations` | 4 个 Entity、`Migrations.kt`(新)、`AppDatabase.kt:63`、`DatabaseModule.kt:43` | 无 | P0 |
 | **S2** | **Domain 模型与 Mapper**：`ExerciseSource`、`completedSetsMask`/派生 getter、`isUserEdited`、`note` | 4 个 domain model、4 个 mapper | S1 | P0 |
 | **S3** | **DAO + Repository**：bitmask 同写、软删除、显式 upsert、`observePlannedWeekdays`、习惯排序 | 4 个 DAO、3 个 RepositoryImpl | S2 | P0 |
-| **S4** | **UseCase**：`ToggleSet`、`UpdateExercise`(→CUSTOM)、计划 upsert/软删/重置、习惯增删改排序 | 7 个 UseCase（多数新增） | S3 | P0 |
+| **S4** | **UseCase**：`ToggleSet`、**`SetRpe`（补登）**、`UpdateExercise`(→CUSTOM)、计划 upsert/软删/重置、习惯增删改排序 | **8 个 UseCase**（多数新增；原写 7，漏 `SetRpeUseCase.kt`） | S3 | P0 |
 | **S5** | **UI**：逐组勾选、日期栏+chip+滑动、习惯编辑态、计划编辑/添加动作弹窗 | `ExerciseCheckCard`、`PlanDateStrip`(新)、`SetCheckboxRow`(新)、Today/Train/Discipline 三屏 | S4 | P1 |
 | **S6** | **AI 保护规则 + 升级回归验证**：`regenerateWeek` 遵守 §9.4；**v1→v2 真机升级验证** | AI 生成处、`app/schemas/.../2.json` | S5 | P1 |
 

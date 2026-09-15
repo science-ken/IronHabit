@@ -64,10 +64,10 @@
 | `week_plans` / `check_ins` 外键子列均有索引 | **✅ 实测** | `WeekPlanEntity.kt:26-28`、`CheckInEntity.kt:27-30` |
 | Vico 2.2.0 无饼图实现 | **✅ 实测** | 下载 AAR 解析类名 |
 | kotlinx-datetime 0.6.1 的 API 形态 | **✅ 实测** | 解包 `sources.jar` 读源码 |
-| schema v2 迁移只能用 `ADD COLUMN` | **✅ 实测** | 查 SQLite 版本门槛 + `minSdk = 24`（`docs/schema-v2.md` §1.2） |
+| schema v2 迁移只能用 `ADD COLUMN` | **🔶 推演（主理人已批准降级，原标 ✅ 实测）** | **完整推理链**：①【已知事实 A · 🔗 引用】`ALTER TABLE … DROP COLUMN` 需 SQLite ≥ 3.35、`RENAME COLUMN` 需 SQLite ≥ 3.25（来源：SQLite / Android 官方版本门槛文档）；②【已知事实 B · ✅ 实测】本工程 `minSdk = 24`（`app/build.gradle.kts`），即需覆盖 Android 7.0 起的老设备，其内置 SQLite 版本**低于**上述门槛；③【由此得出的结论】v2 迁移**只能 `ADD COLUMN`**，禁用 `DROP COLUMN` / `RENAME COLUMN`。**⚠️ 未在 API 24 设备上实测过 DROP/RENAME 的真实行为**（①②均为间接依据，属推演，不是实测）。验证方法：API 24 模拟器跑一次含 `DROP COLUMN` 的迁移，确认报错。**判错的代价**：仅"少用一种可选的迁移手段"，不影响任何已实现功能，故宁可标严。 |
 | **`targetSdk` 保持 34 不会引入回归** | **🔶 推演** | 依据 AGP 官方语义；**未经真机回归验证**。验证方法：Android 15 模拟器装机后跑一遍 4 个 Tab |
 | **首启空态不会崩** | **🔶 推演** | 静态审查了全部卫语句（`StreakCalculator:25` 等，见装机审查报告）；**未经装机验证**。验证方法：**首次装机后直接打开 App，空库走一遍 4 个 Tab**（这是装机验证的**头号必做项**） |
-| 通知提醒链路可用 | **🔶 推演** | 代码路径已审；**未经真机验证**。已知两个 🟡 待修（首屏未请求 `POST_NOTIFICATIONS`、`IronHabitApp.onCreate` 未调 `rescheduleAll()`） |
+| 通知提醒链路可用 | **🔶 推演（已修复，待真机验证）** | 原两个 🟡（启动时不重排闹钟、缺一次性通知权限申请）**已在提交 `b8fb7fb`（v1.1）修复并 push**：启动协程补 `rescheduleAll()`；主 Activity 首帧可见时一次性申请 `POST_NOTIFICATIONS`（DataStore 标记只弹一次，复用 `shouldAskNotificationPermission()`）。**但从未在真机验证过（手上无可用设备）** → 结论仍为 **🔶，不得升格为"已验证可用"**。验证方法：真机设定 2 分钟后提醒 + 重启手机确认重排 |
 
 > ⚠️ **上表 🔶 项正是下一步装机验证的重点**。**推演结论在装机前一律不得当作"已验证"对外宣称。**
 
@@ -134,6 +134,14 @@ export ANDROID_HOME="C:/Users/science/AppData/Local/Android/Sdk"
 > 任何依赖版本变更后，**必须真实跑一次 `./gradlew :app:checkDebugAarMetadata`**，不得靠静态推演判断兼容性。
 > 详见 §3.8 的经验条目。
 
+> **🔴 已知坑 3 · 直接调用 `gradle.bat` 会 `EXIT=127`**
+> 在 Windows / Git-Bash 下直接执行 `gradle.bat` 会因找不到启动器而返回 **`EXIT=127`**（表现为"命令未找到"）。
+> **解法**：一律走 **`bin/gradle`（POSIX 启动器）**，即 `<GradleHome>/bin/gradle`（本机：`C:/Users/science/android-tools/gradle-8.9/bin/gradle`）。
+
+> **🔴 已知坑 4 · `ANDROID_HOME` 必须是 Windows 形式路径**
+> 在 Git-Bash 里若把 `ANDROID_HOME` 设成 POSIX 形式（如 `/c/Users/.../Android/Sdk`），Gradle 会报 **"SDK not found"**。
+> **解法**：设成 **Windows 形式**（`C:/Users/science/AppData/Local/Android/Sdk`，正斜杠即可），即上方 `export ANDROID_HOME=...` 的写法。
+
 ### 1.2 分层架构（Clean Architecture，单 module 内分层）
 
 个人自用项目**不拆多 Gradle module**（过度工程），但在**单个 `app` module 内严格分层**，依赖方向单向向下：
@@ -174,7 +182,7 @@ export ANDROID_HOME="C:/Users/science/AppData/Local/Android/Sdk"
 | 依赖注入 | **Hilt**（KSP，非 KAPT） | `2.52` | 参考项目共识；KSP 编译更快；`2.52` 与 Kotlin `2.0.21` 官方兼容 |
 | 本地持久化 | **Room**（KSP） | `2.6.1` | 编译期 SQL 校验、`Flow` 原生响应式、迁移可控 |
 | 键值设置 | **DataStore Preferences** | `1.1.1` | 主题/单位/提醒开关等轻量设置；替代 SharedPreferences（无阻塞主线程） |
-| 图表 | **自绘 Canvas**（Compose 原生 `Canvas`/`drawPath`/`drawArc`） | 0 依赖 | **不用任何第三方图表库**。理由：① Vico 2.2.0 **只有直角坐标图、无饼图实现**（主理人下载 AAR 解析类名实证），无法满足分类占比饼图；② 本机无 JDK/Android SDK，第三方图表库的**参数名无法本地编译验证**，是"不可验证的第三方 API"；③ 两张图（趋势柱状 + 占比饼图）用 Canvas 手绘约 100 行即可，彻底消除依赖与版本风险。**同时否决 MPAndroidChart**（View 体系需 AndroidView 桥接） |
+| 图表 | **自绘 Canvas**（Compose 原生 `Canvas`/`drawPath`/`drawArc`） | 0 依赖 | **不用任何第三方图表库**。理由：① Vico 2.2.0 **只有直角坐标图、无饼图实现**（主理人下载 AAR 解析类名实证），无法满足分类占比饼图；② ~~本机无 JDK/Android SDK，第三方图表库的**参数名无法本地编译验证**~~ **（该前提已过时，见 §1.1：本机工具链早已就绪且已真实编译通过；此条不再成立，但决策保留，理由见 §2.7）**；③ 两张图（趋势柱状 + 占比饼图）用 Canvas 手绘约 100 行即可，彻底消除依赖与版本风险。**同时否决 MPAndroidChart**（View 体系需 AndroidView 桥接） |
 | 日期/时区 | **kotlinx-datetime** | `0.6.1` | 提供 `LocalDate`/`TimeZone`，**避免 java.time 在 minSdk 24 上必须开 core library desugaring**；纯 Kotlin，domain 层可单测 |
 | 序列化 | **kotlinx.serialization-json** | `1.7.3` | P1 导入导出用；编译期生成、无反射、体积小；**否决 Gson**（反射开销 + 字段丢失静默） |
 | 协程 | kotlinx-coroutines-android | `1.9.0` | 标准 |
@@ -218,8 +226,11 @@ export ANDROID_HOME="C:/Users/science/AppData/Local/Android/Sdk"
 ## 2. 文件列表（施工图）
 
 > 约定：包根 `com.ironhabit.app`；Kotlin 源根 `app/src/main/java/`。
-> **总计 182 个文件** = 构建与配置 18（§2.1+§2.2）+ Kotlin 源文件 143（§2.3+§2.4+§2.5+§2.6+§2.8 的 133 ＋ §2.9 的 10）+ Android 资源 20（§2.7）+ Room schema 1（§2.9 的 `2.json`）。
-> 各小节计数：§2.1=14 ｜ §2.2=4 ｜ §2.3=7 ｜ §2.4=37 ｜ §2.5=35 ｜ §2.6=45 ｜ §2.7=20 ｜ §2.8=9 ｜ **§2.9=11（v2 增量）**。合计 **182**。
+> **总计 183 个文件（当前已落地 = 171 + v2 的 12）** = 构建与配置 18（§2.1+§2.2）+ Kotlin 源文件 144（§2.3+§2.4+§2.5+§2.6+§2.8 的 133 ＋ §2.9 的 11）+ Android 资源 20（§2.7）+ Room schema 1（§2.9 的 `2.json`）。
+> 各小节计数：§2.1=14 ｜ §2.2=4 ｜ §2.3=7 ｜ §2.4=37 ｜ §2.5=35 ｜ §2.6=45 ｜ §2.7=20 ｜ §2.8=9 ｜ **§2.9=12（v2 增量，已落地）**。合计 **183**。
+> **⚠️ 计数更正（以 git 事实为准）**：原登记「总数 182（§2.9=11）」，**实际为 183（§2.9=12）** —— 原 §2.9 与 `docs/schema-v2.md` §8.2 均**漏登 `SetRpeUseCase.kt`**（RPE 落库用例，提交 `4675d99` 中 22 行纯新增）。详见 §2.9 末尾说明。
+> **v3（饮食模块 + 用户档案）设计已登记、尚未施工**：将新增 **§2.10（20 个文件）**，落地后总数 **183 → 203**。见 `docs/schema-v3-meals.md`。
+> **🔑 两个数字的关系（避免误读）**：**183 = 已落地（截至提交 `938210c`）；203 = 含 v3 设计预留** —— v3 尚未施工，**切勿**把 203 误读为"已经写了 203 个文件"。
 >
 > **⭐「171 个文件」红线的适用范围（务必读，避免误判）**：
 > 原「§2 保持 171 个不变」的红线**仅适用于「只改版本数字 / 只改文档表述、不引入新功能」的变更**（例：compileSdk 34 → 35 那次，见 §3.8）。
@@ -401,9 +412,9 @@ export ANDROID_HOME="C:/Users/science/AppData/Local/Android/Sdk"
 | `.../ui/screens/settings/BackupScreen.kt` | 导入/导出页（P1） |
 | `.../ui/screens/settings/BackupViewModel.kt` | 备份页 VM |
 
-> **落点确认（不新增文件）**：精确闹钟权限引导 UI 落在 **`ui/screens/settings/SettingsScreen.kt`**——当用户开启提醒且系统未授予 `SCHEDULE_EXACT_ALARM`（API 31+）时，在提醒开关下方展示引导条（跳转系统"闹钟与提醒"设置页）；用户拒绝则降级 `setAndAllowWhileIdle` 并显示"已降级为不精确提醒"。该 UI 由 `SettingsViewModel` 持有的 `AppSettings` 派生状态驱动，**仅复用现有 20 个 `ui` 文件，当时文件总数保持 171 不变**（v2 增量后为 182，见 §2.9）。
+> **落点确认（不新增文件）**：精确闹钟权限引导 UI 落在 **`ui/screens/settings/SettingsScreen.kt`**——当用户开启提醒且系统未授予 `SCHEDULE_EXACT_ALARM`（API 31+）时，在提醒开关下方展示引导条（跳转系统"闹钟与提醒"设置页）；用户拒绝则降级 `setAndAllowWhileIdle` 并显示"已降级为不精确提醒"。该 UI 由 `SettingsViewModel` 持有的 `AppSettings` 派生状态驱动，**仅复用现有 20 个 `ui` 文件，当时文件总数保持 171 不变**（v2 增量后为 183，见 §2.9）。
 
-> **为何不用图表库（T04 决策）**：`TrendChart.kt` / `CategoryPieChart.kt` 改用 **Compose 原生 `Canvas` 手绘**。依据：Vico 2.2.0 只提供直角坐标图、**无饼图**实现，无法满足 P0-6 的分类占比图；且本机无 JDK/Android SDK，任何第三方图表库的参数名都**无法本地编译验证**。自绘 0 依赖、无版本风险，两图合计约 100 行。相应已从依赖清单移除 Vico（见 §6）。
+> **为何不用图表库（T04 决策）**：`TrendChart.kt` / `CategoryPieChart.kt` 改用 **Compose 原生 `Canvas` 手绘**。依据：**①（主因，仍成立）** Vico 2.2.0 只提供直角坐标图、**无饼图**实现，无法满足 P0-6 的分类占比图；~~② 且本机无 JDK/Android SDK，任何第三方图表库的参数名都无法本地编译验证~~ —— **⚠️ 该前提已过时（属设计当时的旧前提）**：本机工具链早已就绪（JDK 17 `C:\Users\science\android-tools\jdk17`、Gradle 8.9 `C:\Users\science\android-tools\gradle-8.9`、SDK `C:\Users\science\AppData\Local\Android\Sdk`），`compileSdk` 已按真实报错由 34 改为 35，`:app:assembleDebug` **BUILD SUCCESSFUL**，产物 `app-debug.apk` 约 **18.87–19.37 MB** —— 故"图表库无法本地验证"**不再成立**；但**决策保留**（主因①已足以否决图表库，自绘亦零依赖、无版本风险，两图合计约 100 行）。相应已从依赖清单移除 Vico（见 §6）。
 
 ### 2.7 资源（20）
 
@@ -448,7 +459,7 @@ export ANDROID_HOME="C:/Users/science/AppData/Local/Android/Sdk"
 
 > **路径口径（消除歧义）**：§2.8 中 `app/src/test/java/.../` 的省略根 = **`app/src/test/java/com/ironhabit/app`**（单测源根）；`app/src/androidTest/java/.../` 的省略根 = **`app/src/androidTest/java/com/ironhabit/app`**（instrumentation 源根）。**均非** §2.3–§2.6 的 main 源根（`app/src/main/java/com/ironhabit/app`）。
 
-### 2.9 v2 增量新增文件（11）
+### 2.9 v2 增量新增文件（12）
 
 > 全部源自 **`docs/schema-v2.md`**（schema v1 → v2）：逐组打卡 bitmask / RPE / 动作三态来源 / 多肌群 /
 > 计划「用户手动改过」标记 / 习惯增删改排序 / 日期切换。**主理人已拍板确认**（见该文档 §10）。
@@ -459,6 +470,7 @@ export ANDROID_HOME="C:/Users/science/AppData/Local/Android/Sdk"
 | `.../data/local/Migrations.kt` | `MIGRATION_1_2`（v1 → v2，**仅 ADD COLUMN**；受 minSdk 24 限制，禁止 DROP/RENAME COLUMN） |
 | `.../domain/usecase/ToggleSetUseCase.kt` | 勾选/取消某一组，维护 `completed_sets_mask` 与派生值 |
 | `.../domain/usecase/UpdateExerciseUseCase.kt` | 改动作并置 `source = 'CUSTOM'`（对用户承诺过，单向不可逆） |
+| `.../domain/usecase/SetRpeUseCase.kt` | **RPE 落库**（`check_ins.rpe`，渐进超负荷算法的输入源）；**补登**（提交 `4675d99`） |
 | `.../domain/usecase/UpsertPlanItemUseCase.kt` | 新增/改计划条目并置 `is_user_edited = 1`；**显式 upsert，禁用 REPLACE** |
 | `.../domain/usecase/RemovePlanItemUseCase.kt` | 计划条目**软删除**（`is_active = 0` + `is_user_edited = 1`），**禁用 DELETE** |
 | `.../domain/usecase/ResetPlanItemUseCase.kt` | 「恢复为推荐」（`is_user_edited = 0`），交还 AI 接管 |
@@ -468,8 +480,46 @@ export ANDROID_HOME="C:/Users/science/AppData/Local/Android/Sdk"
 | `.../ui/components/PlanDateStrip.kt` | 日期栏 `‹ 日期 [今天] ›` + weekday chip 行 + 左右滑动切换 |
 | `app/schemas/com.ironhabit.app.AppDatabase/2.json` | Room schema v2（**KSP 生成**，必须纳入版本管理，否则 v2→v3 无法写迁移） |
 
-> **认领**：`Migrations.kt` + `2.json` → **T02**（+2）；7 个 UseCase → **T03**（+7）；
+> **认领**：`Migrations.kt` + `2.json` → **T02**（+2）；**8 个 UseCase** → **T03**（+8）；
 > `SetCheckboxRow.kt` + `PlanDateStrip.kt` → **T04**（+2）。见 §5.2。
+>
+> **⚠️ 计数更正说明（以 git 事实为准）**：本节原登记 **11** 个文件（7 个 UseCase），**实际 12 个（8 个 UseCase）**
+> —— 依据提交 `4675d99` 的 `git show --name-status`（新增 `A` 文件共 **12** 个，含 `SetRpeUseCase.kt`；`938210c` 无新增文件，13 个全为修改）。
+> 根因：原 `docs/schema-v2.md` §8.2 的新增清单**漏登 `SetRpeUseCase.kt`**（Room `updateRpe` 的封装用例，22 行纯新增），本节随之漏算。
+> **本次补登 → v2 总数 171 → 183（原登记 182）。**
+
+### 2.10 v3 增量新增文件（20）· **设计已登记，待施工**
+
+> 来源：**`docs/schema-v3-meals.md`**（饮食模块 + 用户档案）。**本轮为"设计预留"** —— v3 尚未施工，
+> 故本节的 20 个文件**不计入 §2 抬头"已落地 183"**；待施工落地后，总数即为 **183 → 203**（§0.1 红线：数字与代码同步）。
+> 包根同 §2.3：`app/src/main/java/com/ironhabit/app`；另含 1 个 Room schema 文件。
+
+| 相对路径 | 职责 |
+|---------|------|
+| `.../data/local/entity/MealEntity.kt` | `meals` 表实体（每日实例；`UNIQUE(date_epoch_day, meal_type)`） |
+| `.../data/local/dao/MealDao.kt` | 当日查询 / `COALESCE(SUM…)` 汇总 / 勾选 / 软删 / **显式 upsert** |
+| `.../data/local/dto/MealTotalsRaw.kt` | 聚合投影 DTO（与 `StatsRaw.kt` 同风格） |
+| `.../data/mapper/MealMapper.kt` | `MealEntity ⇄ domain.Meal`；`items_text` ⇄ `List<String>` |
+| `.../data/repository/MealRepositoryImpl.kt` | `MealRepository` 实现（软删/upsert 语义收敛于此） |
+| `.../data/preset/BuiltInMealTemplates.kt` | 内置餐次模板常量（按 `meal_type` 分组） |
+| `.../domain/model/Meal.kt` | `Meal` + `MealType` 枚举 |
+| `.../domain/model/DietModels.kt` | `DietTarget` / `MealTotals` |
+| `.../domain/model/UserProfile.kt` | **用户档案** `UserProfile` + `Gender` + `Goal`（存 `SettingsDataStore`，**不落库**） |
+| `.../domain/repository/MealRepository.kt` | 仓库接口 |
+| `.../domain/diet/DietPlanGenerator.kt` | **纯函数规则引擎**（Mifflin-St Jeor，零 Android 依赖） |
+| `.../domain/usecase/GetTodayMealsUseCase.kt` | 组装当日「餐列表 + 合计 + 目标」 |
+| `.../domain/usecase/ToggleMealUseCase.kt` | 勾选 / 取消一餐 |
+| `.../domain/usecase/GenerateDietPlanUseCase.kt` | 生成饮食计划（幂等，保护用户修改） |
+| `.../domain/usecase/UpsertMealUseCase.kt` | 编辑一餐 → `is_user_edited = 1` |
+| `.../domain/usecase/DeleteMealUseCase.kt` | **软删**一餐 |
+| `.../ui/components/MealBlock.kt` | 餐次列表渲染 |
+| `.../ui/components/DietTotalsBar.kt` | 热量 / 蛋白汇总条 |
+| `app/schemas/com.ironhabit.app.data.local.AppDatabase/3.json` | Room schema v3（**KSP 生成**，必须入库） |
+| `app/src/test/java/.../domain/diet/DietPlanGeneratorTest.kt` | 规则引擎单测（纯 JVM） |
+
+> **认领（🔶 推演，落地时以实际为准）**：T02 = `MealEntity`/`MealDao`/`MealTotalsRaw`/`MealMapper`/`MealRepositoryImpl`/`BuiltInMealTemplates`/`Meal`/`DietModels`/`MealRepository`/`UserProfile`/`3.json`（**11**）；
+> T03 = `DietPlanGenerator` + 5 个饮食 UseCase + `DietPlanGeneratorTest`（**7**）；T04 = `MealBlock`/`DietTotalsBar`（**2**）；T05 = **0 新增**（仅改 `SettingsScreen`/`SettingsViewModel`）。
+> **合计 20** = 饮食 19 + 用户档案 1（更正说明：`docs/schema-v3-meals.md` §8.1 原写"新增 18"、§8.2 原写"修改 7"，**实际表体为 19 / 8，已在该文更正**）。
 
 ---
 
@@ -1179,7 +1229,7 @@ suspend fun distinctActiveDays(startEpochDay: Long, endEpochDay: Long): Int
 
 ### 3.5 T02 已落地偏离登记（任务 T02 实现时的**加法式**调整，未改原有字段）
 
-> 说明：以下均为 T02 已落盘实现的增补项（只增不改），T03/T04/T05 请**按此处的最终形态**调用，勿照 §3.3 旧签名。整体仍在 §2 **当时**的 171 个文件内，**不新增文件**（v2 功能增量后为 182，见 §2.9）。
+> 说明：以下均为 T02 已落盘实现的增补项（只增不改），T03/T04/T05 请**按此处的最终形态**调用，勿照 §3.3 旧签名。整体仍在 §2 **当时**的 171 个文件内，**不新增文件**（v2 功能增量后为 183，见 §2.9）。
 
 | # | 类别 | 已落地增补 | 用途 |
 |---|------|-----------|------|
@@ -1207,7 +1257,7 @@ suspend fun distinctActiveDays(startEpochDay: Long, endEpochDay: Long): Int
 | 10 | **今日页重试机制** | `TodayViewModel` 比 §7.2 范式多一条 `retryTrigger`：`retryTrigger.flatMapLatest { checkInRepository.observeActiveDaysSince(0L).mapLatest { getTodayOverview(today) } }` + `onRetry()`（注记见 §7.2） | "加载失败 → 重试"需要可重新触发上游 Flow，而非一次性 `viewModelScope.launch` |
 | 11 | **Tab 跳转用显式 NavOptions** | 用 `NavOptions.Builder().setPopUpTo(graph.startDestinationId, false, true).setLaunchSingleTop(true).setRestoreState(true).build()`，**不依赖** `androidx.navigation` 的 Kotlin DSL 扩展导入 | 规避 DSL 扩展的导入/版本差异，行为显式可读 |
 
-> 说明：以上均为 T03/T04 已批准/落盘的调整，**只增不改**，T05 请按此处的最终形态实现。整体仍在 §2 **当时**的 171 个文件内，**不新增文件**（v2 功能增量后为 182，见 §2.9）。
+> 说明：以上均为 T03/T04 已批准/落盘的调整，**只增不改**，T05 请按此处的最终形态实现。整体仍在 §2 **当时**的 171 个文件内，**不新增文件**（v2 功能增量后为 183，见 §2.9）。
 
 ### 3.7 字段一致性基线（对落盘代码 T01–T05 的全量交叉审计）
 
@@ -1286,7 +1336,7 @@ Recommended action: Update this project to use a newer compileSdk of at least 35
 - §A / §C「云端 CI 配方」：Android SDK 预装包 `platforms;android-34 build-tools;34.0.0` → `platforms;android-35 build-tools;35.0.0`；release 校验改用 `build-tools/35.0.0/apksigner`。（`compileSdk = 35` 需预装 `android-35` 平台；`build-tools 35.0.0` 与 AGP 8.7.3 默认值对齐。）
 
 > **红线复核**：以上**仅修改版本数字**，当时 §2 施工图文件清单**保持 171 个不变**（§2.1..§2.8 = 14/4/7/37/35/45/20/9），
-> **未增删任何文件条目**。（后续 v2 功能增量新增 §2.9 的 11 个文件 → 总数 182，属**真实功能增量**，不受本条红线约束，见 §2 抬头的红线适用范围说明。）
+> **未增删任何文件条目**。（后续 v2 功能增量新增 §2.9 的 12 个文件 → 总数 183，属**真实功能增量**，不受本条红线约束，见 §2 抬头的红线适用范围说明。）
 
 ---
 
@@ -1490,7 +1540,7 @@ sequenceDiagram
 ```mermaid
 graph TD
     T01["T01 项目基础设施 + 云端 CI<br/>(45 文件)"] --> T02["T02 数据层 + 领域契约<br/>(54 文件 · 含 v2 +2)"]
-    T02 --> T03["T03 业务用例 + streak + 通知 + 导入导出<br/>(34 文件 · 含 v2 +7)"]
+    T02 --> T03["T03 业务用例 + streak + 通知 + 导入导出<br/>(35 文件 · 含 v2 +8)"]
     T03 --> T04["T04 UI 主框架 + 4 Tab 主页面<br/>(31 文件 · 含 v2 +2)"]
     T04 --> T05["T05 二级页面 + 统计/设置 + 集成收尾<br/>(18 文件)"]
     T01 -.-> T04
@@ -1508,13 +1558,14 @@ graph TD
 |------|--------------|-------:|
 | T01 基础设施 + CI | §2.1(14) + §2.2(4) + §2.3(7) + §2.7(20) | **45** |
 | T02 数据层 + 领域契约 | §2.4 去通知后(32) + §2.5 模型/仓库(11+9=20) + **§2.9 v2 增量(2：`Migrations.kt`、`2.json`)** | **54** |
-| T03 用例 + streak + 通知 + 导入导出 + 单测 | §2.5 用例/工具(13+2=15) + §2.4 通知(5) + §2.8 单测(7) + **§2.9 v2 增量(7 个 UseCase)** | **34** |
+| T03 用例 + streak + 通知 + 导入导出 + 单测 | §2.5 用例/工具(13+2=15) + §2.4 通知(5) + §2.8 单测(7) + **§2.9 v2 增量(8 个 UseCase)** | **35** |
 | T04 UI 主框架 + 4 Tab | §2.6 主题/导航/组件/主页面/弹层(3+4+9+12+1=29) + **§2.9 v2 增量(2：`SetCheckboxRow`、`PlanDateStrip`)** | **31** |
 | T05 二级页 + 统计/设置收尾 | §2.6 二级页(16) + §2.8 androidTest(2) | **18** |
-| **合计** | 覆盖 §2 全部 **9** 小节 | **182** |
+| **合计（已落地）** | 覆盖 §2 全部 **9** 小节 | **183** |
 
-> 与 §2 各小节总数完全对齐（§2.1..§2.9 = 14+4+7+37+35+45+20+9+11 = **182**），无重复登记、无未认领文件。
-> v2 增量的 11 个文件已按依赖关系归入 T02(+2) / T03(+7) / T04(+2)，见 §2.9 与 `docs/schema-v2.md` §11。
+> 与 §2 各小节总数完全对齐（§2.1..§2.9 = 14+4+7+37+35+45+20+9+12 = **183**；原登记 182，**+1 更正见 §2.9**），无重复登记、无未认领文件。
+> v2 增量的 **12** 个文件已按依赖关系归入 T02(+2) / T03(+8) / T04(+2)，见 §2.9 与 `docs/schema-v2.md` §11。
+> **v3（设计已登记、待施工）**：§2.10 的 **20** 个文件落地后需并入 T02/T03/T04/T05（届时更新本表），总数 **183 → 203**。见 `docs/schema-v3-meals.md` §8。
 
 ---
 
@@ -1643,7 +1694,7 @@ hilt                  = { id = "com.google.dagger.hilt.android", version.ref = "
 
 | 项 | 约定 |
 |----|------|
-| **包名（namespace / applicationId）** | `com.ironhabit.app` ｜ 理由：`iron`（铁/自律）+ `habit`（习惯）贴合定位；短、无商标风险、非 `com.example`。**已定稿 `com.ironhabit.app`（主理人已确认）**，全工程 182 个文件统一使用该包名 |
+| **包名（namespace / applicationId）** | `com.ironhabit.app` ｜ 理由：`iron`（铁/自律）+ `habit`（习惯）贴合定位；短、无商标风险、非 `com.example`。**已定稿 `com.ironhabit.app`（主理人已确认）**，全工程 183 个文件统一使用该包名 |
 | 类命名 | `XxxEntity`（Room）/ `XxxDao` / `XxxRepositoryImpl` / `XxxRepository`（接口）/ `XxxUseCase` / `XxxViewModel` / `XxxScreen` / `XxxUiState` |
 | 文件名 | **一文件可含多个同类**（如 `StatsModels.kt` 放多个 data class），但**一个 Screen/ViewModel 一个文件** |
 | 路由名 | snake_case：`today`、`train`、`discipline`、`profile`、`add_edit_exercise?exerciseId=-1`（`-1`=新增） |
@@ -1771,7 +1822,7 @@ val events = _events.receiveAsFlow()
 
 | # | 事项 | 结论（已确认） | 影响面 |
 |---|------|--------------|--------|
-| Q1 | **包名最终定稿** | **已确认**：采用 `com.ironhabit.app` | 182 个文件的包声明 + `applicationId` |
+| Q1 | **包名最终定稿** | **已确认**：采用 `com.ironhabit.app` | 183 个文件的包声明 + `applicationId` |
 | Q2 | **提醒的精确度诉求** | **已确认**：需要**精确到点**，保留 AlarmManager `setExactAndAllowWhileIdle` 方案与 API 31+ `SCHEDULE_EXACT_ALARM` 权限引导（用户拒绝则降级 `setAndAllowWhileIdle`，并在设置页提示） | 权限引导 UI 落在 `ui/screens/settings/SettingsScreen.kt`（复用，不新增文件） |
 | Q3 | **工程如何上传到 GitHub、Secret 怎么配**（本机无 git 且 github.com 被 hosts+代理双重拦截） | **已确认**：由用户自行把工程上传到 GitHub；`docs/CI.md` 须按"零本地环境"前提写清两条上传路径（① GitHub 网页上传 ② 另一台电脑用 git 推送）与 4 个 Secret（`SIGNING_KEY`、`KEY_STORE_PASSWORD`、`KEY_ALIAS`、`KEY_PASSWORD`）的配置位置（仓库 `Settings → Secrets and variables → Actions`） | 决定 T01 能否真正"跑到绿灯" |
 
