@@ -35,6 +35,19 @@ class PlanRepositoryImpl @Inject constructor(
             .map { entities -> entities.map(PlanMapper::toDomain) }
             .flowOn(ioDispatcher)
 
+    override fun observeAllIncludingInactive(): Flow<List<WeekPlan>> =
+        weekPlanDao.observeAllIncludingInactive()
+            .map { entities -> entities.map(PlanMapper::toDomain) }
+            .flowOn(ioDispatcher)
+
+    override suspend fun upsertGenerated(plans: List<WeekPlan>): Int {
+        // 只 upsert，绝不 DELETE（含"先删本周再重建"）—— 见接口文档。
+        for (plan in plans) {
+            weekPlanDao.upsertExplicit(PlanMapper.toEntity(plan).copy(isUserEdited = false))
+        }
+        return plans.size
+    }
+
     override fun observePlannedWeekdays(): Flow<List<Int>> =
         weekPlanDao.observePlannedWeekdays().flowOn(ioDispatcher)
 

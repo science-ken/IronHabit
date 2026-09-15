@@ -9,6 +9,7 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import com.ironhabit.app.ui.screens.ai.AiCoachScreen
 import com.ironhabit.app.ui.screens.bodymetrics.BodyMetricsScreen
 import com.ironhabit.app.ui.screens.discipline.DisciplineScreen
 import com.ironhabit.app.ui.screens.exercise.AddEditExerciseScreen
@@ -25,7 +26,7 @@ import com.ironhabit.app.ui.screens.train.TrainScreen
 /**
  * 应用路由图。
  *
- * - 4 个一级 Tab 路由在此注册；
+ * - 5 个一级 Tab 路由在此注册（v3 起新增 `AI_COACH`）；
  * - 二级页由 [registerSecondaryRoutes] 统一挂载（T05 实现），
  *   这样底部栏可见性规则（[Destinations.TabRoutes]）自适应：二级页路由会自动隐藏底栏。
  */
@@ -68,6 +69,11 @@ fun IronHabitNavGraph(
             DisciplineScreen(
                 onCreateHabit = { navController.navigate(Destinations.habitAddEdit()) },
                 onEditHabit = { habitId -> navController.navigate(Destinations.habitAddEdit(habitId)) },
+            )
+        }
+        composable(Destinations.AI_COACH) {
+            AiCoachScreen(
+                onEditProfile = { navController.navigate(Destinations.SETTINGS) },
             )
         }
         composable(Destinations.PROFILE) {

@@ -314,4 +314,69 @@
     <string name="error_profile_body_fat_range">请输入 3–60 之间的体脂率</string>
     <string name="error_profile_goal_weight_range">请输入 30–300 kg 之间的目标体重</string>
 
+    <!-- ===== AI 教练（v3 增量 · 本地规则版）===== -->
+    <!-- 底栏 -->
+    <string name="tab_ai_coach">AI 教练</string>
+
+    <!-- 顶部徽标 -->
+    <string name="ai_local_badge">本地规则版 · 完全离线，无需联网</string>
+
+    <!-- 区块①：我的身体档案 -->
+    <string name="ai_section_profile">我的身体档案</string>
+    <string name="ai_action_edit_profile">编辑完整档案</string>
+
+    <!-- 区块②：生成计划 -->
+    <string name="ai_section_generate">生成计划</string>
+    <string name="ai_generate_plan">生成训练计划</string>
+    <string name="ai_regenerate_plan">重新生成训练计划</string>
+    <string name="ai_generate_hint">基于你的档案生成，写入后出现在「今日」页</string>
+    <string name="ai_plan_preserved_hint">已保留你手动改过的 %1$d 条，不会被覆盖</string>
+    <string name="ai_plan_written_hint">已写入 %1$d 条到本周计划</string>
+
+    <!-- 区块③：教练解读（替代"自由问答"） -->
+    <string name="ai_section_explain">教练解读</string>
+    <string name="ai_freechat_disabled">自由问答需要联网能力，当前为本地规则版，暂不提供；以下为基于你档案的规则解读</string>
+    <string name="ai_safety_note">以上为通用健身建议，不构成医疗意见。慢性病 / 孕期 / 伤病请先咨询医生</string>
+    <string name="ai_explain_bmr">基础代谢约 %1$d kcal</string>
+
+    <!-- 区块④：补充动作 -->
+    <string name="ai_section_suggest">补充动作 · 一键收入动作库</string>
+    <string name="ai_suggest_hint">按你的档案与伤病筛出的补强选项；收入后与内置动作同等可用，也能自由修改</string>
+    <string name="ai_suggest_adopt">＋ 收入</string>
+    <string name="ai_suggest_adopted">已收入动作库，去「训练」页就能排进计划</string>
+    <string name="ai_suggest_all_adopted">推荐的补充动作已全部收入你的动作库，去「训练」页就能排进计划</string>
+    <string name="ai_suggest_already_exists">这个动作已经在你的动作库里了</string>
+
+    <!-- 补充动作备注（noteKey 映射；禁止内联中文） -->
+    <string name="note_ai_injury_swap">按你的伤病筛出的低冲击替代动作</string>
+    <string name="note_ai_equipment_fit">与你现有器械匹配，无需额外器材</string>
+    <string name="note_ai_goal_support">贴合你的目标方向，用于补强薄弱环节</string>
+
+    <!-- 页面标题 -->
+    <string name="title_ai_coach">AI 教练</string>
+
+    <!-- 区块②：饮食计划入口（复用既有的 GenerateDietPlanUseCase） -->
+    <string name="ai_generate_diet">生成饮食计划</string>
+    <string name="ai_regenerate_diet">重新生成饮食计划</string>
+
+    <!-- 区块③：教练解读（剩余条目） -->
+    <string name="ai_explain_intake">建议每日摄入约 %1$d kcal，蛋白质约 %2$d g</string>
+    <string name="ai_explain_injury_swap">已按你的伤病（%1$s）排除相关动作</string>
+    <string name="ai_explain_equipment">已按你拥有的器械（%1$s）适配全部动作</string>
+
+    <!-- 训练重点（TrainingFocus 枚举 → 文案） -->
+    <string name="focus_lower_body">下肢</string>
+    <string name="focus_upper_push">上肢推</string>
+    <string name="focus_upper_pull">上肢拉</string>
+    <string name="focus_full_body">全身</string>
+    <string name="focus_cardio_core">有氧 + 核心</string>
+
+    <!-- "为什么这样排"（PlanReason 枚举 → 文案） -->
+    <string name="reason_primary_lift">主项动作</string>
+    <string name="reason_supplement">辅助动作</string>
+    <string name="reason_equipment_matched">按你拥有的器械选择</string>
+    <string name="reason_injury_safe">避开伤病的安全替代</string>
+    <string name="reason_progressive_overload">上次做满且有余量，本次加重至 %1$s kg</string>
+    <string name="reason_maintain">上次未做满 / 偏吃力，本次维持 %1$s kg</string>
+
 </resources>

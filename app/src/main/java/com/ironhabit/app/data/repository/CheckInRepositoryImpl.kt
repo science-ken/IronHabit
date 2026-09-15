@@ -1,9 +1,11 @@
 package com.ironhabit.app.data.repository
 
 import com.ironhabit.app.data.local.dao.CheckInDao
+import com.ironhabit.app.data.local.dto.ExerciseProgressRaw
 import com.ironhabit.app.data.mapper.CheckInMapper
 import com.ironhabit.app.di.IoDispatcher
 import com.ironhabit.app.domain.model.CheckIn
+import com.ironhabit.app.domain.model.ExerciseProgress
 import com.ironhabit.app.domain.model.MAX_SETS
 import com.ironhabit.app.domain.repository.CheckInRepository
 import com.ironhabit.app.domain.util.DateUtils
@@ -108,6 +110,17 @@ class CheckInRepositoryImpl @Inject constructor(
         checkInDao.updateRpe(exerciseId, epochDay, rpe?.coerceIn(MIN_RPE, MAX_RPE))
     }
 
+    /**
+     * 每个动作"最近一次"的完成情况（**只读**，供本地规则引擎做渐进超负荷）。
+     *
+     * 目标组数缺失时（打卡记录未关联计划 `plan_id`）回落到 [FALLBACK_TARGET_SETS]，
+     * 保证下游的"是否做满"判定**永远有判据**、不产生除零或 NaN。
+     */
+    override fun latestProgressPerExercise(): Flow<List<ExerciseProgress>> =
+        checkInDao.observeLatestPerExercise()
+            .map { rows -> rows.map(ExerciseProgressRaw::toDomain) }
+            .flowOn(ioDispatcher)
+
     /** 把 epochDay 换算为当天本地 00:00 的 UTC 毫秒时间戳（架构 §7.3）。 */
     private fun startOfDayMillis(epochDay: Long): Long =
         LocalDate.fromEpochDays(epochDay.toInt()).atStartOfDayIn(timeZone).toEpochMilliseconds()
@@ -117,3 +130,15 @@ class CheckInRepositoryImpl @Inject constructor(
         const val MAX_RPE = 10
     }
 }
+
+/** 聚合投影 → 领域模型（目标组数缺失时回落常量）。 */
+private fun ExerciseProgressRaw.toDomain(): ExerciseProgress = ExerciseProgress(
+    exerciseId = exerciseId,
+    lastSetsCompleted = lastSetsCompleted,
+    lastTargetSets = lastTargetSets ?: FALLBACK_TARGET_SETS,
+    lastRpe = lastRpe,
+    lastWeightKg = lastWeightKg,
+)
+
+/** 目标组数兜底：打卡记录未关联计划（`plan_id = NULL`）时的判据（文件级常量，便于单测引用）。 */
+private const val FALLBACK_TARGET_SETS = 3

@@ -28,6 +28,15 @@ interface WeekPlanDao {
     @Query("SELECT * FROM week_plans WHERE is_active = 1 ORDER BY day_of_week, sort_order")
     fun observeAll(): Flow<List<WeekPlanEntity>>
 
+    /**
+     * 观察**全部**计划条目（**含 `is_active = 0` 的软删除行**）。
+     *
+     * 🔒 AI 生成前必须拿全量：软删除行仍占 `UNIQUE(day_of_week, exercise_id)` 槽位，
+     * 只看启用行会误往该槽位写入 → 把用户删掉的那条"复活"。纯新增，[observeAll] 一字未改。
+     */
+    @Query("SELECT * FROM week_plans ORDER BY day_of_week, sort_order")
+    fun observeAllIncludingInactive(): Flow<List<WeekPlanEntity>>
+
     /** 「有计划的日子」→ 预览里的 chip 行（周一/周二/周四/周六…）。 */
     @Query("SELECT DISTINCT day_of_week FROM week_plans WHERE is_active = 1 ORDER BY day_of_week")
     fun observePlannedWeekdays(): Flow<List<Int>>

@@ -13,10 +13,14 @@ object Destinations {
     const val TODAY = "today"
     const val TRAIN = "train"
     const val DISCIPLINE = "discipline"
+
+    /** 本地规则版「AI 教练」页（v3 增量）：插在「自律」与「我的」之间，与预览版底栏顺序一致。 */
+    const val AI_COACH = "ai_coach"
+
     const val PROFILE = "profile"
 
     /** 底部栏展示顺序。 */
-    val TabRoutes: List<String> = listOf(TODAY, TRAIN, DISCIPLINE, PROFILE)
+    val TabRoutes: List<String> = listOf(TODAY, TRAIN, DISCIPLINE, AI_COACH, PROFILE)
 
     // ---------------- 二级页：动作新增/编辑 ----------------
     const val EXERCISE_ADD_EDIT_PATTERN = "exercise/edit?exerciseId={exerciseId}"

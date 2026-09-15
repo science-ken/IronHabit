@@ -14,6 +14,28 @@ interface PlanRepository {
     /** 观察全部启用计划条目（按 `dayOfWeek`、`sortOrder` 升序）。 */
     fun observeAll(): Flow<List<WeekPlan>>
 
+    /**
+     * 观察**全部**计划条目（**含 `isActive == false` 的软删除行**）。
+     *
+     * 🔒 **AI 生成前必须拿全量**：软删除行仍占 `UNIQUE(day_of_week, exercise_id)` 槽位，
+     * 若只看启用行就会误往该槽位写入 → **把用户删掉的那条"复活"**。
+     * 纯新增，[observeAll] 的语义一字未改。
+     */
+    fun observeAllIncludingInactive(): Flow<List<WeekPlan>>
+
+    /**
+     * **AI 生成入口**：对"可写槽位"做**显式 upsert**，并置 `isUserEdited = false`。
+     *
+     * 与用户手动入口 [upsert] 的区别**仅在** `isUserEdited`：
+     * 手动入口置 `true`（保护用户改动），本入口置 `false`（交还 AI 接管）。
+     *
+     * 🔒 本方法**只做 upsert，绝不做任何 DELETE**（含"先删本周再重建"）——
+     * 写入前由 UseCase 排除手改槽位，本方法不再二次过滤。
+     *
+     * @return 实际写入的条数
+     */
+    suspend fun upsertGenerated(plans: List<WeekPlan>): Int
+
     /** 观察「有计划的日子」（`1..7`，升序）→ 预览里的 chip 行。 */
     fun observePlannedWeekdays(): Flow<List<Int>>
 

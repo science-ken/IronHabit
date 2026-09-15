@@ -1,5 +1,7 @@
 package com.ironhabit.app.di
 
+import com.ironhabit.app.domain.ai.LocalRuleAdvisor
+import com.ironhabit.app.domain.ai.PlanAdvisor
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -49,4 +51,15 @@ object AppModule {
     @Provides
     @Singleton
     fun provideTimeZone(): TimeZone = TimeZone.currentSystemDefault()
+
+    /**
+     * 计划 / 建议来源（`docs/ai-coach-local.md` §6.1）。
+     *
+     * 本期**只有一个实现**：[LocalRuleAdvisor]（`source = LOCAL_RULES`，完全离线）。
+     * 将来接入联网模型时，**只改这一处**（改为注入 `RemoteLlmAdvisor` 或按设置二选一），
+     * UI 与 UseCase **零改动**。
+     */
+    @Provides
+    @Singleton
+    fun providePlanAdvisor(): PlanAdvisor = LocalRuleAdvisor
 }

@@ -1,6 +1,7 @@
 package com.ironhabit.app.data.repository
 
 import com.ironhabit.app.data.local.dao.CheckInDao
+import com.ironhabit.app.data.local.dto.ExerciseProgressRaw
 import com.ironhabit.app.data.local.entity.CheckInEntity
 import com.ironhabit.app.domain.usecase.CalculateStreakUseCase
 import com.ironhabit.app.domain.util.DateUtils
@@ -135,4 +136,5 @@ private class FakeActiveDaysDao(private val activeDays: List<Long>) : CheckInDao
     override suspend fun countOn(epochDay: Long): Int = error("unused")
     override suspend fun getAll(): List<CheckInEntity> = error("unused")
     override suspend fun clearAll() = error("unused")
+    override fun observeLatestPerExercise(): Flow<List<ExerciseProgressRaw>> = error("unused")
 }

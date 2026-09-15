@@ -684,6 +684,27 @@ GenerateDietPlanUseCase(epochDay)          // domain 层；构造注入 Settings
 - **`docs/ai-coach-local.md` 的全部任务（AC 系列）依赖 `M2.5`**（档案是本地 AI 的共同前置）。
 - M1 / M2 / M4 / M6 不受影响。
 
+> ✅ **M2.5 已落地**（提交 `dcf2df1`，主理人实测：编译通过、63 个单测全绿含 `UserProfileTest` 18 个、`2.json` 指纹未变、模拟器 10 字段杀进程重启全部保留）。
+
+#### 7.5.8 M2.5 已落地偏离登记（**以 git 事实为准**）
+
+> 本节记录**施工实际形态与 §7.5.5 设计建议的差异**。差异均为**实现方式层面的取舍**，**字段定义（§7.5.2）、默认值、合法域、降级规则（§7.5.3）均已按设计落地，未变**。
+
+| # | 设计建议（§7.5.5） | 实际落地（`dcf2df1`） | 影响 |
+|---|------------------|---------------------|------|
+| **1** | **独立二级页** `ProfileEditScreen`（路由 `profile/edit`）+ `ProfileEditViewModel` | **设置页内联「我的档案」区块**（`SettingsScreen.kt` 内的 `ProfileSection` 可组合项，四区：体征 / 目标 / 训练条件 / 约束）；读写走既有 `SettingsViewModel` | ❌ 少 **2 个新文件**；✅ **未新增任何路由**，`Destinations.kt` 未被修改；标题同时在设置页上下文，少了"二级页跳转"这一步 |
+| **2** | 独立共享组件 `ui/components/ProfileSummaryCard.kt`（三处共用） | `ProfileScreen.kt` 内的 **private 可组合项** `ProfileSummaryCard`（暂只「我的」页用） | ❌ 少 **1 个新文件**；⚠️ **不得跨页复用** —— ✅ **主理人已裁定：AI 教练页需要同一张卡 → 采用「方案 B」**：由 AI 教练任务创建 `ui/components/ProfileSummaryCard.kt`（+1 文件），**并连带删除 `ProfileScreen.kt` 内的 private 旧版（禁止并存）**。硬约束见 `docs/ai-coach-local.md` §7.5；计数影响见 §8.4（待施工 27 → **28**，含 v3 总数 **218 → 219**） |
+| **3** | 「我的」页概要卡点击 → 跳 `profile/edit` | 点击 → 跳**设置页** `Destinations.SETTINGS`（即「我的档案」区块） | 依赖 §1：入口语义由"去编辑页"变为"去设置页档案区" |
+| **4** | — | 新增 `ProfileLimits`（放在 `UserProfile.kt` 内）+ `UserProfileTest.kt`（18 个单测） | ⚠️ 测试文件**原设计未登记**，已由 git 补登（§8.3） |
+
+**为什么记录它**：这是个合理的落地取舍（内联省 3 个文件、省一条路由），但它是"设计 → 事实"的偏离 —— **不登记的话，后来者会照着 §7.5.5 去找一个并不存在的 `ProfileEditScreen.kt`**。
+
+**对下游的连带修正**（必须同步）：
+1. `docs/ai-coach-local.md` §2 / §3.1 / §3.3：AI 教练页档案卡的「编辑」入口改为**跳设置页**（`Destinations.SETTINGS`），**不再**规划 `PROFILE_EDIT` 路由；`Destinations.kt` 仍被 AI 教练修改（仅加 `AI_COACH` 一级路由）。
+2. `ARCHITECTURE.md` §2.10：删除 3 个**未落地**的文件行（`ProfileEditScreen.kt` / `ProfileEditViewModel.kt` / `ProfileSummaryCard.kt`），预留数 31 → **27**；**再因主理人采纳"方案 B"**（概要卡不得有两份）**+1** → **28**（新增 `ui/components/ProfileSummaryCard.kt`，见 §7.5.8 表 #2）。
+3. `ARCHITECTURE.md` **新增 §2.12** 登记 M2.5 已落地的 **2** 个文件（`UserProfile.kt` / `UserProfileTest.kt`）→ 已落地总数 **189 → 191**（**未变**，方案 B 只影响"待施工"侧）。
+4. **🔗 跨任务连带修改**：`ProfileSummaryCard.kt` 由 AI 教练任务创建，但同一任务**必须回头删掉 `ProfileScreen.kt` 内的 private 旧版**（禁止并存）。约束见 `docs/ai-coach-local.md` §7.5。
+
 ---
 
 ## 8. 文件清单
@@ -734,58 +755,70 @@ GenerateDietPlanUseCase(epochDay)          // domain 层；构造注入 Settings
 > 🔴 **禁止硬编码中文**（架构 §7.5）：餐次名（早餐/午餐/加餐/晚餐）**必须**走 `strings.xml`，
 > 与预览的 `n:"早餐"` 不同 —— 预览是 HTML 无法外置，App 侧必须资源化。
 
-### 8.3 用户档案增量（**完整版** · 见 §7.5）
+### 8.3 用户档案增量（**完整版** · 见 §7.5 · ✅ **已落地**，提交 `dcf2df1`）
 
-**新增（4）**
+> ✅ **本节已由 M2.5 施工落地（提交 `dcf2df1`）**，下列清单改为**以 git 事实为准**（不再是设计推算）。
+
+**新增（2）**
+
+> ⚠️ **计数更正（以 git 事实为准）**：**原登记 4，实际 2** ——
+> ① `ProfileEditScreen.kt` / `ProfileEditViewModel.kt` **未独立成件**：实际落地把档案编辑器做成**设置页内联的「我的档案」区块**（`SettingsScreen.kt` 内的 `ProfileSection` 可组合项），**未采用** §7.5.5 建议的"独立二级页 `profile/edit`"方案（详见 §7.5.8 偏离登记）；
+> ② `ProfileSummaryCard.kt` **未独立成件**：实际落地为 `ProfileScreen.kt` 内的 **private 可组合项**（不跨页复用）；
+> ③ `UserProfileTest.kt`（18 个单测）**原设计未登记**，现已补登。
 
 | 相对路径 | 职责 |
-|------|------|
-| `domain/model/UserProfile.kt` | `UserProfile` + `Gender` / `Goal` / `Equipment` / `InjuryArea` / `DietRestriction`（§7.5.2，同文件多模型） |
-| `ui/screens/profile/ProfileEditScreen.kt` | **唯一的档案编辑器**（§7.5.5 的分区与控件） |
-| `ui/screens/profile/ProfileEditViewModel.kt` | 档案读写 + 越界校验 + 当前体重取数（`BodyMetricRepository.latest(WEIGHT)`）；`UiState` 内联于此（沿用 `SettingsViewModel` 范式） |
-| `ui/components/ProfileSummaryCard.kt` | 档案**只读概要卡**（AI 教练页 / 我的页 / 设置页 共用） |
+|---------|------|
+| `domain/model/UserProfile.kt` | `UserProfile` + `Gender` / `Goal` / `Equipment` / `InjuryArea` / `DietRestriction` + **`ProfileLimits`**（§7.5.2，同文件多模型） |
+| `app/src/test/java/.../domain/model/UserProfileTest.kt` | `UserProfile` 单测（18 个：派生属性 / 边界 / 默认值 / 枚举映射）⚠️ **原设计未登记，git 补登** |
 
-**修改（9）**
+**修改（10）**
 
-> ⚠️ **计数更正**：本节标题原写「修改（7）」，但**实为 9 行** —— 原漏登**「我的页」卡片入口**与**导航注册**两处（§7.5.5 的入口③需要改 `ProfileScreen.kt`；新增 `profile/edit` 路由必须改 `IronHabitNavGraph.kt`）。
-> **原登记 7，实际 9，原因：漏登 `ProfileScreen.kt` 与 `IronHabitNavGraph.kt`（新增二级路由的必经改动）**。已更正为 **9**。
+> ⚠️ **计数更正（以 git 事实为准）**：**原登记 9，实际 10** ——
+> ① `Destinations.kt` **实际未被修改**（编辑器改为设置页内联 → **无需新增路由**），移除该行；
+> ② 补登 2 个漏登：`ProfileViewModel.kt`、`ProfileUiState.kt`（概要卡状态与展示在其上）。
 
 | 文件 | 改什么 |
 |------|--------|
-| `domain/repository/SettingsRepository.kt` | 新增 `profile(): Flow<UserProfile>` + 保存方法 |
+| `domain/repository/SettingsRepository.kt` | 新增 `profile(): Flow<UserProfile>` + 各字段保存方法 |
 | `data/repository/SettingsRepositoryImpl.kt` | 委托到 `SettingsDataStore` |
-| `data/preferences/SettingsDataStore.kt` | `Keys` 增 **10 个** `profile_*` 键（含 3 个 `stringSetPreferencesKey`）+ `profile` Flow + 写方法（§7.5.2） |
-| `ui/navigation/Destinations.kt` | 新增二级页路由 `profile/edit`（**同文件另被 `ai-coach-local.md` 加 `ai_coach` 路由，去重只计 1 次**） |
-| `ui/navigation/IronHabitNavGraph.kt` | **注册 `profile/edit` 二级路由**（`registerSecondaryRoutes`「8 条」→「9 条」）；**同文件另被 `ai-coach-local.md` 注册 `AI_COACH` 一级页与第 5 个 Tab，去重只计 1 次** ⚠️ **本行系计数更正补登** |
-| `ui/screens/settings/SettingsScreen.kt` | 新增「我的档案」跳转条目（§7.5.5 入口①） |
-| `ui/screens/settings/SettingsViewModel.kt` | 档案概要状态（供设置页那行展示） |
-| `ui/screens/profile/ProfileScreen.kt` | 「我的」页新增**身体档案概要卡**（§7.5.5 入口③），复用 `ProfileSummaryCard` ⚠️ **本行系计数更正补登** |
+| `data/preferences/SettingsDataStore.kt` | `Keys` 增 **10 个** `profile_*` 键（含 3 个 `stringSetPreferencesKey`）+ `profile` Flow + 写方法（含 `coerceIn` 写入钳制） |
+| `ui/navigation/IronHabitNavGraph.kt` | 仅 +1 行：给 `ProfileScreen` 补 `onOpenBodyMetrics` 回调（**未注册新路由**）；同文件另被 `ai-coach-local.md` 注册 `AI_COACH` 一级页，去重只计 1 次 |
+| `ui/screens/settings/SettingsScreen.kt` | 新增**「我的档案」内联编辑区块**（`ProfileSection`：体征 / 目标 / 训练条件 / 约束 四区） |
+| `ui/screens/settings/SettingsViewModel.kt` | 档案读写 + 越界校验（各 `onProfileXxxChange`）+ `UiState.profile` |
+| `ui/screens/profile/ProfileScreen.kt` | 「我的」页新增**身体档案概要卡**（private `ProfileSummaryCard`），点击跳设置页「我的档案」区块 |
+| `ui/screens/profile/ProfileViewModel.kt` | 加载 `profile`（供概要卡展示）⚠️ **git 补登** |
+| `ui/screens/profile/ProfileUiState.kt` | `UiState` 增 `profile` 字段 ⚠️ **git 补登** |
 | `res/values/strings.xml` | §7.5.6 文案（**与 §8.2 共用同一文件，去重只计 1 行**；同样被 `ai-coach-local.md` 追加文案，仍只计 1 行） |
 
+> ⚠️ **净变化**：新增 **4 → 2（−2）**、修改 **9 → 10（+1）**；合计 M2.5 实际涉及 **12** 个文件（2 新 + 10 改），原设计登记 13 个（4 新 + 9 改）。
 > ⚠️ **本文件不重复登记**：`UserProfile` 的**消费方**（饮食规则 §7、本地 AI 教练 `docs/ai-coach-local.md`）只在各自章节登记自己的文件；档案文件**只登记在此处**，避免两处重复计数。
-> ⚠️ **三处跨增量共用文件**（`Destinations.kt` / `IronHabitNavGraph.kt` / `strings.xml`）同时被「饮食」「档案」「AI 教练」三个增量修改 → **全局去重后各只计 1 次**（见 §8.4）。
+> ⚠️ **跨增量共用文件**（`IronHabitNavGraph.kt` / `strings.xml`）被「饮食」「档案」「AI 教练」三个增量修改 → **全局去重后各只计 1 次**（见 §8.4）。
 
 ### 8.4 对文件计数的影响（以 **git 事实**为准）
 
-> ⚠️ **计数更正 + 扩展**：本节原按"档案 1 个新文件"计（新增 20 / 修改 13）。现档案已扩为**完整版（4 新）**，且新增独立的**本地 AI 教练增量**（`docs/ai-coach-local.md`，8 新 / 5 改）。**原登记 20，现 31，原因：档案由 1 个新文件扩为 4 个（+3）、并新增 AI 教练模块（+8）**。
+> ⚠️ **M2.5（档案）已落地（提交 `dcf2df1`）** → 本节的档案部分**由设计推算改为 git 事实**：新增 **4 → 2**、修改 **9 → 10**（详见 §8.3 的更正注）。
 
 **① 本文件范围（饮食 + 档案）净增**：
-- 新增 **23** = 饮食 19（§8.1）+ 用户档案 **4**（§8.3）；
-- 修改**去重后 16** = 饮食 8（§8.2）+ 档案 8（§8.3 的 9 行，去掉与 §8.2 重复的 `strings.xml`）。
+- 新增 **21** = 饮食 19（§8.1，**待施工**）+ 用户档案 **2**（§8.3，**已落地**）；
+- 修改**去重后 17** = 饮食 8（§8.2）+ 档案 9（§8.3 的 10 行，去掉与 §8.2 重复的 `strings.xml`）。
 
 **② 含 AI 教练增量（`docs/ai-coach-local.md` §7）**：
-- 新增 **8**（`PlanAdvisor` / `AdviceModels` / `LocalRuleAdvisor` / `GenerateTrainingPlanUseCase` / `SuggestExercisesUseCase` / `AiCoachScreen` / `AiCoachViewModel` / `LocalRuleAdvisorTest`）；
-- 修改 **9**（`Destinations.kt` / `BottomBar.kt` / `IronHabitNavGraph.kt` / `AppModule.kt` / `strings.xml` / `domain/repository/CheckInRepository.kt` / `data/repository/CheckInRepositoryImpl.kt` / `data/local/dao/CheckInDao.kt` / `app/src/androidTest/.../CheckInDaoTest.kt`）—— 后 4 个源于「**只增不改**地加一条按动作聚合的只读查询」（见 `ai-coach-local.md` §4.5 / §11 #5）。
-  其中 `Destinations.kt`、`IronHabitNavGraph.kt`、`strings.xml` 与①②**重复** → 去重后**再 +6**（`BottomBar.kt` / `AppModule.kt` / `CheckInRepository.kt` / `CheckInRepositoryImpl.kt` / `CheckInDao.kt` / `CheckInDaoTest.kt`）。
+- 新增 **9**（`ProfileSummaryCard` / `PlanAdvisor` / `AdviceModels` / `LocalRuleAdvisor` / `GenerateTrainingPlanUseCase` / `SuggestExercisesUseCase` / `AiCoachScreen` / `AiCoachViewModel` / `LocalRuleAdvisorTest`）
+  —— 首项 `ui/components/ProfileSummaryCard.kt` 源于主理人裁定「**方案 B：概要卡不得有两份**」；
+- 修改 **10**（`Destinations.kt` / `BottomBar.kt` / `IronHabitNavGraph.kt` / `AppModule.kt` / `strings.xml` / `domain/repository/CheckInRepository.kt` / `data/repository/CheckInRepositoryImpl.kt` / `data/local/dao/CheckInDao.kt` / `app/src/androidTest/.../CheckInDaoTest.kt` / **`ui/screens/profile/ProfileScreen.kt`**）
+  —— 后 4 个源于「**只增不改**地加一条按动作聚合的只读查询」；末项 `ProfileScreen.kt` 是 **🔗 跨任务连带修改**（删 private 概要卡 → 调新共享组件，**禁止新旧并存**）。
+  其中 `IronHabitNavGraph.kt`、`strings.xml` 与①**重复**（`Destinations.kt` 与 `ProfileScreen.kt` 均已在①中 → **不再算重复**）→ 去重后**再 +7**（`Destinations.kt` / `BottomBar.kt` / `AppModule.kt` / `CheckInRepository.kt` / `CheckInRepositoryImpl.kt` / `CheckInDao.kt` / `CheckInDaoTest.kt`）。
 
 **③ v3 全域合计**（= 饮食 + 档案 + AI 教练）：
-- **新增 31** = 23 + 8；
-- **修改去重 22** = 16 + 6。
+- **新增 30** = 21 + 9 —— 其中**已落地 2**（档案 `UserProfile.kt` + `UserProfileTest.kt`）、**待施工 28**（饮食 19 + AI 教练 9）；
+- **修改去重 24** = 17 + 7。
 
-**`docs/ARCHITECTURE.md` 计数联动**（同步动作见本轮「计数对齐」报告）：
-- §2 **当前已落地**总数：原登记 182 → 更正 **183**（v2 实为 12 个新增，见 ARCHITECTURE §2.9）；**再更正 183 → 189**（`938210c` 之后新增 6 个 `.kt`，见 ARCHITECTURE §2.11）。
-- 本文件 + AI 教练落地后 → §2.10 由「v3 增量新增文件（20）」更新为 **「v3 增量新增文件（31）」**，总数 **189 → 220**，并同步 §5.1 依赖图与 §5.2 认领表。
-- **施工落地前**，ARCHITECTURE §2 主计数保持"**已落地 189**"，§2.10 明确标注为"**设计预留（待施工）**"，避免"数字先到、代码未到"的脱节（§0.1 红线）。
+**`docs/ARCHITECTURE.md` 计数联动**（以 git 事实为准，单一口径）：
+- §2 **当前已落地**总数：原登记 182 → 更正 **183**（v2 实为 12 个新增，见 ARCHITECTURE §2.9）；→ 更正 **189**（`938210c` 后 +6 `.kt`，见 §2.11）；→ **再更正 191（截至 `015d637`）**：M2.5 新增 **2** 个 app 文件（`UserProfile.kt` + `UserProfileTest.kt`，见 ARCHITECTURE §2.12）。
+  **原登记 189，实际 191，原因：M2.5 落地新增 2 个 app 文件**（`git diff --name-status d734746..015d637` 的 `A` 行实测；`docs/ai-coach-local.md` 亦为 `A` 但**非 app 源文件，不计入**；`kt/java` 计数 150 → 152 印证）。
+- v3 **剩余预留**：§2.10 由「31」→「27」→ **「28」** = 21 − 2（已落地）＋ 9 = 饮食 19 + AI 教练 9（**+1 来自主理人裁定的共享组件 `ProfileSummaryCard.kt`**）。
+- 含 v3 预留的总数：**191 → 219**（191 已落地 + 28 待施工）。
+- §2.10 维持"**设计预留（待施工）**"标注，避免"数字先到、代码未到"的脱节（§0.1 红线）。
 
 ---
 

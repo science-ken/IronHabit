@@ -1,6 +1,7 @@
 package com.ironhabit.app.data.repository
 
 import com.ironhabit.app.data.local.dao.CheckInDao
+import com.ironhabit.app.data.local.dto.ExerciseProgressRaw
 import com.ironhabit.app.data.local.entity.CheckInEntity
 import com.ironhabit.app.domain.model.CheckIn
 import com.ironhabit.app.domain.model.WeekPlan
@@ -252,4 +253,7 @@ private class FakeCheckInDao : CheckInDao {
     override suspend fun clearAll() {
         rows.clear()
     }
+
+    // 本测试只验证 upsert / RPE 行为，不触达「最近一次完成情况」聚合查询 → 给空流即可。
+    override fun observeLatestPerExercise(): Flow<List<ExerciseProgressRaw>> = flowOf(emptyList())
 }

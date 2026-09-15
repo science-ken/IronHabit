@@ -42,10 +42,12 @@ App 里**没有**任何「AI」功能（底部只有 4 个 Tab，预览版有第
 ```
 AI 教练
  ├─ [顶部徽标] 本地规则版 · 完全离线，无需联网          ← ai_local_badge
- ├─ ① 我的身体档案（只读卡）                          ← ProfileSummaryCard（复用）
+ ├─ ① 我的身体档案（只读卡）   ← **共享组件** `ui/components/ProfileSummaryCard.kt`（§7.5）
  │      · 完整只读展示（身高/体重/年龄/性别/体脂/目标/器械/伤病/忌口）
- │      · [编辑完整档案 ›] → ProfileEditScreen（profile/edit）
- │      · 档案未填全时：行内提示 profile_incomplete_hint（非阻断）
+ │      · 纯展示：`onClick` 由本页传入 → 跳设置页「我的档案」区块（`Destinations.SETTINGS`）
+ │      · ⚠️ 该组件由本任务创建，同时**必须删掉 `ProfileScreen.kt` 里的 private 旧版**（§7.5 约束 3）
+ │      · 本页如需额外信息（器械/伤病提示）→ **在卡片外面另加区块**，不得改组件签名（约束 4）
+ │      · 档案未填全时：行内提示 profile_incomplete_hint（非阻断，放卡片外）
  ├─ ② 生成计划
  │      · [生成训练计划 / 重新生成]   → GenerateTrainingPlanUseCase（本文件 §4）
  │      · [生成饮食计划 / 重新生成]   → GenerateDietPlanUseCase（复用 §7.5.4）
@@ -85,14 +87,8 @@ const val PROFILE = "profile"
 val TabRoutes: List<String> = listOf(TODAY, TRAIN, DISCIPLINE, AI_COACH, PROFILE)
 ```
 
-同时新增二级页路由（档案编辑页，**由 §7.5 定义、此处一并登记**）：
-
-```kotlin
-// ---------------- 二级页：我的档案编辑 ----------------
-const val PROFILE_EDIT = "profile/edit"
-```
-
-> ⚠️ **一处去重**：`Destinations.kt` 与 `IronHabitNavGraph.kt`、`strings.xml` 三个文件**同时**被「档案增量」与「AI 教练增量」修改 → 在**文件计数时各只算 1 次**（见 §7、`schema-v3-meals.md` §8.4）。
+> ⚠️ **不再新增 `PROFILE_EDIT = "profile/edit"` 二级路由**（原 §7.5.5 设计的独立档案编辑页）：M2.5 实际落地把档案编辑器做成**设置页内联区块**，`Destinations.kt` **未被改动**（git 事实，提交 `dcf2df1`）。本页的「编辑」入口改为 `navController.navigate(Destinations.SETTINGS)`，**复用既有路由，零新增**。
+> → 本节因此**只改一处**：加 `AI_COACH` 并插入 `TabRoutes`。
 
 ### 3.2 `ui/navigation/BottomBar.kt`（修改）
 
@@ -119,27 +115,17 @@ private fun bottomTabs(): List<BottomTab> = listOf(
 ```kotlin
 composable(Destinations.AI_COACH) {
     AiCoachScreen(
-        onEditProfile = { navController.navigate(Destinations.PROFILE_EDIT) },
+        onEditProfile = { navController.navigate(Destinations.SETTINGS) },  // 复用既有设置页（含「我的档案」区块）
     )
 }
 ```
 
-- 二级路由：在 `registerSecondaryRoutes(...)` 的 8 条之后**追加第 9 条**（`profile/edit`）：
-
-```kotlin
-// 9) 我的档案编辑（档案增量 + AI 教练共用入口）
-composable(Destinations.PROFILE_EDIT) {
-    ProfileEditScreen(
-        onBack = { navController.popBackStack() },
-    )
-}
-```
-
-> 现状：`registerSecondaryRoutes` 注释写的是"8 条路由"（🔗 `IronHabitNavGraph.kt:88`），本增量后应为 **9 条**，落地时**同步更新该注释**（否则又是一处"数字与事实脱节"，架构 §0.1）。
+> ⚠️ **删除原"`profile/edit` 第 9 条二级路由"的登记** —— M2.5 未建独立编辑页（见 §3.1），故 `registerSecondaryRoutes` **仍为 8 条**，
+> **该文件注释「8 条路由」无需修改**。本文件对 `IronHabitNavGraph.kt` 的改动仅剩一处：**注册 `AI_COACH` 一级页**。
 
 ### 3.4 底栏可见性自动自适应（**零额外改动** ✅）
 
-`Destinations.TabRoutes`（`IronHabitNavGraph.kt:30` 注释所述机制）驱动底栏显隐：**二级页路由（`profile/edit`）不在 `TabRoutes` 内 → 自动隐藏底栏**。因此新增 `AI_COACH` 与 `PROFILE_EDIT` **不需要**任何"隐藏底栏"的特殊逻辑。
+`Destinations.TabRoutes`（`IronHabitNavGraph.kt:30` 注释所述机制）驱动底栏显隐：**非 Tab 路由不在 `TabRoutes` 内 → 自动隐藏底栏**。因此**新增 `AI_COACH` 一级 Tab** **不需要**任何"显示底栏"的额外逻辑（它必须进 `TabRoutes` 才会显示）；本增量**不再新增任何二级路由**（原 `profile/edit` 已因 M2.5 改为设置页内联而取消，见 §3.1）。
 
 ---
 
@@ -522,7 +508,9 @@ fun providePlanAdvisor(): PlanAdvisor = LocalRuleAdvisor
 
 > 包根同 `schema-v3-meals.md`：`app/src/main/java/com/ironhabit/app/`；测试根 `app/src/test/java/com/ironhabit/app/`。
 
-### 7.1 新增（8）
+### 7.1 新增（9）
+
+> ⚠️ **主理人已裁定采用"方案 B"**（上一轮的教训：同一份格式化逻辑在今日卡片与训练页各写一遍，一处漏 `targetWeightKg` 直接出 bug → 概要卡**不该有两份**）。故 AI 增量新增 **8 → 9**，多出的 1 个即共享组件 `ProfileSummaryCard.kt`。
 
 | 相对路径 | 职责 |
 |---------|------|
@@ -533,15 +521,17 @@ fun providePlanAdvisor(): PlanAdvisor = LocalRuleAdvisor
 | `domain/usecase/SuggestExercisesUseCase.kt` | `suggest()` 只读 + `adopt(name)` 幂等写入（`source=AI_SUGGESTED`） |
 | `ui/screens/ai/AiCoachScreen.kt` | AI 教练页（§2 的 4 区块） |
 | `ui/screens/ai/AiCoachViewModel.kt` | 页面状态 + 生成/收入动作；`AiCoachUiState` 内联于此（沿用 `SettingsViewModel` 范式） |
+| **`ui/components/ProfileSummaryCard.kt`** | **共享只读档案概要卡**（由本任务 T04/T05 创建；**纯展示**，契约见 §7.4）。⚠️ 创建它的同时**必须回头改 `ProfileScreen.kt`**（见 §7.2 的"连带修改"） |
 | `test/.../domain/ai/LocalRuleAdvisorTest.kt` | 纯 JVM 单测：**手改行保留**、**幂等**、**器械/伤病排除**、**渐进超负荷边界**、**空档案兜底** |
 
-### 7.2 修改（9 · 与档案/饮食增量**去重后**）
+### 7.2 修改（10 · 与档案/饮食增量**去重后**）
 
 | 文件 | 改什么 |
 |------|--------|
-| `ui/navigation/Destinations.kt` | +`AI_COACH` 一级路由（插入 `TabRoutes` 第 4 位）+`PROFILE_EDIT` 二级路由（**与档案增量共用，去重只计 1 次**） |
+| `ui/navigation/Destinations.kt` | **仅**加 `AI_COACH` 一级路由（插入 `TabRoutes` 第 4 位）。⚠️ **不再加 `PROFILE_EDIT`** —— M2.5 未建独立编辑页（§3.1），且该文件**未被 M2.5 改动**（git 事实） |
 | `ui/navigation/BottomBar.kt` | 4 → 5 个 `BottomTab`，新增 AI 教练图标（`Icons.Filled.AutoAwesome`，**已实测存在**，见 §3.2） |
-| `ui/navigation/IronHabitNavGraph.kt` | 注册 `AI_COACH` 一级页 + `profile/edit` 二级页；注释"8 条"→"9 条"（**与档案增量共用，去重只计 1 次**） |
+| `ui/navigation/IronHabitNavGraph.kt` | **仅**注册 `AI_COACH` 一级页（档案编辑入口走既有 `SETTINGS` 路由）。⚠️ 注释「8 条二级路由」**保持不变**（不新增二级路由） |
+| `ui/screens/profile/ProfileScreen.kt` | 🔗 **跨任务连带修改（主理人硬要求，非可选）**：**删除** M2.5 落在该文件内的 **private `ProfileSummaryCard`**，改调用新的共享组件 `ui/components/ProfileSummaryCard.kt`。**必须删旧版、不允许新旧并存** —— 并存则方案 B 失去意义 |
 | `di/AppModule.kt` | `@Provides PlanAdvisor = LocalRuleAdvisor`（将来切换联网实现的**唯一**改动点） |
 | `res/values/strings.xml` | §8 文案（**与档案/饮食增量共用，去重只计 1 次**） |
 | `domain/repository/CheckInRepository.kt` | **只增不改**：新增只读 `latestProgressPerExercise(): Flow<List<ExerciseProgress>>`（§4.5，主理人已批准） |
@@ -554,7 +544,46 @@ fun providePlanAdvisor(): PlanAdvisor = LocalRuleAdvisor
 - ❌ 不新增 Room 表、不新增 `Migration`、不改 `VERSION`（§5）；
 - ❌ 不新增 `INTERNET` 权限、不动 `AndroidManifest.xml`；
 - ❌ 不改 `schema-v2.md`（本次任务的硬约束）；
-- ❌ 不新增饮食相关文件（饮食生成直接复用 `GenerateDietPlanUseCase`）。
+- ❌ 不新增饮食相关文件（饮食生成直接复用 `GenerateDietPlanUseCase`）；
+- ❌ **不 claim M2.5 已占用的任何文件**（见 §7.4 claim 冲突检查）—— **唯一例外**：`ProfileScreen.kt` 的**连带修改**（删 private 概要卡，见 §7.5 约束 3/5）。
+
+### 7.4 ✅ claim 冲突检查（vs M2.5 已落地，提交 `dcf2df1`）
+
+| M2.5 已改文件 | 本增量的关系（**工程师照此执行**） |
+|---|---|
+| `domain/model/UserProfile.kt`（新）、`domain/repository/SettingsRepository.kt`、`data/repository/SettingsRepositoryImpl.kt`、`data/preferences/SettingsDataStore.kt` | **只读消费**（经构造注入 `SettingsRepository`），**不改** |
+| `ui/screens/profile/ProfileViewModel.kt`、`ProfileUiState.kt` | **不改**（AI 教练是独立 Tab 页，有自己的 VM） |
+| **`ui/screens/profile/ProfileScreen.kt`** | 🔗 **跨任务连带修改（唯一例外，见下方约束 3）**：**删除**其内 private `ProfileSummaryCard` → 改调用新共享组件 |
+| `ui/screens/settings/SettingsScreen.kt`、`SettingsViewModel.kt` | **不改**（档案编辑区块归属 M2.5） |
+| `ui/navigation/IronHabitNavGraph.kt` | **叠加式**：只加 `composable(Destinations.AI_COACH)` 一段，不动既有注册 |
+| `res/values/strings.xml` | **追加式**：只增 `ai_*` / `tab_ai_coach` 等新 key，不改既有条目 |
+
+→ **结论：无 claim 冲突**（除下方明确列出的 1 处连带修改）。本增量**全部价值集中在 9 个新增文件**上。
+
+### 7.5 🔒 共享组件 `ProfileSummaryCard` 的**硬约束**（主理人已裁定，工程师照做）
+
+1. **文件归属**：新文件 `ui/components/ProfileSummaryCard.kt`，由 **AI 教练任务（T04/T05）创建**；本增量新增 **8 → 9**、`ARCHITECTURE.md` §2.10 **27 → 28**、含 v3 总数 **218 → 219**。
+
+2. **组件契约（签名固定，不得加参数）**：
+   ```kotlin
+   @Composable
+   fun ProfileSummaryCard(
+       profile: UserProfile,
+       onClick: () -> Unit,
+       modifier: Modifier = Modifier,
+   )
+   ```
+   **保持纯展示**：内部只读 `UserProfile` 派生文案（性别 / 年龄 / 目标 等）+ 一个点击回调。
+   **🚫 禁止**：不得硬编码"跳设置页"、不得含任何 AI 页专属文案（`ai_*`）、不得引 `ViewModel` / `NavController`。
+   **跳转目标由调用方通过 `onClick` 传入** —— 「我的」页传跳 `SETTINGS`，AI 教练页传跳 `SETTINGS`（同一目标，但由各自决定）。
+
+3. **`ProfileScreen.kt` 里的 private 版本必须删除并改调用新组件**（🔴 **不是并存，不是可选**）。并存 → 两份 UI 逻辑 → 正是上一轮 `targetWeightKg` 漏改的同款隐患。
+
+4. **AI 教练页的额外信息一律放在卡片外面**：若 AI 页需展示器械 / 伤病提示等额外内容，**在 `AiCoachScreen.kt` 里另起一个区块**渲染，**禁止**往共享组件里塞参数分支（如 `showEquipment: Boolean` / `variant: CardVariant`）。组件永远只有 `profile` + `onClick` 两个实质入参。
+
+5. **🔗 跨任务连带改动（必须显式登记，避免"只建不改"）**：
+   `ProfileSummaryCard.kt` 由 AI 教练任务创建，**但同一任务必须回头改 `ProfileScreen.kt` 一处**（删 private 版）。
+   已在 **§7.2 修改清单**中作为独立一行标出（`🔗 跨任务连带修改`），并在 **`ARCHITECTURE.md` §2.10 脚注**同步标注 —— 工程师请**两处一起做**，不要只建新文件。
 
 ---
 
@@ -709,6 +738,7 @@ graph TD
 | **4** | `CheckInRepository` 加只读聚合查询 | ✅ **批准**，坚持"**只增不改**"，**并附单测** | §4.5、§7.2 |
 | **5** | 补充动作候选池来源 | ✅ **内置常量表**（对应预览 `AI_SUG`） | §4.2 / AC2 |
 | **6** | 底栏图标 `AutoAwesome` 是否存在 | ✅ 按 `AutoAwesome` → `SmartToy` → `Star` 顺序处理；**已实测确认 `AutoAwesome` 存在于 1.7.6，无需降级**，结论已写回 §3.2 | §3.2、§10 风险 1 |
+| **7** | AI 页的档案概要卡：**自建一份**（A）还是**提升为共享组件**（B）？ | ✅ **裁定方案 B**（理由：`targetWeightKg` 曾因同一格式化逻辑在今日卡片与训练页各写一遍而出 bug → **概要卡不该有两份**）。新增 `ui/components/ProfileSummaryCard.kt`；**纯展示**契约 `(profile, onClick, modifier)`；**必须删除** `ProfileScreen.kt` 内 private 旧版（**禁止并存**）；AI 页额外信息一律放卡片**外面**，不得改签名 | §7.1（新增 8→9）、§7.2（+`ProfileScreen.kt` 连带修改）、**§7.5 硬约束 5 条**、`ARCHITECTURE.md` §2.10 脚注 |
 
 > **"将来可配置"注（裁定 #2 要求）**：默认训练天数 **3 天** 为**常量**（`const val DEFAULT_TRAINING_DAYS = 3`）—— **不做**"用户自选天数"，避免本版范围膨胀；
 > **将来可配置的路径**：届时把该常量改为读档案 / 设置中的一项（`UserProfile` 加一个可空字段，或用既有 `AppSettings` 扩展），**`planWeek` 签名不变**（仍从 `profile` 取值），UI 与规则层零改动。

@@ -6,6 +6,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
+import com.ironhabit.app.data.local.dto.ExerciseProgressRaw
 import com.ironhabit.app.data.local.entity.CheckInEntity
 import kotlinx.coroutines.flow.Flow
 
@@ -108,6 +109,34 @@ interface CheckInDao {
             "WHERE exercise_id = :exerciseId AND date_epoch_day = :epochDay"
     )
     suspend fun updateRpe(exerciseId: Long, epochDay: Long, rpe: Int?)
+
+    /**
+     * 观测"每个动作最近一次完成情况"的聚合（**只读新增**，不改既有任何查询）。
+     *
+     * 用途：本地规则引擎的**渐进超负荷**判定（`docs/ai-coach-local.md` §4.4）。
+     *
+     * 取"最近一次"的判据：先按 `date_epoch_day` 倒序、再按 `created_at` 倒序取第一条 ——
+     * 用**相关子查询精确定位到行**，避免 `GROUP BY` 在同日多行时挑行的不确定性。
+     * （`UNIQUE(exercise_id, date_epoch_day)` 保证同一动作同一天只有一行。）
+     *
+     * `last_target_sets` 来自关联计划（`plan_id`），无计划时为 `null` —— **不在 SQL 里兜底**，
+     * 由仓库层回落到常量（避免把业务常量写死进 SQL，便于单测覆盖）。
+     */
+    @Query(
+        "SELECT c.exercise_id AS exerciseId, " +
+            "c.completed_sets AS lastSetsCompleted, " +
+            "wp.target_sets AS lastTargetSets, " +
+            "c.rpe AS lastRpe, " +
+            "c.weight_kg AS lastWeightKg " +
+            "FROM check_ins c " +
+            "LEFT JOIN week_plans wp ON wp.id = c.plan_id " +
+            "WHERE c.id = (" +
+            "SELECT c2.id FROM check_ins c2 " +
+            "WHERE c2.exercise_id = c.exercise_id " +
+            "ORDER BY c2.date_epoch_day DESC, c2.created_at DESC LIMIT 1" +
+            ") ORDER BY c.exercise_id"
+    )
+    fun observeLatestPerExercise(): Flow<List<ExerciseProgressRaw>>
 
     @Query("SELECT COUNT(*) FROM check_ins WHERE date_epoch_day = :epochDay")
     suspend fun countOn(epochDay: Long): Int

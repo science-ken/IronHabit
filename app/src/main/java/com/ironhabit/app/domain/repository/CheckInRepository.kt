@@ -1,6 +1,7 @@
 package com.ironhabit.app.domain.repository
 
 import com.ironhabit.app.domain.model.CheckIn
+import com.ironhabit.app.domain.model.ExerciseProgress
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -39,4 +40,12 @@ interface CheckInRepository {
 
     /** 写入 / 清除某动作某天的 RPE（`1..10`，空 = 清除）。 */
     suspend fun setRpe(exerciseId: Long, epochDay: Long, rpe: Int?)
+
+    /**
+     * 观测"**每个动作**最近一次"的完成情况（供本地规则引擎做渐进超负荷，**只读**）。
+     *
+     * 纯新增、不改既有任何签名与语义；不新增/修改任何 Room 迁移；
+     * 实现落在 `CheckInDao.observeLatestPerExercise()`。
+     */
+    fun latestProgressPerExercise(): Flow<List<ExerciseProgress>>
 }
