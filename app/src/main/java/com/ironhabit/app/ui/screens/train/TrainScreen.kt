@@ -44,6 +44,7 @@ import com.ironhabit.app.domain.model.WeekPlan
 import com.ironhabit.app.ui.components.EmptyState
 import com.ironhabit.app.ui.components.LoadingSkeleton
 import com.ironhabit.app.ui.components.LocalSnackbarHostState
+import com.ironhabit.app.ui.components.planGoalText
 import kotlinx.datetime.LocalDate
 
 /** 训练页三个分段。 */
@@ -231,7 +232,11 @@ private fun PlanRow(
                 }
             }
             Text(
-                text = "${plan.targetSets} × ${plan.targetReps}",
+                text = planGoalText(
+                    sets = plan.targetSets,
+                    reps = plan.targetReps,
+                    weightKg = plan.targetWeightKg,
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

@@ -47,6 +47,8 @@ import com.ironhabit.app.domain.model.TodayPlanItem
  * （一键打卡 / 撤销 / 补录弹层 / 逐组勾选 / RPE），整卡置灰给出可见反馈；
  * 「动作详情」（只读）仍可打开。
  *
+ * 计划目标文案（`组数 × 次数`，含目标重量）由 [planGoalText] 统一生成，与训练页计划行一致。
+ *
  * @param enabled 是否可写（`false` = 未来日只读态，禁用所有写入口）
  * @param onToggleSet 勾选/取消第 [Int] 组（0-based）
  * @param onSetRpe 写入 RPE 强度（`1..10`）
@@ -70,6 +72,11 @@ fun ExerciseCheckCard(
     val containerColor = if (dimmed) colorScheme.surfaceVariant else colorScheme.surface
     val contentColor = if (dimmed) colorScheme.onSurfaceVariant else colorScheme.onSurface
     val mask = item.checkIn?.completedSetsMask ?: 0
+    val goalText = planGoalText(
+        sets = item.plan.targetSets,
+        reps = item.plan.targetReps,
+        weightKg = item.plan.targetWeightKg,
+    )
 
     Card(
         modifier = modifier
@@ -110,7 +117,7 @@ fun ExerciseCheckCard(
                     )
                 }
                 Text(
-                    text = targetText(item),
+                    text = goalText,
                     style = MaterialTheme.typography.bodyMedium,
                     color = colorScheme.onSurfaceVariant,
                 )
@@ -197,13 +204,6 @@ private fun RpeChips(
             )
         }
     }
-}
-
-/** 目标组数 × 次数（纯数字，避免硬编码中文文案）。 */
-private fun targetText(item: TodayPlanItem): String {
-    val sets = item.plan.targetSets
-    val reps = item.plan.targetReps
-    return "$sets × $reps"
 }
 
 /** RPE 合法区间下界。 */
