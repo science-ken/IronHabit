@@ -26,6 +26,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.AdviceSource
@@ -63,6 +65,11 @@ fun AiCoachScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
+    // 从设置页改完 Key 回来时刷新徽标（加密文件无响应式流，只能主动拉）。
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        viewModel.refreshKeyStatus()
+    }
+
     val snackbarRes = uiState.snackbarRes
     if (snackbarRes != null) {
         val message = stringResource(snackbarRes, *uiState.snackbarArgs.toTypedArray())
@@ -84,7 +91,11 @@ fun AiCoachScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            LocalRulesBadge()
+            LocalRulesBadge(
+                aiRemoteEnabled = uiState.aiRemoteEnabled,
+                hasApiKey = uiState.hasApiKey,
+                onGoSettings = onEditProfile,
+            )
 
             when {
                 uiState.isLoading -> {
@@ -345,21 +356,44 @@ private fun SourceLine(
     )
 }
 
-/** 页首「本地规则版」徽标：让用户一眼看出这不是大模型。 */
+/** 页首徽标：三态诚实标注当前 AI 模式，让用户一眼看出背后是谁在干活。 */
 @Composable
-private fun LocalRulesBadge() {
+private fun LocalRulesBadge(
+    aiRemoteEnabled: Boolean,
+    hasApiKey: Boolean,
+    onGoSettings: () -> Unit,
+) {
     Card(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.secondaryContainer,
             contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
         ),
     ) {
-        Text(
-            text = stringResource(R.string.ai_local_badge),
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = stringResource(badgeRes(aiRemoteEnabled, hasApiKey)),
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.weight(1f),
+            )
+            if (!aiRemoteEnabled || !hasApiKey) {
+                TextButton(onClick = onGoSettings) {
+                    Text(text = stringResource(R.string.ai_action_go_settings))
+                }
+            }
+        }
     }
+}
+
+private fun badgeRes(aiRemoteEnabled: Boolean, hasApiKey: Boolean): Int = when {
+    aiRemoteEnabled && hasApiKey -> R.string.ai_badge_remote_on
+    aiRemoteEnabled -> R.string.ai_badge_remote_no_key
+    else -> R.string.ai_badge_local
 }
 
 @Composable

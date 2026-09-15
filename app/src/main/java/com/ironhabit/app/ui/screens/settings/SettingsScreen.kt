@@ -45,12 +45,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -186,6 +188,13 @@ fun SettingsScreen(
                 )
                 HorizontalDivider()
 
+                // ---- AI 设置（联网增强 · 默认关）----
+                AiSettingsSection(
+                    uiState = uiState,
+                    viewModel = viewModel,
+                )
+                HorizontalDivider()
+
                 // ---- 每日提醒 ----
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -300,6 +309,87 @@ fun SettingsScreen(
             }
         }
     }
+}
+
+// ---------------- AI 设置（联网增强 · v3 增量二期） ----------------
+
+/**
+ * 「AI 设置」区块：联网开关 + DeepSeek API Key + 隐私说明。
+ *
+ * **诚实原则**：开关默认关；关闭/未填 Key/断网时行为与纯离线版完全一致（自动回落本地规则）。
+ * 隐私说明写明"开了发什么给谁"——**宁朴素勿误导**，不许用"智能云服务"之类的模糊措辞。
+ */
+@Composable
+private fun AiSettingsSection(
+    uiState: SettingsUiState,
+    viewModel: SettingsViewModel,
+) {
+    var keyInput by rememberSaveable { mutableStateOf("") }
+
+    SectionLabel(text = stringResource(R.string.settings_section_ai))
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text = stringResource(R.string.settings_ai_remote_enabled),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Switch(
+            checked = uiState.aiRemoteEnabled,
+            onCheckedChange = viewModel::onAiRemoteEnabledChange,
+        )
+    }
+    Text(
+        text = stringResource(R.string.settings_ai_remote_hint),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+
+    OutlinedTextField(
+        value = keyInput,
+        onValueChange = { keyInput = it },
+        modifier = Modifier.fillMaxWidth(),
+        label = { Text(text = stringResource(R.string.settings_ai_key_label)) },
+        placeholder = { Text(text = stringResource(R.string.settings_ai_key_hint)) },
+        singleLine = true,
+        visualTransformation = PasswordVisualTransformation(),
+        trailingIcon = {
+            TextButton(
+                onClick = {
+                    viewModel.onApiKeySave(keyInput)
+                    keyInput = ""
+                },
+                enabled = keyInput.isNotBlank(),
+            ) {
+                Text(text = stringResource(R.string.action_save))
+            }
+        },
+        supportingText = {
+            Text(
+                text = if (uiState.hasApiKey) {
+                    stringResource(R.string.settings_ai_key_saved)
+                } else {
+                    stringResource(R.string.settings_ai_key_hint)
+                },
+                style = MaterialTheme.typography.bodySmall,
+            )
+        },
+    )
+    if (uiState.hasApiKey) {
+        TextButton(onClick = viewModel::onApiKeyClear) {
+            Text(text = stringResource(R.string.settings_ai_key_cleared))
+        }
+    }
+
+    Text(
+        text = stringResource(R.string.settings_ai_privacy),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 // ---------------- 我的档案（v3 增量） ----------------

@@ -4,6 +4,7 @@ import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ironhabit.app.R
+import com.ironhabit.app.data.preferences.AiCredentialsStore
 import com.ironhabit.app.domain.model.AdoptResult
 import com.ironhabit.app.domain.model.AdviceSource
 import com.ironhabit.app.domain.model.BodyMetricType
@@ -72,6 +73,10 @@ data class AiCoachUiState(
     val suggestionSource: AdviceSource = AdviceSource.LOCAL_RULES,
     /** 建议走本地时的回落原因（`null` = 没有回落）。 */
     val suggestionFallbackReason: RemoteFallbackReason? = null,
+    /** 「AI 联网增强」开关（默认关）。 */
+    val aiRemoteEnabled: Boolean = false,
+    /** 是否已配置 API Key（快照；加密文件无响应式流，写入后由 ViewModel 手动刷新）。 */
+    val hasApiKey: Boolean = false,
     @StringRes val errorRes: Int? = null,
     @StringRes val snackbarRes: Int? = null,
     val snackbarArgs: List<Any> = emptyList(),
@@ -90,9 +95,10 @@ data class AiCoachUiState(
  */
 @HiltViewModel
 class AiCoachViewModel @Inject constructor(
-    settingsRepository: SettingsRepository,
+    private val settingsRepository: SettingsRepository,
     bodyMetricRepository: BodyMetricRepository,
     exerciseRepository: ExerciseRepository,
+    private val aiCredentialsStore: AiCredentialsStore,
     private val generateTrainingPlan: GenerateTrainingPlanUseCase,
     private val suggestExercises: SuggestExercisesUseCase,
 ) : ViewModel() {
@@ -110,17 +116,21 @@ class AiCoachViewModel @Inject constructor(
         viewModelScope.launch {
             combine(
                 settingsRepository.profile(),
+                settingsRepository.aiRemoteEnabled(),
                 latestWeightKg,
-            ) { profile: UserProfile, weight: Float? -> profile to weight }
-                .collect { (profile, weight) ->
-                    _uiState.update {
-                        it.copy(
-                            isLoading = false,
-                            profile = profile,
-                            currentWeightKg = weight,
-                        )
-                    }
+            ) { profile: UserProfile, aiRemote: Boolean, weight: Float? ->
+                Triple(profile, aiRemote, weight)
+            }.collect { (profile, aiRemote, weight) ->
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        profile = profile,
+                        currentWeightKg = weight,
+                        aiRemoteEnabled = aiRemote,
+                        hasApiKey = aiCredentialsStore.isConfigured(),
+                    )
                 }
+            }
         }
         loadSuggestions()
         viewModelScope.launch {
@@ -128,6 +138,16 @@ class AiCoachViewModel @Inject constructor(
                 _uiState.update { it.copy(exerciseNames = exercises.associate { e -> e.id to e.name }) }
             }
         }
+    }
+
+    /**
+     * 刷新「是否已配置 Key」快照。
+     *
+     * 加密文件无响应式流：用户在设置页保存/清除 Key 后回到本页时，
+     * DataStore 流不会重发，必须由 UI 在 ON_RESUME 主动调此方法（否则徽标滞留旧状态）。
+     */
+    fun refreshKeyStatus() {
+        _uiState.update { it.copy(hasApiKey = aiCredentialsStore.isConfigured()) }
     }
 
     /** 生成 / 重新生成训练计划（写入本周计划，用户手改行保持不动）。 */

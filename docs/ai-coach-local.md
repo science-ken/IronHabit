@@ -3,7 +3,7 @@
 > **范围**：只涉及 `docs/`（本文件为设计文档）；**不含任何 `app/src/` 代码改动**。
 > **前置**：`docs/schema-v3-meals.md` §7.5（**用户档案完整版**）—— 本文件的「AI 教练」与饮食模块**共用同一个 `UserProfile`**（不新造模型）。
 > **用户已拍板（本文件的设计前提）**：
-> 1. **先做完全离线的「本地规则版」**，不做联网、不接任何模型 API；
+> 1. **先做完全离线的「本地规则版」**，不做联网、不接任何模型 API（✅ **已落地**；**联网一期已于 2026-09-15 拍板启动**，见 §6.2/§6.3 —— 本地规则引擎保留为回落层）；
 > 2. 从**身体档案**开工（档案已由 `schema-v3-meals.md` §7.5 定稿）。
 >
 > **治理标记**（架构 §0.2）：✅ 实测 / 🔶 推演 / 🔗 引用。
@@ -13,7 +13,8 @@
 
 ## 0. 一句话结论
 
-App 里**没有**任何「AI」功能（底部只有 4 个 Tab，预览版有第 5 个「AI 教练」）。本设计把预览里的第 4 个 Tab「AI 教练」**用完全离线的确定性规则**落地一版 —— **不联网、不接模型、不加 `INTERNET` 权限**，产出「按档案生成的训练计划 + 按伤病/器械筛出的补充动作」两类结果，且**文案绝不宣称是模型推理**（"本地规则版"）。
+App 里**没有**任何「AI」功能（底部只有 4 个 Tab，预览版有第 5 个「AI 教练」）。本设计把预览里的第 4 个 Tab「AI 教练」**先用完全离线的确定性规则**落地一版 —— **本地规则引擎不联网、不接模型、不加 `INTERNET` 权限**，产出「按档案生成的训练计划 + 按伤病/器械筛出的补充动作」两类结果，且**文案绝不宣称是模型推理**（"本地规则版"）。
+> ✅ **后续**：用户已于 **2026-09-15 拍板启动联网一期**（DeepSeek）—— 见 **§6.2 定稿 / §6.3 文件清单**。联网是**叠加**在本地规则之上的"增强层"：`LocalRuleAdvisor` 保留为回落层，**无 Key / 开关关 / 任何异常时，行为与纯离线版完全一致**。
 
 ---
 
@@ -484,23 +485,60 @@ interface PlanAdvisor {
 ```kotlin
 @Provides
 @Singleton
-fun providePlanAdvisor(): PlanAdvisor = LocalRuleAdvisor
-// 将来联网：改为注入 RemoteLlmAdvisor（或按"设置里的开关"二选一）—— UI/UseCase 零改动
+fun providePlanAdvisor(): PlanAdvisor =
+    DelegatingPlanAdvisor(remote = RemoteLlmAdvisor(...), local = LocalRuleAdvisor)
+// 联网一期（§6.2 定稿）：委托实现 + 失败回落；无 Key / 开关关 / 任何异常 → LocalRuleAdvisor
 ```
 
-### 6.2 「联网阶段待决事项」（**本次一律不做，只登记**）
+### 6.2 联网一期定稿（✅ **用户 2026-09-15 拍板启动**，本节由"只登记"升级为"定稿登记"）
 
-| # | 事项 | 说明 | 触发条件 |
-|---|------|------|---------|
-| N1 | `INTERNET` 权限 | 联网实现需在 `AndroidManifest.xml` 加 `android.permission.INTERNET` | 接入真实模型时 |
-| N2 | API Key 管理 | 预览用 **DeepSeek** + 明文展示 `sk-••••3f7a`（`:673-674`）。**明文存 API Key 不可接受** → 需选型：`EncryptedSharedPreferences` / Keystore / 或"不让用户填 Key，走服务端代理" | 联网阶段**首要**决策 |
-| N3 | 隐私与合规 | 身体档案（性别/年龄/身高/体重/伤病）属**敏感个人信息** → 需隐私政策、用户明示同意、README 更新 | 联网阶段**必做** |
-| N4 | 离线降级 | 联网失败 / 飞行模式 → **自动回落 `LocalRuleAdvisor`**（`source` 已预留标注），UI 显示来源 | 联网阶段 |
-| N5 | 自由问答 | 预览的四段脚本对话（`:623-625`）+ 输入框 → 需真实模型。**本轮不实现，但页内保留"可见禁用说明"（不静默删除）**（§1 ④、§2 ③）。**将来启用方式**：① 在 `PlanAdvisor` 之外新增 `interface ChatAdvisor { suspend fun ask(profile, question): Answer }`（`source = REMOTE_LLM`）；② 联网可用时，把 §2 ③ 的"禁用说明行"替换为一个真实输入框（`ai_freechat_enabled`）；③ 断网/未配置 Key 时**回落**为"禁用说明 + 本地规则解读"（与 N4 同款降级）。**UI 骨架本轮已留位，联网阶段只换内容不改布局** | 联网阶段 |
-| N6 | 联网策略 | 预览「仅 Wi‑Fi 下调用」（`:675`）→ 是否实现、默认值 | 联网阶段 |
-| N7 | 成本 / 限流 | 模型调用计费与频控 | 联网阶段 |
+> **接入对象**：DeepSeek（`https://api.deepseek.com`，`model = deepseek-chat`，`temperature = 0.2`，`response_format = json_object`）。
+> **范围**：只有「生成训练计划」与「补充动作建议」走模型；**自由问答本期仍不做**（见 N5）。
+> **总原则**：`LocalRuleAdvisor` **原样保留**为回落层 —— 联网是"增强"，不是"替代"；**无 Key / 开关关 / 任何异常，行为与纯离线版完全一致**。
 
-> **架构不变式**：`AdviceSource`（`LOCAL_RULES` / `REMOTE_LLM`）从第一天就在模型里 → 将来"来源"可在 UI 明确标注（"本地规则" / "AI 联网生成"），**不会**出现"用户分不清是规则还是模型"的情况。
+| # | 事项 | **裁定（定稿）** |
+|---|------|----------------|
+| **N1** | `INTERNET` 权限 | ✅ **已触发**：本期在 `AndroidManifest.xml` 加 `android.permission.INTERNET`（工程师施工中）。**口径更正**：App 由"零网络"变为"**可选联网（默认关闭）**" —— 无 Key 时行为与纯离线版一致，`ARCHITECTURE.md` §7.7 等处的"零网络红线"已同步改写（见 §6.4） |
+| **N2** | API Key 管理 | ✅ **定稿**：用户在**设置页**填 Key；存 **`EncryptedSharedPreferences`**（**AES256_GCM**，文件名 `ai_credentials`）。**不得**进 DataStore / 日志 / 云备份（`backup_rules.xml` 不含该文件）；Key 不回显（只显示尾 4 位）。**服务商**：DeepSeek，`https://api.deepseek.com`，`model=deepseek-chat`，`temperature=0.2`，`response_format=json_object` |
+| **N3** | 隐私与合规 | ✅ **定稿**：用户**已明示同意**发送必要身体档案（性别 / 年龄 / 身高 / 体重 / 伤病 / 目标）。App 内**两处披露**：① 设置页 AI 区块的隐私说明行；② AI 页**动态徽标**。文案由主理人撰写；本设计只登记**披露位置与原则**：**宁朴素勿误导** —— 徽标必须让人一眼看出"这次是谁生成的"（本地规则 / AI 联网 / 失败回落本地），不得模糊化 |
+| **N4** | 离线降级 | ✅ **定稿**：新增 **`DelegatingPlanAdvisor`** 包装 —— **无 Key / 开关关 / 任何网络或解析异常 → 一律回落 `LocalRuleAdvisor`**。`GeneratedPlanSummary.source` 与建议结果**带来源**，UI 诚实标注三态：**「本地规则」/「AI 联网」/「联网失败，已回落本地规则」**（不得把回落结果标成 AI 生成） |
+| **N5** | 自由问答 | ✅ **本期仍不做**（用户只要计划与建议由 AI 生成）。**禁用说明行保留**（§1 ④、§2 ③），**将来仍走 `ChatAdvisor` 接口**（`suspend fun ask(profile, question): Answer`），启用路径不变（见 §11 #3） |
+| **N6** | 联网策略 | ✅ **不设"仅 Wi‑Fi"开关**（一期从简）：**30s 超时 + 失败回落**已足够。登记为**将来可选项**（届时可加"仅 Wi‑Fi 调用"设置项，与预览 `:675` 对齐） |
+| **N7** | 成本 / 限流 | ✅ **无内置限流**：一期靠 `temperature=0.2`（输出更稳定）+ **设置页手动开关**。**登记风险**：频繁生成会增加费用；**将来方案**：本地节流（如"同一天同一动作只生成一次"）、或按月配额 |
+
+> **架构不变式（兑现）**：`AdviceSource`（`LOCAL_RULES` / `REMOTE_LLM`）从第一天就在模型里 → 现在正好用来承载"来源三态"，UI 不会让用户分不清是规则还是模型。
+
+### 6.3 联网一期文件清单（**预计 7 个 · 待施工**，落地后以 git 复核）
+
+> ⚠️ **本表为设计推算**（主理人预估 6–8 个），**不计入** §2 现有计数（**191 / 219 不变**）；**落地后须以 git 事实复核并更正**（预期已落地 191 → 197±）。
+
+| 相对路径 | 职责 |
+|---------|------|
+| `domain/ai/DelegatingPlanAdvisor.kt` | **回落包装**：按"开关 + Key + 结果"委托 `RemoteLlmAdvisor`，任何失败回落 `LocalRuleAdvisor`，并把来源标进结果 |
+| `domain/ai/RemoteLlmAdvisor.kt` | `PlanAdvisor` 的 **REMOTE_LLM** 实现：拼提示词 → 调 DeepSeek → 解析 `PlanProposal` / `ExerciseSuggestion`（**解析失败也回落**） |
+| `domain/ai/AiPromptBuilder.kt` | **纯函数**：把 `UserProfile` + 动作库摘要 → 请求体（零 Android，可单测；输出带 `response_format=json_object` 约束） |
+| `data/ai/DeepSeekClient.kt` | HTTP 调用 + **30s 超时** + 错误分类（可回落 / 不可回落） |
+| `data/ai/AiCredentialsStore.kt` | `EncryptedSharedPreferences`（AES256_GCM，文件 `ai_credentials`）读写 Key；**不进 DataStore / 日志 / 云备份** |
+| `data/ai/AiRemoteModels.kt` | 请求 / 响应 DTO（kotlinx.serialization）+ 错误类型 |
+| `di/AiModule.kt` | 绑定 `PlanAdvisor → DelegatingPlanAdvisor`（把原在 `AppModule` 的 `@Provides` 迁来，联网/离线切换**唯一**改动点） |
+
+**伴随修改（不计入新增）**：`AndroidManifest.xml`（+`INTERNET`）、`SettingsScreen.kt`/`SettingsViewModel.kt`（Key 录入 + 开关 + 隐私说明行）、`SettingsDataStore.kt`（+`ai_enabled` 开关）、`AiCoachScreen.kt`/`AiCoachViewModel.kt`（来源三态徽标）、`strings.xml`、`backup_rules.xml`/`data_extraction_rules.xml`（排除 `ai_credentials`）。
+
+### 6.4 联网一期的口径更正（**全库扫描结论**）
+
+| 位置 | 原表述 | 更正后 |
+|------|--------|--------|
+| `ARCHITECTURE.md` 头部"定位" | 单机离线 | **单机优先 · 可选联网**（AI 教练联网一期；默认关闭，无 Key 时与纯离线一致） |
+| `ARCHITECTURE.md` §7.7「离线与"零网络"红线」 | `AndroidManifest` **不含** `INTERNET`（"零网络"最硬证据） | **可选联网**：`INTERNET` 权限已加（N1），但**无 Key / 开关关时行为与纯离线一致**；核心链路（打卡/统计/提醒/备份）仍零网络 |
+| `ARCHITECTURE.md` §CI「零网络红线校验」 | grep 禁 `INTERNET` 权限 | 改为校验"**联网默认关闭**"（`ai_enabled` 默认 false）+ 依赖红线保留（见下 ⚠️） |
+| `ARCHITECTURE.md` §1.3/§6 依赖红线 | 明确不引入 Retrofit/OkHttp/Ktor | ⚠️ **见 §6.5 待决**：若用 JVM 内建 `HttpURLConnection` 则红线**可原样保留**；若选 OkHttp/Ktor 则 CI 与依赖清单**须同步放开** |
+| 本文件 §0 / §1 | "不联网、不加 INTERNET 权限" | 本地规则增量（AC1–AC5）**自身仍零网络**；联网一期由 §6.2/§6.3 单列，**两件事分开计数、分开复核** |
+
+### 6.5 需主理人拍板（联网一期，1 个）→ ✅ **已全部拍板定稿**
+
+| # | 事项 | 裁定结果 |
+|---|------|---------|
+| **N8** | **HTTP 客户端选型** | ✅ **已定稿：JVM 内建 `HttpURLConnection`**（主理人 **2026-09-15** 裁定，不定 OkHttp）。理由：①零新依赖——§6.2 的"明确不引入 Retrofit/OkHttp/Ktor"条款与 CI 的依赖 grep **原样保留**，三处口径自洽；②一期只调 DeepSeek 一个 POST 端点，自处理 30s 超时（N6）与 JSON（kotlinx.serialization）足够。若将来确需 OkHttp，须先同步修订 `ARCHITECTURE.md` §6.2 依赖清单 / §7.7 / 附录 CI 三处 |
 
 ---
 
@@ -739,6 +777,7 @@ graph TD
 | **5** | 补充动作候选池来源 | ✅ **内置常量表**（对应预览 `AI_SUG`） | §4.2 / AC2 |
 | **6** | 底栏图标 `AutoAwesome` 是否存在 | ✅ 按 `AutoAwesome` → `SmartToy` → `Star` 顺序处理；**已实测确认 `AutoAwesome` 存在于 1.7.6，无需降级**，结论已写回 §3.2 | §3.2、§10 风险 1 |
 | **7** | AI 页的档案概要卡：**自建一份**（A）还是**提升为共享组件**（B）？ | ✅ **裁定方案 B**（理由：`targetWeightKg` 曾因同一格式化逻辑在今日卡片与训练页各写一遍而出 bug → **概要卡不该有两份**）。新增 `ui/components/ProfileSummaryCard.kt`；**纯展示**契约 `(profile, onClick, modifier)`；**必须删除** `ProfileScreen.kt` 内 private 旧版（**禁止并存**）；AI 页额外信息一律放卡片**外面**，不得改签名 | §7.1（新增 8→9）、§7.2（+`ProfileScreen.kt` 连带修改）、**§7.5 硬约束 5 条**、`ARCHITECTURE.md` §2.10 脚注 |
+| **8** | **联网一期**（接入 DeepSeek，用户 **2026-09-15** 拍板启动） | ✅ **N1** 已触发：`AndroidManifest.xml` 新增且仅新增 `INTERNET`（**已核实落地**）；**N2** Key 管理：`EncryptedSharedPreferences`（AES256_GCM，文件 `ai_credentials`），用户自填、无内置 Key；**N3** 隐私合规：两处披露（AI 页 + 设置页），延续"宁朴素勿误导"；**N4** 离线降级：`DelegatingPlanAdvisor` 回落本地规则，建议来源三态标注；**N5** 自由问答：本期**仍不做**（保留禁用行）；**N6** 网络策略：不设"仅 Wi-Fi"开关，超时 30s；**N7** 成本：无内置限流（个人自用，依赖人工约束）；**N8** HTTP 客户端**已定稿 `HttpURLConnection`**（2026-09-15，零新依赖，与 §6.2/§7.7/CI 三处口径自洽，详见 §6.5）；**联网开关默认值 = 关**（`ai_remote_enabled` 默认 `false`）——语义："不填 Key + 不开开关 = 行为与纯离线版完全一致"，v1.5→v1.6 升级用户无感，守住"默认不出设备"。**联动**：`ARCHITECTURE.md` 全库"零网络"表述已逐处更正为"可选联网（默认关闭）"，数字计数不动 | §6.2（N1–N7 定稿）、§6.3（待施工文件清单）、§6.4（口径更正表）、`ARCHITECTURE.md` §2.13 / §7.7 / 附录 CI |
 
 > **"将来可配置"注（裁定 #2 要求）**：默认训练天数 **3 天** 为**常量**（`const val DEFAULT_TRAINING_DAYS = 3`）—— **不做**"用户自选天数"，避免本版范围膨胀；
 > **将来可配置的路径**：届时把该常量改为读档案 / 设置中的一项（`UserProfile` 加一个可空字段，或用既有 `AppSettings` 扩展），**`planWeek` 签名不变**（仍从 `profile` 取值），UI 与规则层零改动。

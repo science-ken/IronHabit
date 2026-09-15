@@ -4,6 +4,7 @@ import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ironhabit.app.R
+import com.ironhabit.app.data.preferences.AiCredentialsStore
 import com.ironhabit.app.domain.model.AppSettings
 import com.ironhabit.app.domain.model.BodyMetricType
 import com.ironhabit.app.domain.model.DietRestriction
@@ -43,6 +44,8 @@ import kotlinx.coroutines.launch
  * @property reminderMinute 提醒分钟
  * @property profile 用户档案（「我的档案」区块，存 DataStore）
  * @property currentWeightKg 当前体重（只读，来自 `body_metrics` 最新 WEIGHT 值；无记录为 `null`）
+ * @property aiRemoteEnabled 「AI 联网增强」开关（默认 false = 纯本地规则，行为与纯离线版一致）
+ * @property hasApiKey 是否已配置 DeepSeek API Key（只读快照；存于加密文件，不经 DataStore）
  * @property errorRes 页面级错误资源 id
  * @property snackbarRes 一次性 Snackbar 资源 id（提醒设置结果）
  * @property snackbarArgs Snackbar 格式化参数（提醒时间）
@@ -56,6 +59,8 @@ data class SettingsUiState(
     val reminderMinute: Int = DEFAULT_MINUTE,
     val profile: UserProfile = UserProfile(),
     val currentWeightKg: Float? = null,
+    val aiRemoteEnabled: Boolean = false,
+    val hasApiKey: Boolean = false,
     @StringRes val errorRes: Int? = null,
     @StringRes val snackbarRes: Int? = null,
     val snackbarArgs: List<String> = emptyList(),
@@ -75,6 +80,7 @@ private const val DEFAULT_MINUTE = 0
 class SettingsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val bodyMetricRepository: BodyMetricRepository,
+    private val aiCredentialsStore: AiCredentialsStore,
     private val scheduleReminder: ScheduleReminderUseCase,
 ) : ViewModel() {
 
@@ -90,9 +96,14 @@ class SettingsViewModel @Inject constructor(
         combine(
             settingsRepository.settings(),
             settingsRepository.profile(),
+            settingsRepository.aiRemoteEnabled(),
             latestWeightKg,
-        ) { settings: AppSettings, profile: UserProfile, weightKg: Float? ->
-            settings.toUiState().copy(profile = profile, currentWeightKg = weightKg)
+        ) { settings: AppSettings, profile: UserProfile, aiRemote: Boolean, weightKg: Float? ->
+            settings.toUiState().copy(
+                profile = profile,
+                currentWeightKg = weightKg,
+                aiRemoteEnabled = aiRemote,
+            )
         }
             .catch {
                 emit(SettingsUiState(isLoading = false, errorRes = R.string.error_load_failed))
@@ -108,13 +119,16 @@ class SettingsViewModel @Inject constructor(
             dataState.collect { data ->
                 _uiState.update { local ->
                     data.copy(
+                        // 本地一次性状态不被数据流覆盖；hasApiKey 不经数据流（加密文件无响应式流）。
                         snackbarRes = local.snackbarRes,
                         snackbarArgs = local.snackbarArgs,
+                        hasApiKey = local.hasApiKey,
                         errorRes = data.errorRes ?: local.errorRes,
                     )
                 }
             }
         }
+        _uiState.update { it.copy(hasApiKey = aiCredentialsStore.isConfigured()) }
     }
 
     fun onThemeChange(mode: ThemeMode) {
@@ -123,6 +137,61 @@ class SettingsViewModel @Inject constructor(
 
     fun onUnitChange(system: UnitSystem) {
         persist { settingsRepository.setUnit(system) }
+    }
+
+    // ---------------- AI 设置（联网增强）----------------
+
+    /** 开关「AI 联网增强」。默认关；关 = 行为与纯离线版完全一致。 */
+    fun onAiRemoteEnabledChange(enabled: Boolean) {
+        persist { settingsRepository.setAiRemoteEnabled(enabled) }
+    }
+
+    /**
+     * 保存 DeepSeek API Key。
+     *
+     * 校验：`sk-` 前缀（DeepSeek 官方格式）；空白输入视为无效（清空请用 [onApiKeyClear]）。
+     * Key 只进加密文件（[AiCredentialsStore]），不落 DataStore/日志/备份。
+     */
+    fun onApiKeySave(rawKey: String) {
+        val key = rawKey.trim()
+        if (!key.startsWith("sk-") || key.length < 10) {
+            _uiState.update {
+                it.copy(snackbarRes = R.string.settings_ai_key_invalid, snackbarArgs = emptyList())
+            }
+            return
+        }
+        viewModelScope.launch {
+            try {
+                aiCredentialsStore.setKey(key)
+                _uiState.update {
+                    it.copy(
+                        hasApiKey = true,
+                        snackbarRes = R.string.settings_ai_key_saved,
+                        snackbarArgs = emptyList(),
+                    )
+                }
+            } catch (throwable: Throwable) {
+                _uiState.update { it.copy(snackbarRes = R.string.error_generic) }
+            }
+        }
+    }
+
+    /** 清除已保存的 Key（清除后即使开关开着也会自动回落本地规则）。 */
+    fun onApiKeyClear() {
+        viewModelScope.launch {
+            try {
+                aiCredentialsStore.setKey(null)
+                _uiState.update {
+                    it.copy(
+                        hasApiKey = false,
+                        snackbarRes = R.string.settings_ai_key_cleared,
+                        snackbarArgs = emptyList(),
+                    )
+                }
+            } catch (throwable: Throwable) {
+                _uiState.update { it.copy(snackbarRes = R.string.error_generic) }
+            }
+        }
     }
 
     // ---------------- 我的档案（即时落盘，无保存按钮）----------------

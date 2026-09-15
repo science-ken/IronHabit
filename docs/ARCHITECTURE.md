@@ -2,7 +2,7 @@
 
 > 版本：v1.0 ｜ 作者：高见远（架构师）｜ 上游输入：《PRD v1.0》（产品经理 许清楚）
 > 交付对象：工程师（施工）、QA（测试）、主理人（汇总）
-> 定位：**个人自用 · 单机离线 · 仅 Android · 无账号无广告 · 不上架**
+> 定位：**个人自用 · 单机离线（可选联网：默认关闭，仅限 AI 教练一期，见 `docs/ai-coach-local.md` §6） · 仅 Android · 无账号无广告 · 不上架**
 > 输出语言：简体中文 ｜ 本文件为**唯一施工依据**，工程师按第 5 章任务顺序施工
 
 ---
@@ -593,6 +593,13 @@ export ANDROID_HOME="C:/Users/science/AppData/Local/Android/Sdk"
 > **⚠️ 计数更正（以 git 事实为准）**：§2 抬头原登记「**已落地 189**（截至 `d734746`）」，**实际 191（截至 `015d637`）**
 > —— **原登记 189，实际 191，原因：M2.5 落地新增 2 个 app 文件**（上表；`git diff --name-status d734746..015d637` 的 `A` 行实测，`kt/java` 计数 150 → 152 印证）。
 > `docs/ai-coach-local.md` 亦是该 diff 的 `A` 行，但**为设计文档，非 app 源文件，不计入 §2**。
+
+### 2.13 联网一期（AI 教练 · DeepSeek）增量 · **设计已登记，待施工（不计数）**
+
+> 主理人 **2026-09-15** 拍板启动「联网一期」，裁定 N1–N7 已定稿登记于 `docs/ai-coach-local.md` §6.2（§11 #8 留档）。
+> **本节不改变任何既有计数**：联网一期**不加新表、不改 schema**（`2.json` 指纹不变）；预计新增 **6–8 个 app 文件**（预测清单见 `docs/ai-coach-local.md` §6.3：`DelegatingPlanAdvisor` / `RemoteLlmAdvisor` / `AiPromptBuilder` / `DeepSeekClient` / `AiCredentialsStore` / `AiRemoteModels` / `AiModule`，±1 以落地为准），登记为**待施工、落地后以 `git diff --name-status` 复核**并再登记一节。
+> 权限影响（**已核实落地**）：`AndroidManifest.xml` 新增且仅新增 `android.permission.INTERNET`（N1）；无 Key / 断网 / 调用失败时行为与纯离线版一致（N4 `DelegatingPlanAdvisor` 回落本地规则）。
+> HTTP 实现倾向 `HttpURLConnection` 直连（N8 建议，待主理人确认；若改选 OkHttp 须先更新 §7.7 与 §6.2 依赖红线口径）。
 
 ---
 
@@ -1760,7 +1767,7 @@ hilt                  = { id = "com.google.dagger.hilt.android", version.ref = "
 | Coroutines | `org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0` | 异步 |
 | 测试 | `junit:junit:4.13.2`、`io.mockk:mockk:1.13.13`、`app.cash.turbine:turbine:1.2.0`、`org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0`、`org.robolectric:robolectric:4.14.1`、`androidx.test.ext:junit:1.2.1`、`androidx.test:runner:1.6.2`、`androidx.test:core-ktx:1.6.1` | 单测 + instrumentation |
 
-> **明确不引入**：Retrofit / OkHttp / Ktor（无网络需求）、WorkManager（见 1.3）、Firebase / GMS（无账号无云）、**Vico / MPAndroidChart（图表改用 Compose 原生 Canvas 手绘，见 1.3）**、Gson（kotlinx.serialization 替代）。CI 可用一条 grep 校验依赖清单中不含 `retrofit|okhttp|ktor|firebase|play-services|vico`。
+> **明确不引入**：Retrofit / OkHttp / Ktor（**核心链路**无网络需求；联网一期 AI 教练倾向 `HttpURLConnection` 直连、零新依赖，见 `docs/ai-coach-local.md` §6.5 N8——若最终裁定改用 OkHttp，须先同步修订本条与 §7.7 红线口径）、WorkManager（见 1.3）、Firebase / GMS（无账号无云）、**Vico / MPAndroidChart（图表改用 Compose 原生 Canvas 手绘，见 1.3）**、Gson（kotlinx.serialization 替代）。CI 可用一条 grep 校验依赖清单中不含 `retrofit|okhttp|ktor|firebase|play-services|vico`。
 
 ---
 
@@ -1878,10 +1885,13 @@ val events = _events.receiveAsFlow()
 - **不得**把业务逻辑写进 `DatabaseSeeder`（只做幂等播种）。
 - **软删除/软取消的查询口径红线（重要，防回归）**：`habit_logs` 取消勾选 = UPSERT 把 `is_completed` 置 0、**不删行**。因此凡是**按"活跃日 / 连续天数"聚合**的 SQL 都必须显式过滤 `is_completed = 1`（如 `HabitLogDao.observeActiveDays`），以与 `GetTodayOverviewUseCase` 的 Kotlin 侧 `filter { it.isCompleted }` 口径保持一致；否则会出现"今日页断档、自律页连续"的矛盾。**该过滤条件不得被"优化"删除**（见 §3.3）。
 
-### 7.7 离线与"零网络"红线
+### 7.7 离线与网络红线（口径更正：可选联网 · 默认关闭）
 
-- 依赖清单**必须**通过 CI 的 grep 校验：`grep -RE "retrofit|okhttp|ktor|firebase|play-services|volley" app/build.gradle.kts gradle/libs.versions.toml` **必须无输出**。
-- `AndroidManifest.xml` **不含** `android.permission.INTERNET`（这是"零网络"最硬的证据）。
+> **口径更正（联网一期，主理人 2026-09-15 拍板；裁定登记见 `docs/ai-coach-local.md` §6.2 / §11 #8）**：原「零网络」红线修订为「**核心链路（打卡 / 统计 / 提醒 / 备份）仍严格零网络；联网仅限 AI 教练一期，默认关闭，无 Key / 断网 / 调用失败时行为与纯离线版一致**」。
+> 已核实落地：`AndroidManifest.xml` 已新增且**仅新增** `android.permission.INTERNET`（N1），其余权限仍全部为本地能力。
+
+- 依赖清单**必须**通过 CI 的 grep 校验：`grep -RE "retrofit|okhttp|ktor|firebase|play-services|volley" app/build.gradle.kts gradle/libs.versions.toml` **必须无输出**（联网一期倾向 `HttpURLConnection` 直连、零新依赖，见 N8；若裁定引入 OkHttp 须先改本条）。
+- `AndroidManifest.xml` 的 `INTERNET` 权限**仅服务于 AI 教练**（联网一期 N1）；不得再新增任何云服务 / 账号 / 同步类权限（CI 侧以权限白名单校验，见附录 CI 配方）。
 
 ### 7.8 测试约定
 
@@ -1916,7 +1926,7 @@ val events = _events.receiveAsFlow()
 | P0-4 | 习惯追踪（每日/每周） | `HabitEntity`、`HabitLogEntity`、`HabitDao`、`HabitLogDao`、`ToggleHabitUseCase`、`DisciplineScreen`、`HabitRow` | T02/T03/T04 |
 | P0-5 | 连续打卡 streak（当前 + 历史最长） | `StreakCalculator`、`CalculateStreakUseCase`、`StreakInfo`、`ProgressRing`（streak 大字） | T03/T04 |
 | P0-6 | 统计图表（趋势 + 分类占比） | `StatsDao`、`StatsRepository(Impl)`、`GetStatsUseCase`、`TrendChart`、`CategoryPieChart`、`ProfileScreen` | T02/T03/T04 |
-| P0-7 | 本地持久化 Room（杀进程不丢） | `AppDatabase`、全部 Entity/Dao、无 INTERNET 权限 | T01/T02 |
+| P0-7 | 本地持久化 Room（杀进程不丢） | `AppDatabase`、全部 Entity/Dao、无网络依赖（原登记「无 INTERNET 权限」→ **口径更正**：联网一期已增 `INTERNET` 且仅限 AI 教练、默认关闭，见 §7.7） | T01/T02 |
 | P0-8 | 本地通知提醒（可开关、离线、重启不丢） | `ReminderSchedulerImpl`(AlarmManager)、`ReminderReceiver`、`BootReceiver`、`NotificationHelper`、`ScheduleReminderUseCase`、`SettingsScreen` | T01/T03/T05 |
 | P0-9 | 打卡历史视图 | `HistoryScreen/ViewModel`、`CheckInDao`、`GetHeatmapUseCase`、`HeatmapGrid` | T03/T05 |
 
@@ -1960,18 +1970,22 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
-      - name: 零网络红线校验
+      - name: 网络红线校验（可选联网 · 默认关闭口径）
         run: |
           if grep -RE "retrofit|okhttp|ktor|firebase|play-services|volley" \
                app/build.gradle.kts gradle/libs.versions.toml; then
-            echo "::error::检测到网络/云服务依赖，违反纯离线约束"
+            echo "::error::检测到网络/云服务依赖，违反依赖红线（联网一期仅允许 HttpURLConnection，见 docs/ai-coach-local.md §6.5 N8）"
             exit 1
           fi
-          if grep -q "android.permission.INTERNET" app/src/main/AndroidManifest.xml; then
-            echo "::error::AndroidManifest 声明了 INTERNET 权限，违反纯离线约束"
+          # 联网一期（2026-09-15）：INTERNET 已放行，仅限 AI 教练（默认关闭）。
+          # 权限白名单 = 当前 AndroidManifest 实际权限集（已核实）；出现白名单之外的权限即失败
+          allowed="android\.permission\.(INTERNET|SCHEDULE_EXACT_ALARM|USE_EXACT_ALARM|POST_NOTIFICATIONS|RECEIVE_BOOT_COMPLETED|VIBRATE)"
+          if grep -o "android\.permission\.[A-Z_]*" app/src/main/AndroidManifest.xml \
+             | sort -u | grep -vE "^${allowed}$"; then
+            echo "::error::发现白名单之外的权限声明，不得新增云服务/账号/同步类权限"
             exit 1
           fi
-          echo "零网络约束校验通过 ✅"
+          echo "网络约束校验通过 ✅（核心链路零网络 · INTERNET 仅限 AI 教练 · 无 Key 时与纯离线版一致）"
 
       - name: Run unit tests
         run: ./gradlew testDebugUnitTest --stacktrace

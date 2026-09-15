@@ -171,7 +171,7 @@
     <string name="settings_exact_alarm_tip">未开启「精确闹钟」权限，提醒时间可能有偏差。点此去设置</string>
     <string name="settings_notification_permission_tip">通知权限未开启，无法收到提醒</string>
     <string name="settings_version">版本 %1$s</string>
-    <string name="settings_privacy">本应用完全离线运行，不联网、不采集任何数据</string>
+    <string name="settings_privacy">核心功能（打卡/计划/提醒/备份）完全离线运行；仅当你在「AI 设置」开启联网增强后，AI 相关请求才会联网，数据是否发送由该开关控制</string>
 
     <!-- ===== 备份页 ===== -->
     <string name="backup_export_title">导出备份</string>

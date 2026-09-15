@@ -1,0 +1,34 @@
+== ARCHITECTURE.md: 网络/离线 表述 ==
+5:> 定位：**个人自用 · 单机离线 · 仅 Android · 无账号无广告 · 不上架**
+99:| D4 | **杀进程数据不丢 + 飞行模式全可用** | Room 落盘为唯一真源；无任何网络依赖库（依赖清单内**无** Retrofit/OkHttp/Ktor）；`Application` 只在首启做一次预置动作写入（幂等 `OnConflictStrategy.IGNORE`） |
+202:| 免网络 | 纯本地，SystemService | 同为本地，但多引入 `androidx.work` + `hilt-work` 两个依赖 |
+537:| `.../domain/ai/LocalRuleAdvisor.kt` | **本地规则引擎**（`object`，`planWeek` + `suggestExercises`，零 Android / 零网络） |
+1524:    Note over AM,OS: —— 到点触发（可能发生在杀进程/离线状态）——
+1586:| **完成判据** | ① `./gradlew :app:testDebugUnitTest` 全绿，其中 `StreakCalculatorTest` 覆盖：跨天、今天未打卡但昨天打了、隔两天断档、补卡后回升、撤销归零、best 永久保留（**≥6 个用例**）；② 真机/模拟器设定 2 分钟后提醒，能收到本地通知且**飞行模式下同样触发**；③ 重启手机后提醒仍生效（BootReceiver 重排）；④ 导出 JSON 可被 `ImportDataUseCase` 原样还原 |
+1597:| **完成判据** | ① 4 Tab 可切换、底部栏在二级页自动隐藏；②「今日」页完成"打开即见今日计划 + 一键打卡 + 进度环 + streak 大字"，**打开到看到今日 ≤1 次操作**；③ 打卡后卡片置灰、进度环前进（Room Flow 自动刷新，无需手动 refresh）；④ 三态齐全（加载骨架 / 空态引导 / 错误 Snackbar）；⑤ 全程飞行模式可用 |
+1608:| **完成判据** | ① 9 项 P0 全部可点通（见附录追溯矩阵）；② 「训练」页 3 分段（周计划/动作库/历史）齐全，可增删改计划条目与自建动作；③「我的」页 2 张图（近 30 天趋势 + 分类占比）离线渲染且在数据变化后自动刷新；④ 设置页可切主题/单位/提醒并重启后保持；⑤ `assembleRelease` 出签名 APK，冷启动无崩溃 |
+1763:> **明确不引入**：Retrofit / OkHttp / Ktor（无网络需求）、WorkManager（见 1.3）、Firebase / GMS（无账号无云）、**Vico / MPAndroidChart（图表改用 Compose 原生 Canvas 手绘，见 1.3）**、Gson（kotlinx.serialization 替代）。CI 可用一条 grep 校验依赖清单中不含 `retrofit|okhttp|ktor|firebase|play-services|vico`。
+1881:### 7.7 离线与"零网络"红线
+1884:- `AndroidManifest.xml` **不含** `android.permission.INTERNET`（这是"零网络"最硬的证据）。
+1919:| P0-7 | 本地持久化 Room（杀进程不丢） | `AppDatabase`、全部 Entity/Dao、无 INTERNET 权限 | T01/T02 |
+1920:| P0-8 | 本地通知提醒（可开关、离线、重启不丢） | `ReminderSchedulerImpl`(AlarmManager)、`ReminderReceiver`、`BootReceiver`、`NotificationHelper`、`ScheduleReminderUseCase`、`SettingsScreen` | T01/T03/T05 |
+1963:      - name: 零网络红线校验
+1967:            echo "::error::检测到网络/云服务依赖，违反纯离线约束"
+1970:          if grep -q "android.permission.INTERNET" app/src/main/AndroidManifest.xml; then
+1971:            echo "::error::AndroidManifest 声明了 INTERNET 权限，违反纯离线约束"
+1974:          echo "零网络约束校验通过 ✅"
+
+== ai-coach-local.md: 零网络/权限 表述（行号） ==
+6:> 1. **先做完全离线的「本地规则版」**，不做联网、不接任何模型 API；
+16:App 里**没有**任何「AI」功能（底部只有 4 个 Tab，预览版有第 5 个「AI 教练」）。本设计把预览里的第 4 个 Tab「AI 教练」**用完全离线的确定性规则**落地一版 —— **不联网、不接模型、不加 `INTERNET` 权限**，产出「按档案生成的训练计划 + 按伤病/器械筛出的补充动作」两类结果，且**文案绝不宣称是模型推理**（"本地规则版"）。
+32:| （页内）AI 教练设置 · DeepSeek + API Key（`Profile` 页 `:672-676`、配置表 `:783`） | 服务商 / API Key / 联网策略 | ❌ **本地版整块隐藏** | 零网络时**不得**摆一个填了也没用的 API Key 框。留到"联网阶段待决事项"（§6） |
+35:> **硬要求（主理人原话意图）**：徽标与文案必须让用户**一眼看出这不是大模型** —— **宁可朴素，也不要让人误以为背后有云**。故：页首徽标 `ai_local_badge`＝「**本地规则版 · 完全离线，无需联网**」常驻；Tab 名沿用预览的「AI 教练」**仅为与预览一致**，页内不得出现任何"智能感"装饰（如"思考中/正在生成"的假动效）。
+44: ├─ [顶部徽标] 本地规则版 · 完全离线，无需联网          ← ai_local_badge
+134:### 4.1 定位：**纯函数、零 Android、零 IO、零网络、零随机**
+144: * 本地规则引擎（**纯函数集合**）：零 Android / 零 IO / 零网络 / 零随机。
+441:## 5. 存储与权限（**零网络**）
+448:| **网络权限** | **不新增 `INTERNET` 权限**（`AndroidManifest.xml` 不动） | 零网络 → 无权限可加 |
+495:| N1 | `INTERNET` 权限 | 联网实现需在 `AndroidManifest.xml` 加 `android.permission.INTERNET` | 接入真实模型时 |
+545:- ❌ 不新增 `INTERNET` 权限、不动 `AndroidManifest.xml`；
+601:<string name="ai_local_badge">本地规则版 · 完全离线，无需联网</string>
+672:1. **飞行模式 / 断网下走查全页** —— 页面**不得**出现任何"加载中/网络错误"（本版零网络，理应全天可用）；
