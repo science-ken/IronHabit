@@ -45,6 +45,10 @@ import com.ironhabit.app.ui.screens.checkin.CheckInSheet
  * 切换只改 ViewModel 的日期游标（[TodayViewModel.onSelectEpochDay]），
  * 计划 / 习惯 / 打卡状态随游标经 Room 数据流自动刷新（schema-v2 §6.1 / §6.3 坑 1）。
  *
+ * **未来日只读（v3）**：所选日 > 今天时，本页**只读**——禁用全部写入口
+ * （逐组勾选 / RPE / 一键打卡 / 撤销 / 补录弹层 / 习惯勾选），并给出可见提示
+ * （`msg_future_day_readonly`），避免「点了没反应」。过去的日期仍可正常补录。
+ *
  * @param onCreatePlan 今日无计划时「去创建」回调
  * @param onCreateHabit 今日无习惯时「去创建」回调
  * @param onEditHabit 习惯行「编辑」回调（附加的可选参数，便于 T05 复用二级页表单）
@@ -64,6 +68,10 @@ fun TodayScreen(
     val snackbarHostState = LocalSnackbarHostState.current
 
     var sheetItem by remember { mutableStateOf<TodayPlanItem?>(null) }
+
+    // 未来日只读：所选日 > 今天（`todayEpochDay` == 0 表示尚未加载，不判定）。
+    val isFutureDay: Boolean =
+        uiState.todayEpochDay > 0L && uiState.dateEpochDay > uiState.todayEpochDay
 
     val snackbarText: String? = uiState.snackbarRes?.let { res ->
         stringResource(res, *uiState.snackbarArgs.toTypedArray())
@@ -126,6 +134,15 @@ fun TodayScreen(
                     )
                 }
 
+                // ---- 未来日只读提示（可见反馈，避免「点了没反应」）----
+                if (isFutureDay) {
+                    Text(
+                        text = stringResource(R.string.msg_future_day_readonly),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.tertiary,
+                    )
+                }
+
                 if (uiState.isRestDay) {
                     Text(
                         text = stringResource(R.string.msg_rest_day),
@@ -152,6 +169,7 @@ fun TodayScreen(
                             onOpenSheet = { sheetItem = item },
                             onToggleSet = { setIndex -> viewModel.onToggleSet(item, setIndex) },
                             onSetRpe = { rpe -> viewModel.onSetRpe(item, rpe) },
+                            enabled = !isFutureDay,
                         )
                     }
                 }
@@ -170,6 +188,7 @@ fun TodayScreen(
                             item = item,
                             onToggle = { viewModel.onToggleHabit(item) },
                             onEdit = { onEditHabit(item.habit.id) },
+                            enabled = !isFutureDay,
                         )
                     }
                 }
@@ -177,8 +196,9 @@ fun TodayScreen(
         }
     }
 
+    // 补录弹层：未来日只读，不弹（双保险：卡片入口已禁用）。
     val currentSheetItem = sheetItem
-    if (currentSheetItem != null) {
+    if (currentSheetItem != null && !isFutureDay) {
         CheckInSheet(
             item = currentSheetItem,
             onDismissRequest = { sheetItem = null },

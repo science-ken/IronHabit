@@ -232,4 +232,7 @@
     <string name="cd_previous_week">上一周</string>
     <string name="cd_next_week">下一周</string>
 
+    <!-- ===== 未来日只读（v3：所选日 > 今天时禁用全部写入口）===== -->
+    <string name="msg_future_day_readonly">还没到这一天，先看看计划就好</string>
+
 </resources>

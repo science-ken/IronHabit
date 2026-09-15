@@ -25,6 +25,11 @@ import com.ironhabit.app.domain.model.HabitItem
  *
  * 左侧显示 emoji 与习惯名（下方小字显示连续天数 `label_streak_days`），
  * 右侧为 [Checkbox]（勾选/取消 → [onToggle]）与编辑按钮（→ [onEdit]）、删除按钮（→ [onDelete]）。
+ *
+ * **只读态**（[enabled] = `false`，用于「所选日 > 今天」）：禁用勾选（打卡）入口，
+ * 但「编辑」（改习惯定义，与日期无关）仍可用。
+ *
+ * @param enabled 勾选（打卡）是否可写（`false` = 未来日只读态）
  */
 @Composable
 fun HabitRow(
@@ -33,6 +38,7 @@ fun HabitRow(
     onEdit: () -> Unit,
     modifier: Modifier = Modifier,
     onDelete: () -> Unit = {},
+    enabled: Boolean = true,
 ) {
     val colorScheme = MaterialTheme.colorScheme
 
@@ -87,6 +93,7 @@ fun HabitRow(
             Checkbox(
                 checked = item.isCompletedToday,
                 onCheckedChange = onToggle,
+                enabled = enabled,
             )
         }
     }

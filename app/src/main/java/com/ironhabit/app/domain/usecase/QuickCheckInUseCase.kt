@@ -13,8 +13,12 @@ import kotlinx.datetime.TimeZone
 /**
  * 「一键打卡」用例（架构 §4.1）。
  *
- * 以计划目标值直接 upsert 今日打卡，并累加动作使用次数。
+ * 以计划目标值直接 upsert 打卡，并累加动作使用次数。
  * `CheckInDao` 的唯一约束 `(exercise_id, date_epoch_day)` 保证重复点击**幂等**、不产生脏数据。
+ *
+ * ⚠️ **写入口径（v3 统一）**：打卡日期由**调用方传入的 [epochDay]（所选日）**决定，
+ * 与逐组勾选 / RPE / 撤销 / 习惯 / 补录完全一致；**不再**在用例内部自算「真实今天」，
+ * 否则切到非今天查看时会在同一屏出现「一键打卡写今天、其它写所选日」两套口径。
  */
 class QuickCheckInUseCase @Inject constructor(
     private val checkInRepository: CheckInRepository,
@@ -23,16 +27,20 @@ class QuickCheckInUseCase @Inject constructor(
     private val timeZone: TimeZone,
 ) {
 
-    /** 由计划条目直接打卡（T04 传入 `WeekPlan`）。 */
-    suspend operator fun invoke(plan: WeekPlan) {
-        val today = DateUtils.todayEpochDay(clock, timeZone)
+    /**
+     * 由计划条目直接打卡。
+     *
+     * @param plan 来源计划条目
+     * @param epochDay 打卡日期（调用方传入的**所选日**；`LocalDate.toEpochDays()`）
+     */
+    suspend operator fun invoke(plan: WeekPlan, epochDay: Long) {
         val nowMillis = clock.now().toEpochMilliseconds()
         val checkIn = CheckIn(
             id = 0L,
             exerciseId = plan.exerciseId,
             planId = plan.id.takeIf { it > 0L },
-            dateEpochDay = today,
-            dateStartMillis = DateUtils.startOfDayMillis(today, timeZone),
+            dateEpochDay = epochDay,
+            dateStartMillis = DateUtils.startOfDayMillis(epochDay, timeZone),
             completedSetsMask = CheckIn.maskFromCount(plan.targetSets),
             completedReps = plan.targetReps,
             weightKg = plan.targetWeightKg,
@@ -46,6 +54,6 @@ class QuickCheckInUseCase @Inject constructor(
         exerciseRepository.bumpUsage(plan.exerciseId)
     }
 
-    /** 便捷重载：直接传今日列表项。 */
-    suspend operator fun invoke(item: TodayPlanItem) = invoke(item.plan)
+    /** 便捷重载：直接传列表项 + 所选日。 */
+    suspend operator fun invoke(item: TodayPlanItem, epochDay: Long) = invoke(item.plan, epochDay)
 }

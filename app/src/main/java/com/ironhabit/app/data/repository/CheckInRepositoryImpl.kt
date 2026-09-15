@@ -6,6 +6,7 @@ import com.ironhabit.app.di.IoDispatcher
 import com.ironhabit.app.domain.model.CheckIn
 import com.ironhabit.app.domain.model.MAX_SETS
 import com.ironhabit.app.domain.repository.CheckInRepository
+import com.ironhabit.app.domain.util.DateUtils
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineDispatcher
@@ -54,8 +55,19 @@ class CheckInRepositoryImpl @Inject constructor(
         checkInDao.deleteOn(exerciseId, epochDay)
     }
 
+    /**
+     * 活跃日（streak 输入）。
+     *
+     * **统计加固**：过滤掉 `dateEpochDay > 今天` 的记录 —— 防御历史脏数据（例如旧版本
+     * 「日期游标可写到未来日」留下的未来打卡）把 streak 的 head 顶成未来日、导致 current 归零。
+     */
     override fun observeActiveDaysSince(epochDay: Long): Flow<List<Long>> =
-        checkInDao.observeActiveDaysSince(epochDay).flowOn(ioDispatcher)
+        checkInDao.observeActiveDaysSince(epochDay)
+            .map { days ->
+                val today = DateUtils.todayEpochDay(clock, timeZone)
+                days.filter { it <= today }
+            }
+            .flowOn(ioDispatcher)
 
     override fun observeBetween(startEpochDay: Long, endEpochDay: Long): Flow<List<CheckIn>> =
         checkInDao.observeBetween(startEpochDay, endEpochDay)

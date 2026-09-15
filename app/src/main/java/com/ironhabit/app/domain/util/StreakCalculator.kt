@@ -9,7 +9,8 @@ import com.ironhabit.app.domain.model.StreakInfo
  * 便于 JVM 单测（架构 §7.8、§4.2）。
  *
  * 规则（与 §4.2 链路②一致）：
- * 1. 列表为空 → `StreakInfo(0, 0, null)`。
+ * 0. **忽略 `dateEpochDay > today` 的未来日**（统计侧加固：防御历史脏数据 / 跨时区边界），过滤后再计算。
+ * 1. 过滤后列表为空 → `StreakInfo(0, 0, null)`。
  * 2. 最近一天（head）必须等于 `today` 或 `today - 1`，否则 `current = 0`
  *    （今天还没练但昨天练了 → 不立即断档）。
  * 3. 从 head 向下逐日比较：相邻差 = 1 → `current++`；差 > 1 → 中断。
@@ -26,8 +27,16 @@ object StreakCalculator {
             return StreakInfo(current = 0, best = 0, lastActiveEpochDay = null)
         }
 
-        // 去重 + 保证降序（防御性，输入约定已降序）
-        val days = sortedDescEpochDays.distinct().sortedDescending()
+        // 去重 + **过滤未来日**（未来日不得进入 streak：防御「日期游标写到未来日」留下的脏数据
+        // 把 head 顶成未来日、导致 current 归零；同时兜住跨时区 / 时钟偏差边界）
+        // + 保证降序（防御性，输入约定已降序）
+        val days = sortedDescEpochDays
+            .filter { it <= todayEpochDay }
+            .distinct()
+            .sortedDescending()
+        if (days.isEmpty()) {
+            return StreakInfo(current = 0, best = 0, lastActiveEpochDay = null)
+        }
         val head = days.first()
 
         // ---- current：仅当 head 是今天或昨天时才计 ----

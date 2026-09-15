@@ -41,8 +41,22 @@ interface WeekPlanDao {
     @Query("SELECT * FROM week_plans WHERE day_of_week = :dayOfWeek AND exercise_id = :exerciseId LIMIT 1")
     suspend fun getByDayAndExercise(dayOfWeek: Int, exerciseId: Long): WeekPlanEntity?
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun upsert(entity: WeekPlanEntity): Long
+    /**
+     * 幂等 upsert（**禁用 `OnConflictStrategy.REPLACE`**）。与 [upsertExplicit] 同语义：
+     * 命中已有行（含软删行）→ `UPDATE`（保住原 rowid / flags），未命中 → `INSERT`。
+     * `week_plans` 非 CASCADE 父表，但 REPLACE 会重建整行冲掉 `is_active` / `is_user_edited`，
+     * 故一并统一为显式 upsert。
+     */
+    @Transaction
+    suspend fun upsert(entity: WeekPlanEntity): Long {
+        val existing = getByDayAndExercise(entity.dayOfWeek, entity.exerciseId)
+        return if (existing == null) {
+            insert(entity)
+        } else {
+            update(entity.copy(id = existing.id))
+            existing.id
+        }
+    }
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(entity: WeekPlanEntity): Long

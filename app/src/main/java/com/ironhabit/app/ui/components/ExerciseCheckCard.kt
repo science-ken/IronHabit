@@ -43,6 +43,11 @@ import com.ironhabit.app.domain.model.TodayPlanItem
  *
  * 已完成时整卡置灰（`surfaceVariant`）并显示勾选图标与 `label_today_done`。
  *
+ * **只读态**（[enabled] = `false`，用于「所选日 > 今天」）：禁用**全部写入口**
+ * （一键打卡 / 撤销 / 补录弹层 / 逐组勾选 / RPE），整卡置灰给出可见反馈；
+ * 「动作详情」（只读）仍可打开。
+ *
+ * @param enabled 是否可写（`false` = 未来日只读态，禁用所有写入口）
  * @param onToggleSet 勾选/取消第 [Int] 组（0-based）
  * @param onSetRpe 写入 RPE 强度（`1..10`）
  */
@@ -55,19 +60,22 @@ fun ExerciseCheckCard(
     onOpenDetail: () -> Unit,
     onOpenSheet: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     onToggleSet: (Int) -> Unit = {},
     onSetRpe: (Int) -> Unit = {},
 ) {
     val colorScheme = MaterialTheme.colorScheme
     val completed = item.isCompleted
-    val containerColor = if (completed) colorScheme.surfaceVariant else colorScheme.surface
-    val contentColor = if (completed) colorScheme.onSurfaceVariant else colorScheme.onSurface
+    val dimmed = completed || !enabled
+    val containerColor = if (dimmed) colorScheme.surfaceVariant else colorScheme.surface
+    val contentColor = if (dimmed) colorScheme.onSurfaceVariant else colorScheme.onSurface
     val mask = item.checkIn?.completedSetsMask ?: 0
 
     Card(
         modifier = modifier
             .fillMaxWidth()
             .combinedClickable(
+                enabled = enabled,
                 onClick = { if (completed) onUndo() else onQuickCheckIn() },
                 onLongClick = onOpenSheet,
             ),
@@ -107,18 +115,20 @@ fun ExerciseCheckCard(
                     color = colorScheme.onSurfaceVariant,
                 )
 
-                // 逐组勾选（v2）：mask 为唯一真源，点击回调只传索引。
+                // 逐组勾选（v2）：mask 为唯一真源，点击回调只传索引。（未来日只读时禁用）
                 SetCheckboxRow(
                     totalSets = item.plan.targetSets,
                     mask = mask,
                     onToggle = onToggleSet,
+                    enabled = enabled,
                 )
 
-                // RPE（v2）：渐进超负荷输入源；已有打卡时才显示。
+                // RPE（v2）：渐进超负荷输入源；已有打卡时才显示。（未来日只读时禁用）
                 if (item.checkIn != null) {
                     RpeChips(
                         current = item.checkIn.rpe,
                         onSelect = onSetRpe,
+                        enabled = enabled,
                     )
                 }
 
@@ -133,16 +143,20 @@ fun ExerciseCheckCard(
 
             Column(horizontalAlignment = Alignment.End) {
                 // 可见的一键打卡 / 撤销入口（P0-3：一键打卡零摩擦）
-                TextButton(onClick = { if (completed) onUndo() else onQuickCheckIn() }) {
+                TextButton(
+                    onClick = { if (completed) onUndo() else onQuickCheckIn() },
+                    enabled = enabled,
+                ) {
                     Text(
                         text = stringResource(
                             if (completed) R.string.action_undo else R.string.action_quick_checkin
                         )
                     )
                 }
-                TextButton(onClick = onOpenSheet) {
+                TextButton(onClick = onOpenSheet, enabled = enabled) {
                     Text(text = stringResource(R.string.action_detailed))
                 }
+                // 详情页为只读，未来日仍可打开（不禁用）。
                 IconButton(onClick = onOpenDetail) {
                     Icon(
                         imageVector = Icons.Filled.Description,
@@ -160,6 +174,7 @@ fun ExerciseCheckCard(
 private fun RpeChips(
     current: Int?,
     onSelect: (Int) -> Unit,
+    enabled: Boolean,
 ) {
     Row(
         modifier = Modifier
@@ -178,6 +193,7 @@ private fun RpeChips(
                 selected = current == rpe,
                 onClick = { onSelect(rpe) },
                 label = { Text(text = rpe.toString()) },
+                enabled = enabled,
             )
         }
     }

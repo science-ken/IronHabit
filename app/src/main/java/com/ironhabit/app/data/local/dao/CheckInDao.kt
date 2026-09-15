@@ -63,6 +63,10 @@ interface CheckInDao {
      * 会**重建整行、令主键 `id` 变化**（引用不稳定）。故：
      * 命中已有行 → `UPDATE`（保留原 `id`，其余列以入参为准），未命中 → `INSERT`。
      *
+     * **RPE 保留**：命中已有行且入参 `rpe == null` 时，**沿用旧行的 `rpe`** —— 补录 / 一键打卡
+     * 构造的 `CheckIn` 不携带 rpe，若整行覆盖会把用户已录入的强度静默抹成 NULL；
+     * 入参显式给出 `rpe` 时以入参为准。
+     *
      * 命名沿用 `upsert` 而非 `upsertExplicit`：`check_ins` 无「软删占位」语义，
      * 唯一约束槽位天然对应一行有效记录，无需与旧 `REPLACE` 版本并存。
      */
@@ -72,7 +76,15 @@ interface CheckInDao {
         return if (existing == null) {
             insert(entity)
         } else {
-            update(entity.copy(id = existing.id))
+            // RPE 保留：入参未显式给 rpe（== null）时**沿用旧行 rpe**。补录 / 一键打卡等入口
+            // 构造的 CheckIn 不携带 rpe（null），若直接整行覆盖会把用户已录入的强度静默抹成 NULL
+            // （弹层里无 RPE 字段，用户无从察觉）。入参显式给了值则以入参为准。
+            val merged = if (entity.rpe == null) {
+                entity.copy(id = existing.id, rpe = existing.rpe)
+            } else {
+                entity.copy(id = existing.id)
+            }
+            update(merged)
             existing.id
         }
     }

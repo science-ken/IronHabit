@@ -111,7 +111,9 @@ class TodayViewModel @Inject constructor(
     fun onQuickCheckIn(item: TodayPlanItem) {
         performWrite(
             baseSnackbarRes = R.string.msg_checkin_done,
-            block = { quickCheckIn(item.plan) },
+            // 口径统一：一键打卡跟随**所选日**（与逐组/RPE/撤销/习惯/补录一致），
+            // 不再由 QuickCheckInUseCase 内部自算「真实今天」。
+            block = { quickCheckIn(item.plan, currentEpochDay()) },
         )
     }
 
