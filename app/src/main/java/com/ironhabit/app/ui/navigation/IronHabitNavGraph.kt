@@ -169,6 +169,7 @@ fun NavGraphBuilder.registerSecondaryRoutes(navController: NavHostController) {
     composable(Destinations.SETTINGS) {
         SettingsScreen(
             onOpenBackup = { navController.navigate(Destinations.BACKUP) },
+            onOpenBodyMetrics = { navController.navigate(Destinations.BODY_METRICS) },
         )
     }
 

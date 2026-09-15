@@ -11,23 +11,29 @@ import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.StringRes
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -44,6 +50,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -52,6 +59,12 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ironhabit.app.BuildConfig
 import com.ironhabit.app.R
+import com.ironhabit.app.domain.model.DietRestriction
+import com.ironhabit.app.domain.model.Equipment
+import com.ironhabit.app.domain.model.Gender
+import com.ironhabit.app.domain.model.Goal
+import com.ironhabit.app.domain.model.InjuryArea
+import com.ironhabit.app.domain.model.ProfileLimits
 import com.ironhabit.app.domain.model.ThemeMode
 import com.ironhabit.app.domain.model.UnitSystem
 import com.ironhabit.app.ui.components.EmptyState
@@ -59,18 +72,24 @@ import com.ironhabit.app.ui.components.LoadingSkeleton
 import com.ironhabit.app.ui.components.LocalSnackbarHostState
 
 /**
- * 「设置」页：主题 / 单位 / 每日提醒（含精确闹钟与通知权限引导）/ 隐私 / 版本 / 备份入口。
+ * 「设置」页：主题 / 单位 / 我的档案 / 每日提醒（含精确闹钟与通知权限引导）/ 隐私 / 版本 / 备份入口。
  *
  * 精确闹钟引导（架构 §2.6）：API 31+ 且未授予 `SCHEDULE_EXACT_ALARM`、且提醒已开启时，
  * 在提醒开关下方展示引导条（点击跳系统「闹钟与提醒」设置）；用户拒绝则由 `ReminderSchedulerImpl` 自动降级。
  *
+ * 「我的档案」区块（v3 增量 · §7.5）：性别/目标用分段/单选 chip，数值用数字输入框，
+ * 器械/伤病/忌口用多选 chip；**控件变更即时落盘、无独立保存按钮**；数值越界钳制 + 轻提示；
+ * 当前体重**只读**（唯一真源 `body_metrics`）并提供「去记录」跳转。
+ *
  * @param onOpenBackup 数据备份入口回调
+ * @param onOpenBodyMetrics 身体数据（记录体重）入口回调
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(
     onOpenBackup: () -> Unit,
     modifier: Modifier = Modifier,
+    onOpenBodyMetrics: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -158,6 +177,13 @@ fun SettingsScreen(
                     }
                 }
 
+                // ---- 我的档案 ----
+                HorizontalDivider()
+                ProfileSection(
+                    uiState = uiState,
+                    viewModel = viewModel,
+                    onOpenBodyMetrics = onOpenBodyMetrics,
+                )
                 HorizontalDivider()
 
                 // ---- 每日提醒 ----
@@ -276,6 +302,406 @@ fun SettingsScreen(
     }
 }
 
+// ---------------- 我的档案（v3 增量） ----------------
+
+/**
+ * 「我的档案」区块：体征 / 目标 / 训练条件 / 约束 四区。
+ *
+ * 所有控件**即时落盘**（无保存按钮）；数值越界钳制 + 轻提示；当前体重只读 + 跳转。
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ProfileSection(
+    uiState: SettingsUiState,
+    viewModel: SettingsViewModel,
+    onOpenBodyMetrics: () -> Unit,
+) {
+    val profile = uiState.profile
+
+    SectionLabel(text = stringResource(R.string.entry_profile_edit))
+
+    // ---- 体征 ----
+    Text(
+        text = stringResource(R.string.section_profile_body),
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    Text(
+        text = stringResource(R.string.label_profile_gender),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurface,
+    )
+    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+        Gender.entries.forEachIndexed { index, gender ->
+            SegmentedButton(
+                selected = profile.gender == gender,
+                onClick = { viewModel.onProfileGenderChange(gender) },
+                shape = SegmentedButtonDefaults.itemShape(index = index, count = Gender.entries.size),
+                label = { Text(text = stringResource(genderLabelRes(gender))) },
+            )
+        }
+    }
+    ProfileIntField(
+        value = profile.age,
+        range = ProfileLimits.AGE,
+        rangeErrorRes = R.string.error_profile_age_range,
+        label = stringResource(R.string.label_profile_age),
+        suffix = stringResource(R.string.suffix_profile_age),
+        hint = stringResource(R.string.hint_profile_age),
+        onCommit = viewModel::onProfileAgeChange,
+    )
+    ProfileIntField(
+        value = profile.heightCm,
+        range = ProfileLimits.HEIGHT_CM,
+        rangeErrorRes = R.string.error_profile_height_range,
+        label = stringResource(R.string.label_profile_height),
+        suffix = stringResource(R.string.suffix_profile_height),
+        hint = stringResource(R.string.hint_profile_height),
+        onCommit = viewModel::onProfileHeightChange,
+    )
+    ProfileFloatField(
+        value = profile.bodyFatPct,
+        range = ProfileLimits.BODY_FAT_PCT,
+        rangeErrorRes = R.string.error_profile_body_fat_range,
+        label = stringResource(R.string.label_profile_body_fat),
+        suffix = stringResource(R.string.suffix_profile_body_fat),
+        hint = stringResource(R.string.hint_profile_body_fat),
+        onCommit = viewModel::onProfileBodyFatChange,
+    )
+
+    // 当前体重：只读（唯一真源 body_metrics），提供「去记录」跳转。
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text = stringResource(R.string.label_profile_current_weight),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            val weight = uiState.currentWeightKg
+            Text(
+                text = if (weight != null) {
+                    stringResource(R.string.label_weight_kg, weight.toDisplayNumber())
+                } else {
+                    stringResource(R.string.value_profile_not_recorded)
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            TextButton(onClick = onOpenBodyMetrics) {
+                Text(text = stringResource(R.string.action_profile_record_weight))
+            }
+        }
+    }
+
+    // ---- 目标 ----
+    Text(
+        text = stringResource(R.string.section_profile_goal),
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    Text(
+        text = stringResource(R.string.label_profile_goal),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurface,
+    )
+    ChipGroup(
+        options = Goal.entries,
+        isSelected = { it == profile.goal },
+        labelOf = { stringResource(goalLabelRes(it)) },
+        onClick = viewModel::onProfileGoalChange,
+    )
+    ProfileFloatField(
+        value = profile.goalWeightKg,
+        range = ProfileLimits.GOAL_WEIGHT_KG,
+        rangeErrorRes = R.string.error_profile_goal_weight_range,
+        label = stringResource(R.string.label_profile_goal_weight),
+        suffix = stringResource(R.string.suffix_profile_goal_weight),
+        hint = stringResource(R.string.hint_profile_goal_weight),
+        onCommit = viewModel::onProfileGoalWeightChange,
+    )
+
+    // ---- 训练条件 ----
+    Text(
+        text = stringResource(R.string.section_profile_training),
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    Text(
+        text = stringResource(R.string.label_profile_equipment),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurface,
+    )
+    ChipGroup(
+        options = Equipment.entries,
+        isSelected = { it in profile.equipment },
+        labelOf = { stringResource(equipmentLabelRes(it)) },
+        onClick = viewModel::onProfileEquipmentToggle,
+    )
+
+    // ---- 约束（可留空）----
+    Text(
+        text = stringResource(R.string.section_profile_constraints),
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    Text(
+        text = stringResource(R.string.label_profile_injury_area),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurface,
+    )
+    ChipGroup(
+        options = InjuryArea.entries,
+        isSelected = { it in profile.injuryAreas },
+        labelOf = { stringResource(injuryLabelRes(it)) },
+        onClick = viewModel::onProfileInjuryAreaToggle,
+    )
+
+    InjuryNoteField(
+        value = profile.injuryNote,
+        onCommit = viewModel::onProfileInjuryNoteChange,
+    )
+
+    Text(
+        text = stringResource(R.string.label_profile_diet_avoid),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurface,
+    )
+    ChipGroup(
+        options = DietRestriction.entries,
+        isSelected = { it in profile.dietaryAvoid },
+        labelOf = { stringResource(restrictionLabelRes(it)) },
+        onClick = viewModel::onProfileDietAvoidToggle,
+    )
+}
+
+/** 多选 / 单选 chip 组（横向流式换行）。 */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun <T> ChipGroup(
+    options: List<T>,
+    isSelected: (T) -> Boolean,
+    labelOf: @Composable (T) -> String,
+    onClick: (T) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    FlowRow(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        options.forEach { option ->
+            FilterChip(
+                selected = isSelected(option),
+                onClick = { onClick(option) },
+                label = { Text(text = labelOf(option)) },
+            )
+        }
+    }
+}
+
+/**
+ * 数字（Int）输入字段：即时落盘、越界钳制、非法/越界轻提示。
+ *
+ * 本地文本状态优先：用户未编辑时展示 [value]（随数据加载自动回填）；一旦编辑即以用户输入为准，
+ * 避免「钳制值回写」打断连续输入。
+ */
+@Composable
+private fun ProfileIntField(
+    value: Int?,
+    range: IntRange,
+    @StringRes rangeErrorRes: Int,
+    label: String,
+    suffix: String,
+    hint: String,
+    onCommit: (Int?) -> Unit,
+) {
+    var edited by remember { mutableStateOf<String?>(null) }
+    val text = edited ?: value?.toString().orEmpty()
+    val trimmed = text.trim()
+    val parsed = trimmed.toIntOrNull()
+    val invalid = trimmed.isNotEmpty() && parsed == null
+    val outOfRange = parsed != null && parsed !in range
+
+    ProfileNumberField(
+        text = text,
+        onTextChange = { raw ->
+            edited = raw
+            val t = raw.trim()
+            when {
+                t.isEmpty() -> onCommit(null)
+                else -> t.toIntOrNull()?.let { onCommit(it.coerceIn(range.first, range.last)) }
+            }
+        },
+        label = label,
+        suffix = suffix,
+        hint = hint,
+        errorText = when {
+            invalid -> stringResource(R.string.error_invalid_number)
+            outOfRange -> stringResource(rangeErrorRes)
+            else -> null
+        },
+    )
+}
+
+/** 数字（Float）输入字段：即时落盘、越界钳制、非法/越界轻提示。 */
+@Composable
+private fun ProfileFloatField(
+    value: Float?,
+    range: ClosedFloatingPointRange<Float>,
+    @StringRes rangeErrorRes: Int,
+    label: String,
+    suffix: String,
+    hint: String,
+    onCommit: (Float?) -> Unit,
+) {
+    var edited by remember { mutableStateOf<String?>(null) }
+    val text = edited ?: value?.toDisplayNumber().orEmpty()
+    val trimmed = text.trim()
+    val parsed = trimmed.toFloatOrNull()
+    val invalid = trimmed.isNotEmpty() && parsed == null
+    val outOfRange = parsed != null && parsed !in range
+
+    ProfileNumberField(
+        text = text,
+        onTextChange = { raw ->
+            edited = raw
+            val t = raw.trim()
+            when {
+                t.isEmpty() -> onCommit(null)
+                else -> t.toFloatOrNull()?.let {
+                    onCommit(it.coerceIn(range.start, range.endInclusive))
+                }
+            }
+        },
+        label = label,
+        suffix = suffix,
+        hint = hint,
+        errorText = when {
+            invalid -> stringResource(R.string.error_invalid_number)
+            outOfRange -> stringResource(rangeErrorRes)
+            else -> null
+        },
+    )
+}
+
+/** 数字输入框（数字键盘 + 后缀 + 支持文本错误提示）。 */
+@Composable
+private fun ProfileNumberField(
+    text: String,
+    onTextChange: (String) -> Unit,
+    label: String,
+    suffix: String,
+    hint: String,
+    errorText: String?,
+) {
+    OutlinedTextField(
+        value = text,
+        onValueChange = onTextChange,
+        label = { Text(text = label) },
+        placeholder = { Text(text = hint) },
+        suffix = { Text(text = suffix) },
+        singleLine = true,
+        isError = errorText != null,
+        supportingText = if (errorText != null) {
+            { Text(text = errorText) }
+        } else {
+            null
+        },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+/** 伤病备注（自由文本，截断到 [ProfileLimits.INJURY_NOTE_MAX_LENGTH] 字，即时落盘）。 */
+@Composable
+private fun InjuryNoteField(
+    value: String?,
+    onCommit: (String?) -> Unit,
+) {
+    var edited by remember { mutableStateOf<String?>(null) }
+    val text = edited ?: value.orEmpty()
+
+    OutlinedTextField(
+        value = text,
+        onValueChange = { raw ->
+            val limited = raw.take(ProfileLimits.INJURY_NOTE_MAX_LENGTH)
+            edited = limited
+            onCommit(limited)
+        },
+        label = { Text(text = stringResource(R.string.label_profile_injury_note)) },
+        placeholder = { Text(text = stringResource(R.string.hint_profile_injury_note)) },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+/** 浮点展示：整数去小数点尾巴（`20.0f → "20"`），小数原样（`22.5f → "22.5"`）。 */
+private fun Float.toDisplayNumber(): String =
+    if (this % 1f == 0f) this.toLong().toString() else this.toString()
+
+/** 性别 → 文案资源。 */
+@StringRes
+private fun genderLabelRes(gender: Gender): Int = when (gender) {
+    Gender.MALE -> R.string.label_profile_gender_male
+    Gender.FEMALE -> R.string.label_profile_gender_female
+}
+
+/** 目标 → 文案资源。 */
+@StringRes
+private fun goalLabelRes(goal: Goal): Int = when (goal) {
+    Goal.CUT -> R.string.label_profile_goal_cut
+    Goal.BULK -> R.string.label_profile_goal_bulk
+    Goal.RECOMP -> R.string.label_profile_goal_recomp
+    Goal.SHAPE -> R.string.label_profile_goal_shape
+    Goal.MAINTAIN -> R.string.label_profile_goal_maintain
+}
+
+/** 器械 → 文案资源。 */
+@StringRes
+private fun equipmentLabelRes(equipment: Equipment): Int = when (equipment) {
+    Equipment.NONE -> R.string.equipment_none
+    Equipment.DUMBBELL -> R.string.equipment_dumbbell
+    Equipment.BARBELL -> R.string.equipment_barbell
+    Equipment.YOGA_MAT -> R.string.equipment_yoga_mat
+    Equipment.PULLUP_BAR -> R.string.equipment_pullup_bar
+    Equipment.RESISTANCE_BAND -> R.string.equipment_resistance_band
+    Equipment.MACHINE -> R.string.equipment_machine
+    Equipment.TREADMILL -> R.string.equipment_treadmill
+}
+
+/** 伤病部位 → 文案资源。 */
+@StringRes
+private fun injuryLabelRes(area: InjuryArea): Int = when (area) {
+    InjuryArea.KNEE -> R.string.injury_knee
+    InjuryArea.LOWER_BACK -> R.string.injury_lower_back
+    InjuryArea.SHOULDER -> R.string.injury_shoulder
+    InjuryArea.WRIST -> R.string.injury_wrist
+    InjuryArea.ELBOW -> R.string.injury_elbow
+    InjuryArea.ANKLE -> R.string.injury_ankle
+    InjuryArea.NECK -> R.string.injury_neck
+    InjuryArea.HIP -> R.string.injury_hip
+    InjuryArea.CARDIO -> R.string.injury_cardio
+}
+
+/** 饮食忌口 → 文案资源。 */
+@StringRes
+private fun restrictionLabelRes(restriction: DietRestriction): Int = when (restriction) {
+    DietRestriction.PEANUT -> R.string.restriction_peanut
+    DietRestriction.SEAFOOD -> R.string.restriction_seafood
+    DietRestriction.DAIRY -> R.string.restriction_dairy
+    DietRestriction.GLUTEN -> R.string.restriction_gluten
+    DietRestriction.SPICY -> R.string.restriction_spicy
+    DietRestriction.ALCOHOL -> R.string.restriction_alcohol
+}
+
 /** 分区标题。 */
 @Composable
 private fun SectionLabel(text: String) {
@@ -326,6 +752,7 @@ private fun TipCard(
 }
 
 /** 主题 → 文案资源。 */
+@StringRes
 private fun themeLabelRes(mode: ThemeMode): Int = when (mode) {
     ThemeMode.LIGHT -> R.string.settings_theme_light
     ThemeMode.DARK -> R.string.settings_theme_dark
@@ -333,6 +760,7 @@ private fun themeLabelRes(mode: ThemeMode): Int = when (mode) {
 }
 
 /** 单位制 → 文案资源。 */
+@StringRes
 private fun unitLabelRes(system: UnitSystem): Int = when (system) {
     UnitSystem.METRIC -> R.string.settings_unit_metric
     UnitSystem.IMPERIAL -> R.string.settings_unit_imperial

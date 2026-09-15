@@ -237,4 +237,81 @@
     <!-- ===== 未来日只读（v3：所选日 > 今天时禁用全部写入口）===== -->
     <string name="msg_future_day_readonly">还没到这一天，先看看计划就好</string>
 
+    <!-- ===== 我的档案（v3 增量 · 完整版 · §7.5.6）===== -->
+    <!-- 入口与标题 -->
+    <string name="entry_profile_edit">我的档案</string>
+    <string name="title_profile_edit">我的档案</string>
+
+    <!-- 分区：体征 -->
+    <string name="section_profile_body">体征</string>
+    <string name="label_profile_gender">性别</string>
+    <string name="label_profile_gender_male">男</string>
+    <string name="label_profile_gender_female">女</string>
+    <string name="label_profile_age">年龄</string>
+    <string name="label_profile_height">身高</string>
+    <string name="label_profile_body_fat">体脂率</string>
+    <string name="label_profile_current_weight">当前体重</string>
+    <string name="action_profile_record_weight">去记录</string>
+    <string name="value_profile_not_recorded">未记录</string>
+    <string name="hint_profile_age">如 30</string>
+    <string name="hint_profile_height">如 175</string>
+    <string name="hint_profile_body_fat">如 22</string>
+    <string name="suffix_profile_age">岁</string>
+    <string name="suffix_profile_height">cm</string>
+    <string name="suffix_profile_body_fat">%</string>
+
+    <!-- 分区：目标（5 项）-->
+    <string name="section_profile_goal">目标</string>
+    <string name="label_profile_goal">目标</string>
+    <string name="label_profile_goal_weight">目标体重</string>
+    <string name="label_profile_goal_cut">减脂</string>
+    <string name="label_profile_goal_bulk">增肌</string>
+    <string name="label_profile_goal_recomp">减脂增肌</string>
+    <string name="label_profile_goal_shape">塑形</string>
+    <string name="label_profile_goal_maintain">保持</string>
+    <string name="hint_profile_goal_weight">如 72</string>
+    <string name="suffix_profile_goal_weight">kg</string>
+
+    <!-- 分区：训练条件（8 项）-->
+    <string name="section_profile_training">训练条件</string>
+    <string name="label_profile_equipment">可用器械（可多选）</string>
+    <string name="equipment_none">无器械</string>
+    <string name="equipment_dumbbell">哑铃</string>
+    <string name="equipment_barbell">杠铃</string>
+    <string name="equipment_yoga_mat">瑜伽垫</string>
+    <string name="equipment_pullup_bar">单杠</string>
+    <string name="equipment_resistance_band">弹力带</string>
+    <string name="equipment_machine">器械区</string>
+    <string name="equipment_treadmill">跑步机</string>
+
+    <!-- 分区：约束（伤病部位 9 项 / 忌口 6 项）-->
+    <string name="section_profile_constraints">约束（可留空）</string>
+    <string name="label_profile_injury_area">伤病部位（可多选）</string>
+    <string name="label_profile_injury_note">伤病备注（可选）</string>
+    <string name="hint_profile_injury_note">如：右膝旧伤，避免深跳</string>
+    <string name="label_profile_diet_avoid">饮食忌口（可多选）</string>
+    <string name="injury_knee">膝</string>
+    <string name="injury_lower_back">腰</string>
+    <string name="injury_shoulder">肩</string>
+    <string name="injury_wrist">腕</string>
+    <string name="injury_elbow">肘</string>
+    <string name="injury_ankle">踝</string>
+    <string name="injury_neck">颈</string>
+    <string name="injury_hip">髋</string>
+    <string name="injury_cardio">心血管</string>
+    <string name="restriction_peanut">花生</string>
+    <string name="restriction_seafood">海鲜</string>
+    <string name="restriction_dairy">乳制品</string>
+    <string name="restriction_gluten">麸质</string>
+    <string name="restriction_spicy">辛辣</string>
+    <string name="restriction_alcohol">酒精</string>
+
+    <!-- 提示与校验 -->
+    <string name="profile_incomplete_hint">档案未填全，已按默认值估算，去「我的档案」补全更准</string>
+    <string name="profile_equipment_missing_hint">还没勾选可用器械，去「我的档案」选一项（没有器械就选「无器械」）</string>
+    <string name="error_profile_age_range">请输入 14–100 之间的年龄</string>
+    <string name="error_profile_height_range">请输入 140–220 cm 之间的身高</string>
+    <string name="error_profile_body_fat_range">请输入 3–60 之间的体脂率</string>
+    <string name="error_profile_goal_weight_range">请输入 30–300 kg 之间的目标体重</string>
+
 </resources>

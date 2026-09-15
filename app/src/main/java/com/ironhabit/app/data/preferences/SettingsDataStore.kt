@@ -6,12 +6,24 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.ironhabit.app.domain.model.AppSettings
+import com.ironhabit.app.domain.model.DietRestriction
+import com.ironhabit.app.domain.model.Equipment
+import com.ironhabit.app.domain.model.Gender
+import com.ironhabit.app.domain.model.Goal
+import com.ironhabit.app.domain.model.InjuryArea
+import com.ironhabit.app.domain.model.ProfileLimits
 import com.ironhabit.app.domain.model.ThemeMode
 import com.ironhabit.app.domain.model.UnitSystem
+import com.ironhabit.app.domain.model.UserProfile
+import com.ironhabit.app.domain.model.decodeEnum
+import com.ironhabit.app.domain.model.decodeEnumSet
+import com.ironhabit.app.domain.model.encodeEnumSet
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -28,7 +40,11 @@ private val Context.settingsDataStore: DataStore<Preferences> by preferencesData
 /**
  * 设置持久化（DataStore Preferences）。
  *
- * 键：主题 / 单位 / 提醒开关 / 提醒时间 / 首启标记。
+ * 键：主题 / 单位 / 提醒开关 / 提醒时间 / 首启标记，以及用户档案 `profile_*`（10 键）。
+ *
+ * **用户档案**（单人单份）与主题/单位同处一个 DataStore 文件，**不落 Room、不需 schema 迁移**。
+ * 多选集合（器械 / 伤病部位 / 忌口）用 [`stringSetPreferencesKey`] 存枚举 `name`（**不存 ordinal**）。
+ * 所有数值写入即 `coerceIn`（见 [ProfileLimits]），越界只钳制、不抛异常。
  */
 @Singleton
 class SettingsDataStore @Inject constructor(
@@ -50,6 +66,29 @@ class SettingsDataStore @Inject constructor(
                 reminderHour = preferences[Keys.REMINDER_HOUR] ?: DEFAULT_REMINDER_HOUR,
                 reminderMinute = preferences[Keys.REMINDER_MINUTE] ?: DEFAULT_REMINDER_MINUTE,
                 isFirstLaunch = preferences[Keys.FIRST_LAUNCH] ?: true,
+            )
+        }
+
+    /**
+     * 观察用户档案变化（读取失败时回落到空档案，**不崩**）。
+     *
+     * 未知枚举 `name` 读入时忽略并回落默认（不抛异常）；不设「是否已配置」布尔键，
+     * 「是否填全」由字段是否为 `null` / 集合是否为空**直接推导**。
+     */
+    val profile: Flow<UserProfile> = context.settingsDataStore.data
+        .catch { emit(emptyPreferences()) }
+        .map { preferences ->
+            UserProfile(
+                gender = decodeEnum<Gender>(preferences[Keys.PROFILE_GENDER]),
+                age = preferences[Keys.PROFILE_AGE],
+                heightCm = preferences[Keys.PROFILE_HEIGHT_CM],
+                bodyFatPct = preferences[Keys.PROFILE_BODY_FAT_PCT],
+                goal = decodeEnum<Goal>(preferences[Keys.PROFILE_GOAL]) ?: Goal.MAINTAIN,
+                goalWeightKg = preferences[Keys.PROFILE_GOAL_WEIGHT_KG],
+                equipment = decodeEnumSet(preferences[Keys.PROFILE_EQUIPMENT].orEmpty()),
+                injuryAreas = decodeEnumSet(preferences[Keys.PROFILE_INJURY_AREA].orEmpty()),
+                injuryNote = preferences[Keys.PROFILE_INJURY_NOTE],
+                dietaryAvoid = decodeEnumSet(preferences[Keys.PROFILE_DIET_AVOID].orEmpty()),
             )
         }
 
@@ -81,6 +120,96 @@ class SettingsDataStore @Inject constructor(
         context.settingsDataStore.edit { it[Keys.FIRST_LAUNCH] = false }
     }
 
+    // ---------------- 用户档案（profile_*）写入：一律 coerceIn ----------------
+
+    /** 写入性别；`null` = 清空（未填）。 */
+    suspend fun setProfileGender(gender: Gender?) {
+        context.settingsDataStore.edit { preferences ->
+            if (gender == null) {
+                preferences.remove(Keys.PROFILE_GENDER)
+            } else {
+                preferences[Keys.PROFILE_GENDER] = gender.name
+            }
+        }
+    }
+
+    /** 写入年龄；`null` = 清空。越界钳制到 `14–100`。 */
+    suspend fun setProfileAge(age: Int?) {
+        context.settingsDataStore.edit { preferences ->
+            if (age == null) {
+                preferences.remove(Keys.PROFILE_AGE)
+            } else {
+                preferences[Keys.PROFILE_AGE] = ProfileLimits.coerceAge(age)
+            }
+        }
+    }
+
+    /** 写入身高；`null` = 清空。越界钳制到 `140–220`。 */
+    suspend fun setProfileHeightCm(heightCm: Int?) {
+        context.settingsDataStore.edit { preferences ->
+            if (heightCm == null) {
+                preferences.remove(Keys.PROFILE_HEIGHT_CM)
+            } else {
+                preferences[Keys.PROFILE_HEIGHT_CM] = ProfileLimits.coerceHeightCm(heightCm)
+            }
+        }
+    }
+
+    /** 写入体脂率；`null` = 清空。越界钳制到 `3–60`。 */
+    suspend fun setProfileBodyFatPct(bodyFatPct: Float?) {
+        context.settingsDataStore.edit { preferences ->
+            if (bodyFatPct == null) {
+                preferences.remove(Keys.PROFILE_BODY_FAT_PCT)
+            } else {
+                preferences[Keys.PROFILE_BODY_FAT_PCT] = ProfileLimits.coerceBodyFatPct(bodyFatPct)
+            }
+        }
+    }
+
+    /** 写入目标（默认 [Goal.MAINTAIN]）。 */
+    suspend fun setProfileGoal(goal: Goal) {
+        context.settingsDataStore.edit { it[Keys.PROFILE_GOAL] = goal.name }
+    }
+
+    /** 写入目标体重；`null` = 清空。越界钳制到 `30–300`。 */
+    suspend fun setProfileGoalWeightKg(goalWeightKg: Float?) {
+        context.settingsDataStore.edit { preferences ->
+            if (goalWeightKg == null) {
+                preferences.remove(Keys.PROFILE_GOAL_WEIGHT_KG)
+            } else {
+                preferences[Keys.PROFILE_GOAL_WEIGHT_KG] =
+                    ProfileLimits.coerceGoalWeightKg(goalWeightKg)
+            }
+        }
+    }
+
+    /** 写入可用器械集合（存 `name`）。 */
+    suspend fun setProfileEquipment(equipment: Set<Equipment>) {
+        context.settingsDataStore.edit { it[Keys.PROFILE_EQUIPMENT] = encodeEnumSet(equipment) }
+    }
+
+    /** 写入伤病部位集合（存 `name`）。 */
+    suspend fun setProfileInjuryAreas(areas: Set<InjuryArea>) {
+        context.settingsDataStore.edit { it[Keys.PROFILE_INJURY_AREA] = encodeEnumSet(areas) }
+    }
+
+    /** 写入伤病备注；空白/`null` = 清空。截断到 [ProfileLimits.INJURY_NOTE_MAX_LENGTH] 字。 */
+    suspend fun setProfileInjuryNote(note: String?) {
+        context.settingsDataStore.edit { preferences ->
+            val normalized = note?.trim()
+            if (normalized.isNullOrEmpty()) {
+                preferences.remove(Keys.PROFILE_INJURY_NOTE)
+            } else {
+                preferences[Keys.PROFILE_INJURY_NOTE] = ProfileLimits.coerceInjuryNote(normalized)
+            }
+        }
+    }
+
+    /** 写入饮食忌口集合（存 `name`）。 */
+    suspend fun setProfileDietaryAvoid(avoid: Set<DietRestriction>) {
+        context.settingsDataStore.edit { it[Keys.PROFILE_DIET_AVOID] = encodeEnumSet(avoid) }
+    }
+
     /**
      * 是否仍需向用户申请通知权限（API 33+）。
      *
@@ -106,6 +235,18 @@ class SettingsDataStore @Inject constructor(
         val REMINDER_MINUTE = intPreferencesKey("reminder_minute")
         val FIRST_LAUNCH = booleanPreferencesKey("first_launch")
         val NOTIFICATION_PERM_ASKED = booleanPreferencesKey("notification_permission_asked")
+
+        // ---- 用户档案（profile_*）：单值用 String/Int/Float，多选用 StringSet（存枚举 name）----
+        val PROFILE_GENDER = stringPreferencesKey("profile_gender")
+        val PROFILE_AGE = intPreferencesKey("profile_age")
+        val PROFILE_HEIGHT_CM = intPreferencesKey("profile_height_cm")
+        val PROFILE_BODY_FAT_PCT = floatPreferencesKey("profile_body_fat_pct")
+        val PROFILE_GOAL = stringPreferencesKey("profile_goal")
+        val PROFILE_GOAL_WEIGHT_KG = floatPreferencesKey("profile_goal_weight_kg")
+        val PROFILE_EQUIPMENT = stringSetPreferencesKey("profile_equipment")
+        val PROFILE_INJURY_AREA = stringSetPreferencesKey("profile_injury_area")
+        val PROFILE_INJURY_NOTE = stringPreferencesKey("profile_injury_note")
+        val PROFILE_DIET_AVOID = stringSetPreferencesKey("profile_diet_avoid")
     }
 
     companion object {
