@@ -50,7 +50,8 @@ data class PlanResultUi(
  * @property exerciseNames 动作 id → 名称（用于把"为什么这样排"里的 id 显示成动作名）
  * @property errorRes 页面级错误资源 id
  * @property snackbarRes 一次性提示资源 id
- * @property snackbarArgs 提示的格式化参数
+ * @property snackbarArgs 提示的格式化参数（**类型必须与资源占位符一致**：`%1$d` 传 Int、`%1$s` 传 String；
+ *   传错类型会在 `stringResource` 格式化时抛 `IllegalFormatConversionException` 直接崩溃）
  */
 data class AiCoachUiState(
     val isLoading: Boolean = true,
@@ -63,7 +64,7 @@ data class AiCoachUiState(
     val exerciseNames: Map<Long, String> = emptyMap(),
     @StringRes val errorRes: Int? = null,
     @StringRes val snackbarRes: Int? = null,
-    val snackbarArgs: List<String> = emptyList(),
+    val snackbarArgs: List<Any> = emptyList(),
 )
 
 /**
@@ -135,7 +136,7 @@ class AiCoachViewModel @Inject constructor(
                                 notes = summary.notes,
                             ),
                             snackbarRes = R.string.ai_plan_written_hint,
-                            snackbarArgs = listOf(summary.writtenCount.toString()),
+                            snackbarArgs = listOf(summary.writtenCount),
                         )
                     }
                 }
