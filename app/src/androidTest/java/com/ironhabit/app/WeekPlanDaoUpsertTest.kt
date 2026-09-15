@@ -9,6 +9,7 @@ import com.ironhabit.app.data.local.entity.ExerciseEntity
 import com.ironhabit.app.data.local.entity.WeekPlanEntity
 import com.ironhabit.app.domain.model.ExerciseCategory
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.first
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
