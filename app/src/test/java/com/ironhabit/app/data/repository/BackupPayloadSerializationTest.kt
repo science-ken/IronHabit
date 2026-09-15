@@ -59,7 +59,7 @@ class BackupPayloadSerializationTest {
 
         // 整体相等即覆盖全部字段（data class 结构相等），失败时便于直接 diff。
         assertEquals("整份 v3 备份必须无损往返", payload, restored)
-        assertEquals("appVersion 必须原样往返（不再是硬编码 1.0）", "1.9", restored.appVersion)
+        assertEquals("appVersion 必须原样往返（不再是硬编码 1.0）", "2.0", restored.appVersion)
 
         // 档案 11 项逐项断言：这是 bug (a) 的直接回归守卫。
         val settings = restored.settings
@@ -182,7 +182,7 @@ class BackupPayloadSerializationTest {
     private fun fullPayload(): BackupPayload = BackupPayload(
         schemaVersion = BackupPayload.CURRENT_SCHEMA_VERSION,
         exportedAt = 1_700_000_000_000L,
-        appVersion = "1.9",
+        appVersion = "2.0",
         exercises = listOf(
             ExerciseBackup(
                 id = 1L,
