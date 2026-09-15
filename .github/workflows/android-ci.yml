@@ -31,18 +31,23 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
-      - name: 零网络红线校验
+      - name: 网络红线校验（白名单制 · 联网一期口径）
         run: |
           if grep -RE "retrofit|okhttp|ktor|firebase|play-services|volley" \
                app/build.gradle.kts gradle/libs.versions.toml; then
-            echo "::error::检测到网络/云服务依赖，违反纯离线约束"
+            echo "::error::检测到网络/云服务依赖，违反约束"
             exit 1
           fi
-          if grep -q "android.permission.INTERNET" app/src/main/AndroidManifest.xml; then
-            echo "::error::AndroidManifest 声明了 INTERNET 权限，违反纯离线约束"
+          # 权限白名单：白名单之外一律失败（封死账号/云同步/广告类权限扩张）。
+          # INTERNET 仅限 AI 教练一期使用（docs/ai-coach-local.md §6 / ARCHITECTURE.md §7.7）。
+          ALLOWED='android.permission.SCHEDULE_EXACT_ALARM|android.permission.USE_EXACT_ALARM|android.permission.POST_NOTIFICATIONS|android.permission.RECEIVE_BOOT_COMPLETED|android.permission.VIBRATE|android.permission.INTERNET'
+          BAD=$(grep -oE 'android\.permission\.[A-Z_]+' app/src/main/AndroidManifest.xml | sort -u \
+                | grep -Ev "^($ALLOWED)$" || true)
+          if [ -n "$BAD" ]; then
+            echo "::error::发现白名单之外的权限：$BAD"
             exit 1
           fi
-          echo "零网络约束校验通过 ✅"
+          echo "网络约束校验通过（白名单制）✅"
 
       - name: Run unit tests
         run: ./gradlew testDebugUnitTest --stacktrace
