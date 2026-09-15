@@ -314,7 +314,7 @@ data class MealTotalsRaw(
     男：BMR = 10·kg + 6.25·cm − 5·age + 5
     女：BMR = 10·kg + 6.25·cm − 5·age − 161
 ② TDEE = BMR × 活动系数          （训练日 1.55 / 休息日 1.375）
-③ 目标热量 targetKcal = TDEE × 目标系数   （减脂 0.85 / 维持 1.0 / 增肌 1.10）
+③ 目标热量 targetKcal = TDEE × 目标系数   （取 `Goal.kcalFactor`：减脂 0.85 / 增肌 1.10 / 减脂增肌 1.00 / 塑形 0.95 / 保持 1.00，见 §7.5.2）
 ④ 目标蛋白 targetProtein = kg × 1.6      ← 预览 78×1.6 = 124.8 ≈ 126/125 g，✅ 精确吻合
 ⑤ 按餐次比例拆分（比例由预览 4 餐精确反解，见下）
 ```
@@ -373,44 +373,116 @@ GenerateDietPlanUseCase(epochDay):
 
 → **结论：放 `SettingsDataStore`。** 唯一"代价"是档案不进 Room schema —— 但这与主题/单位/提醒完全一致（它们也不进 DB 备份），**没有引入任何新的不一致**。
 
-#### 7.5.2 字段定义（类型 / 单位 / 默认值 / 合法域 / 键名）
+#### 7.5.2 字段定义（**完整版** · 类型 / 单位 / 默认值 / 合法域 / 键名）
+
+> **范围**：本节从"4 字段（性别/年龄/身高/目标）"**扩展为完整档案**，对齐预览 `ironhabit-preview.html` 的「我的身体档案」卡（`:594-604`、编辑表单 `:731-747`）。
+> 该完整档案同时是 **本地 AI 教练**（见 `docs/ai-coach-local.md`）与 **饮食模块** 的**共同前置**。
 
 | 字段 | 领域类型 | DataStore 键 | 单位 | 默认值 | 合法域 | 说明 |
 |------|---------|-------------|------|--------|--------|------|
-| 性别 `gender` | `Gender?`（枚举 `MALE`/`FEMALE`） | `profile_gender`（String，存 `Gender.name`） | — | `null`（未填） | `MALE` / `FEMALE` | 决定 Mifflin-St Jeor 的 ±常数项（+5 / −161） |
-| 年龄 `age` | `Int?` | `profile_age`（Int） | 岁 | `null` | **14–100**（写入时 `coerceIn`） | BMR 的年龄项 |
-| 身高 `heightCm` | `Int?` | `profile_height_cm`（Int） | cm | `null` | **140–220**（写入时 `coerceIn`） | BMR 的身高项 |
-| 目标 `goal` | `Goal`（枚举 `CUT`/`MAINTAIN`/`BULK`） | `profile_goal`（String） | — | `MAINTAIN` | `CUT` / `MAINTAIN` / `BULK` | 目标热量系数 0.85 / 1.0 / 1.10 |
+| 性别 `gender` | `Gender?` | `profile_gender`（String：`Gender.name`） | — | `null`（未填） | `MALE` / `FEMALE` | BMR 的 ±常数项（+5 / −161） |
+| 年龄 `age` | `Int?` | `profile_age`（Int） | 岁 | `null` | **14–100**（写入 `coerceIn`） | BMR 年龄项 |
+| 身高 `heightCm` | `Int?` | `profile_height_cm`（Int） | cm | `null` | **140–220**（写入 `coerceIn`） | BMR 身高项 |
+| **体脂率** `bodyFatPct` | `Float?` | `profile_body_fat_pct`（Float） | % | `null` | **3–60**（写入 `coerceIn`） | 仅展示/参考；**缺失时回落** `body_metrics` 的 `BODY_FAT` 最新值（见 §7.5.3） |
+| 目标 `goal` | `Goal`（5 值） | `profile_goal`（String） | — | `MAINTAIN` | `CUT`/`BULK`/`RECOMP`/`SHAPE`/`MAINTAIN` | 目标热量系数，见 §7.2 |
+| **目标体重** `goalWeightKg` | `Float?` | `profile_goal_weight_kg`（Float） | kg | `null` | **30–300**（写入 `coerceIn`） | **仅展示/激励**；本地规则**不用它**算热量（用当前体重） |
+| **可用器械** `equipment` | `Set<Equipment>` | `profile_equipment`（**StringSet**） | — | 空集（=未选） | `Equipment` 枚举子集 | 训练计划生成的**硬约束**（只用用户有的器械） |
+| **伤病部位** `injuryAreas` | `Set<InjuryArea>` | `profile_injury_area`（**StringSet**） | — | 空集 | `InjuryArea` 枚举子集 | 训练计划生成的**机械排除项** |
+| **伤病备注** `injuryNote` | `String?` | `profile_injury_note`（String） | — | `null` | ≤ 200 字 | **仅展示**；本地规则**不解析**自由文本 |
+| **饮食忌口** `dietaryAvoid` | `Set<DietRestriction>` | `profile_diet_avoid`（**StringSet**） | — | 空集 | `DietRestriction` 枚举子集 | 饮食生成的**排除项** |
+| ~~体重~~ | **不入档案** | — | kg | — | — | **走 `body_metrics` 表**（`BodyMetricType.WEIGHT` 最新值），见 §7.5.3 与 §7.5.5 |
 
-**领域模型**（**新文件** `domain/model/UserProfile.kt`，与现有 `AppSettings` / `ThemeMode` / `UnitSystem` 同处 `domain/model/`）：
+**为什么"多选集合"用 DataStore 原生 `stringSetPreferencesKey`，而不是 CSV 或位掩码**（主理人给了 CSV/位掩码两个选项，我选第三个并说明）：
+
+| 方案 | 评价 |
+|------|------|
+| **DataStore `stringSetPreferencesKey`（选用）** | **DataStore 原生 Set<String>**，零手写编解码；存 `Equipment.name` 等**枚举名**（改动枚举顺序也不受影响）。**无序**正合此场景（器械/伤病/忌口都无次序语义） |
+| 单字符串 CSV（如 v2 的 `muscle_group`） | v2 用 CSV 是因为那是 **Room TEXT 列**、且要保序（主肌群在前）。**此处是 DataStore、无 SQL、无次序**，CSV 只会引入手写 split/join 与"分隔符转义"的额外风险 |
+| 位掩码 Int | 适合"布尔 + 需要 SQL 聚合"（如 `completed_sets_mask`）。此处**无聚合需求**，位掩码反而**不可读、依赖枚举 ordinal**（增删枚举会错位） |
+
+→ **结论：三个多选字段用 `stringSetPreferencesKey`（存枚举 `name`）**。展示顺序由 UI 按**枚举声明顺序**排序（不依赖 Set 迭代顺序）。**淘汰**该字段时（如清空器械），写空集即可。
+
+**领域模型**（**新文件** `domain/model/UserProfile.kt`，与现有 `AppSettings` / `ThemeMode` / `UnitSystem` 同处 `domain/model/`；枚举与 data class **同一文件**，沿用 `StatsModels.kt` / `DietModels.kt` 的"同文件多模型"先例）：
 
 ```kotlin
 /** 生理性别：仅用于 BMR 公式的常数项。 */
 enum class Gender { MALE, FEMALE }
 
-/** 健身目标：仅用于目标热量系数。 */
-enum class Goal { CUT, MAINTAIN, BULK }        // 减脂 / 维持 / 增肌
+/**
+ * 健身目标（对齐预览 `GOALS` 的 5 项；预览 `P.goal = "减脂增肌"`）。
+ * @property kcalFactor 目标热量系数（相对 TDEE），被饮食规则 §7.2 使用。
+ */
+enum class Goal(val kcalFactor: Double) {
+    CUT(0.85),       // 减脂
+    BULK(1.10),      // 增肌
+    RECOMP(1.00),    // 减脂增肌（体重维持 + 高蛋白）
+    SHAPE(0.95),     // 塑形（轻微热量缺口）
+    MAINTAIN(1.00),  // 保持
+}
+
+/** 可用器械（对齐预览 `EQUIP`）。 */
+enum class Equipment {
+    NONE,             // 无器械
+    DUMBBELL,         // 哑铃
+    BARBELL,          // 杠铃
+    YOGA_MAT,         // 瑜伽垫
+    PULLUP_BAR,       // 单杠
+    RESISTANCE_BAND,  // 弹力带
+    MACHINE,          // 器械区
+    TREADMILL,        // 跑步机
+}
+
+/**
+ * 伤病部位（**结构化**，供本地规则**机械排除**动作）。
+ *
+ * ⚠️ 预览把伤病存成**纯自由文本**（"右膝旧伤（避免深跳）"），自由文本**无法被规则可靠消费**；
+ * 故本设计改为**部位枚举多选**（驱动规则）+ 可选自由文本备注（仅展示）。
+ */
+enum class InjuryArea {
+    KNEE, LOWER_BACK, SHOULDER, WRIST, ELBOW, ANKLE, NECK, HIP, CARDIO,
+    // 膝 / 腰 / 肩 / 腕 / 肘 / 踝 / 颈 / 髋 / 心血管（含"其他慢性病"）
+}
+
+/** 饮食忌口（对齐预览 `AVOID`）。 */
+enum class DietRestriction { PEANUT, SEAFOOD, DAIRY, GLUTEN, SPICY, ALCOHOL }
+// 花生 / 海鲜 / 乳制品 / 麸质 / 辛辣 / 酒精
 
 /**
  * 用户档案（单人单份，存 [SettingsDataStore]，**不落 Room**）。
  *
- * - [gender] / [age] / [heightCm] 为 null 表示"用户尚未填写"（是合法状态，非错误）；
- * - [goal] 有默认值，恒非空。
+ * ⚠️ **不含体重** —— 体重走 `body_metrics`（唯一真源），档案只做"展示 + 跳转"，见 §7.5.3。
+ *
+ * 所有 `?` 字段为 null 表示"用户尚未填写"，是**合法状态**（非错误）。
  */
 data class UserProfile(
     val gender: Gender? = null,
     val age: Int? = null,
     val heightCm: Int? = null,
+    val bodyFatPct: Float? = null,
     val goal: Goal = Goal.MAINTAIN,
+    val goalWeightKg: Float? = null,
+    val equipment: Set<Equipment> = emptySet(),
+    val injuryAreas: Set<InjuryArea> = emptySet(),
+    val injuryNote: String? = null,
+    val dietaryAvoid: Set<DietRestriction> = emptySet(),
 ) {
-    /** 三个体征字段是否填全（决定目标热量走 BMR 还是走安全兜底，见 §7.5.3）。 */
+    /** 体征三件套是否填全（BMR 计算的前提；缺失走 §7.5.3 兜底）。 */
     val isBodyProfileComplete: Boolean
         get() = gender != null && age != null && heightCm != null
+
+    /** 训练档案是否可用：**至少勾选一项器械**（没有器械就选 `NONE`）。决定能否生成训练计划。 */
+    val isTrainingProfileComplete: Boolean
+        get() = equipment.isNotEmpty()
+
+    /** 是否存在需要规则避让的约束（伤病 / 忌口）。 */
+    val hasConstraints: Boolean
+        get() = injuryAreas.isNotEmpty() || dietaryAvoid.isNotEmpty()
 }
 ```
 
-- **键命名遵循既有约定**：全部放进 `SettingsDataStore.Keys` 私有对象内、snake_case（见 `SettingsDataStore.kt:101-109` 的 `theme_mode` / `unit_system` …）。
-- **不新增额外的"是否已配置"布尔键**："是否填全"由 `gender/age/heightCm` 是否为 null **直接推导**（`isBodyProfileComplete`），少一个可能与事实不同步的冗余键。
+- **键命名遵循既有约定**：全部放进 `SettingsDataStore.Keys` 私有对象内、snake_case 且统一 `profile_` 前缀（见 `SettingsDataStore.kt:101-109` 的 `theme_mode` / `unit_system` …）。
+- **不新增额外的"是否已配置"布尔键**："是否填全"一律由字段是否为 null / 集合是否为空**直接推导**（`isBodyProfileComplete` / `isTrainingProfileComplete`），少一个可能与事实不同步的冗余键。
+- **枚举 ↔ 存储映射**：集合存 `Enum.name`（字符串），**不存 ordinal**（新增/重排枚举值不会错位）；未知 name 读入时**忽略并回落默认**（不崩）。
 
 #### 7.5.3 降级规则（**必须写死；空档案也不得算出荒谬值、不得崩**）
 
@@ -423,6 +495,12 @@ data class UserProfile(
 | **年龄** 为 `null` | 用 **30 岁** | 预览实测锚点（BMR≈1729@175cm/30岁/男 ≈ 预览 1720 kcal）正是 30 岁 |
 | **身高** 为 `null` | 用 **175 cm** | 同上，预览锚点身高 |
 | **目标** 为 `null` | 用 **`MAINTAIN`** | 系数 1.0，最中性、无倾向 |
+| **体脂率** 为 `null` | **展示回落**：读 `body_metrics` 的 `BODY_FAT` 最新值；仍无则**整行不显示** | 体脂率**不参与** BMR / 热量计算（Mifflin-St Jeor 不含体脂），缺失**不影响任何数值**，仅少显示一行 |
+| **目标体重** 为 `null` | 卡片只显示"目标：X"，**不显示"→ 目标体重"**；计算不受影响 | 目标体重是**激励项**，不参与热量计算 |
+| **器械** 为空集 | **视为 `{NONE}`（仅自重）**：训练计划只挑"无器械/自重"动作，**绝不假定用户有器材** | "宁可保守"：宁少给动作，也不给用户做不到的动作 |
+| **伤病** 为空集 | **不排除任何动作** | 未申报 = 无条件可练 |
+| **忌口** 为空集 | **不排除任何食物** | 同上 |
+| **伤病备注** 为 `null` | 不显示该行 | 备注仅展示，本地规则**不解析**它 |
 
 **输入 / 出口双重钳制（防荒谬值的最后一道闸）：**
 
@@ -461,73 +539,150 @@ GenerateDietPlanUseCase(epochDay)          // domain 层；构造注入 Settings
 
 **关键**：`DietPlanGenerator.dailyTarget(...)` 是**纯函数**（`domain/diet/DietPlanGenerator.kt`），`SettingsRepository` 只是它的数据来源；单测里直接传入 `UserProfile` 即可，无需 Android。`profile()` 走 `SettingsRepository`（domain 接口）→ UI 与 domain **均不直接依赖** `SettingsDataStore`，与既有分层一致（参照 `SettingsViewModel` 只用 `SettingsRepository`）。
 
-#### 7.5.5 设置页 UI 结构（分区 / 控件选型）
+#### 7.5.5 UI：**独立「我的档案」编辑页** + 3 处只读入口
 
-「设置」页现有条目：主题 / 单位制 / 提醒 / 精确闹钟引导 / 通知权限引导 / 版本 / 隐私（见 `strings.xml:160-174`）。
-新增 **「我的档案」区块**，置于 **「单位制」之后、「每日训练提醒」之前**（体征信息与单位同属"个人化基础配置"，聚在一起）：
+> ⚠️ **对早期设计的调整（字段 4 → 10 所致）**：原设计把编辑器做成**设置页内联区块**。字段扩到 10 个后，一个横跨"体征 / 目标 / 器械 / 伤病 / 忌口"的长表单**塞进设置页会很长、且与"设置项"语义不符** → 改为 **独立二级页 `ProfileEditScreen`**，设置页只放一个**跳转条目**。**编辑器全局唯一**，杜绝"两套档案 UI 各改各的"。
+
+**只读入口（3 处，均跳同一个 `ProfileEditScreen`）**：
+
+| 入口 | 位置 | 展示 |
+|------|------|------|
+| ① 设置页 | 「单位制」之后、「每日训练提醒」之前，新增一行「**我的档案**」 | 一行概要（性别 · 年龄 · 目标）+ `›` |
+| ② AI 教练页 | 页首「我的身体档案」卡（见 `docs/ai-coach-local.md`） | 完整只读卡（对齐预览 `:594-604`） |
+| ③ 「我的」页 | 「身体档案」卡（预览 `scrProfile` 已有） | 概要卡 |
+
+**`ProfileEditScreen`（二级页 `profile/edit`）分区与控件**：
 
 ```
-设置
- ├─ 主题               （既有）
- ├─ 单位制             （既有）
- ├─ ─── 我的档案 ───   ← 新增区块（section 标题 + 副标题）
- │    ├─ 性别   [ 男 | 女 ]              ← 分段按钮（M3 SegmentedButton，2 段）
- │    ├─ 年龄   [____] 岁               ← 数值输入框（keyboardType = Number）
- │    ├─ 身高   [____] cm              ← 数值输入框（keyboardType = Number）
- │    └─ 目标   [ 减脂 | 维持 | 增肌 ]   ← 分段按钮（3 段）
- ├─ 每日训练提醒        （既有）
- └─ 版本 / 隐私         （既有）
+我的档案
+ ├─ 【体征】
+ │    ├─ 性别     [ 男 | 女 ]                    ← SegmentedButton（2 段）
+ │    ├─ 年龄     [____] 岁                      ← 数字输入框
+ │    ├─ 身高     [____] cm                      ← 数字输入框
+ │    ├─ 体脂率   [____] %    （可空）             ← 数字输入框
+ │    └─ 当前体重  78.0 kg         [ 去记录 › ]    ← 只读展示 + 跳 BodyMetricsScreen
+ ├─ 【目标】
+ │    ├─ 目标     [ 减脂 | 增肌 | 减脂增肌 | 塑形 | 保持 ]   ← SegmentedButton（5 段）
+ │    └─ 目标体重 [____] kg    （可空）              ← 数字输入框
+ ├─ 【训练条件】
+ │    └─ 可用器械  ☐ 无器械 ☐ 哑铃 ☐ 杠铃 ☐ 瑜伽垫 ☐ 单杠 ☐ 弹力带 ☐ 器械区 ☐ 跑步机   ← 多选 chip
+ └─ 【约束（可留空）】
+      ├─ 伤病部位  ☐ 膝 ☐ 腰 ☐ 肩 ☐ 腕 ☐ 肘 ☐ 踝 ☐ 颈 ☐ 髋 ☐ 心血管   ← 多选 chip
+      ├─ 伤病备注  [_______________]   （自由文本，可空）
+      └─ 饮食忌口  ☐ 花生 ☐ 海鲜 ☐ 乳制品 ☐ 麸质 ☐ 辛辣 ☐ 酒精          ← 多选 chip
 ```
 
 | 字段 | 控件 | 选型理由 |
 |------|------|---------|
-| 性别 | **分段按钮**（2 段） | 互斥 + 仅 2 项：分段按钮**一次点击直达**，比下拉少一步操作 |
-| 目标 | **分段按钮**（3 段） | 同上；3 项且需"当前选中态"一眼可见 |
-| 年龄 | **数值输入框**（数字键盘） | 跨度 14–100 太大，滑杆难以精调；输入框直接键入 |
-| 身高 | **数值输入框**（数字键盘） | 需精确到 1 cm，输入框比滑杆直观 |
+| 性别 | **分段按钮**（2 段） | 互斥 + 仅 2 项：一次点击直达，比下拉少一步 |
+| 目标 | **分段按钮 / 横向 chip**（5 段） | 5 项并行可见、当前选中态一眼可见；5 项已到分段按钮舒适上限，若嫌挤可降级为 chip 组 |
+| 年龄 / 身高 / 体脂率 / 目标体重 | **数字输入框**（数字键盘） | 需精确键入 + 越界钳制；滑杆难精调 |
+| 器械 / 伤病部位 / 忌口 | **多选 chip** | 多选 + 项数适中；chip 组比多选对话框更轻、可一眼看全（对齐预览 `pick` 组） |
+| 当前体重 | **只读 + 跳转**（**不在本页录入**） | 体重唯一真源是 `body_metrics`；本页只**展示最新值**并给「去记录」跳 `BodyMetricsScreen`（复用既有页面，不新造） |
 
 - **保存时机**：控件变更**即时落 DataStore**（与主题 / 单位一致，**不设独立"保存"按钮**，避免"改了没保存"）。
-- **校验**：输入越界时**钳制 + 轻提示**（`error_profile_age_range` / `error_profile_height_range`），**不阻断输入、不崩**。
-- **空态**：未填时输入框显示占位符（`hint_profile_age` 等）；**性别可留空未选**（缺失时按 §7.5.3 用 `FEMALE` 兜底）；**目标默认高亮「维持」**（因 `Goal` 恒非空）。
-- 页面级错误 / Snackbar 复用既有 `SettingsUiState.errorRes / snackbarRes` 通道，**不新造机制**。
+- **校验**：数值越界时**钳制 + 轻提示**（`error_profile_*_range`），**不阻断输入、不崩**。
+- **空态**：全部字段可留空；性别未选按 §7.5.3 用 `FEMALE` 兜底；目标默认高亮「保持」。
+- **体重取数**：`BodyMetricRepository.latest(WEIGHT)`（现有接口）；无记录时该行显示"未记录" + 「去记录」。
+- 页面级错误 / Snackbar 复用既有 `errorRes / snackbarRes` 通道，**不新造机制**。
 
 #### 7.5.6 需新增的 `strings.xml` 条目（一次性列全）
 
 沿用命名规范（架构 §7.5）：`settings_*` 属设置页、`hint_*` 为输入提示、`label_*` 为展示标签、`error_*` 为校验文案：
 
 ```xml
-<!-- ===== 我的档案（v3 增量）===== -->
-<string name="settings_profile_title">我的档案</string>
-<string name="settings_profile_subtitle">用于生成更贴合你的饮食计划</string>
+<!-- ===== 我的档案（v3 增量 · 完整版）===== -->
+<!-- 入口与标题 -->
+<string name="entry_profile_edit">我的档案</string>
+<string name="title_profile_edit">我的档案</string>
+
+<!-- 分区：体征 -->
+<string name="section_profile_body">体征</string>
 <string name="label_profile_gender">性别</string>
 <string name="label_profile_gender_male">男</string>
 <string name="label_profile_gender_female">女</string>
 <string name="label_profile_age">年龄</string>
 <string name="label_profile_height">身高</string>
-<string name="label_profile_goal">目标</string>
-<string name="label_profile_goal_cut">减脂</string>
-<string name="label_profile_goal_maintain">维持</string>
-<string name="label_profile_goal_bulk">增肌</string>
+<string name="label_profile_body_fat">体脂率</string>
+<string name="label_profile_current_weight">当前体重</string>
+<string name="action_profile_record_weight">去记录</string>
+<string name="value_profile_not_recorded">未记录</string>
 <string name="hint_profile_age">如 30</string>
 <string name="hint_profile_height">如 175</string>
+<string name="hint_profile_body_fat">如 22</string>
 <string name="suffix_profile_age">岁</string>
 <string name="suffix_profile_height">cm</string>
+<string name="suffix_profile_body_fat">%</string>
+
+<!-- 分区：目标（5 项，对齐预览 GOALS）-->
+<string name="section_profile_goal">目标</string>
+<string name="label_profile_goal">目标</string>
+<string name="label_profile_goal_weight">目标体重</string>
+<string name="label_profile_goal_cut">减脂</string>
+<string name="label_profile_goal_bulk">增肌</string>
+<string name="label_profile_goal_recomp">减脂增肌</string>
+<string name="label_profile_goal_shape">塑形</string>
+<string name="label_profile_goal_maintain">保持</string>
+<string name="hint_profile_goal_weight">如 72</string>
+<string name="suffix_profile_goal_weight">kg</string>
+
+<!-- 分区：训练条件（8 项，对齐预览 EQUIP）-->
+<string name="section_profile_training">训练条件</string>
+<string name="label_profile_equipment">可用器械（可多选）</string>
+<string name="equipment_none">无器械</string>
+<string name="equipment_dumbbell">哑铃</string>
+<string name="equipment_barbell">杠铃</string>
+<string name="equipment_yoga_mat">瑜伽垫</string>
+<string name="equipment_pullup_bar">单杠</string>
+<string name="equipment_resistance_band">弹力带</string>
+<string name="equipment_machine">器械区</string>
+<string name="equipment_treadmill">跑步机</string>
+
+<!-- 分区：约束（伤病部位 9 项 / 忌口 6 项，对齐预览 AVOID）-->
+<string name="section_profile_constraints">约束（可留空）</string>
+<string name="label_profile_injury_area">伤病部位（可多选）</string>
+<string name="label_profile_injury_note">伤病备注（可选）</string>
+<string name="hint_profile_injury_note">如：右膝旧伤，避免深跳</string>
+<string name="label_profile_diet_avoid">饮食忌口（可多选）</string>
+<string name="injury_knee">膝</string>
+<string name="injury_lower_back">腰</string>
+<string name="injury_shoulder">肩</string>
+<string name="injury_wrist">腕</string>
+<string name="injury_elbow">肘</string>
+<string name="injury_ankle">踝</string>
+<string name="injury_neck">颈</string>
+<string name="injury_hip">髋</string>
+<string name="injury_cardio">心血管</string>
+<string name="restriction_peanut">花生</string>
+<string name="restriction_seafood">海鲜</string>
+<string name="restriction_dairy">乳制品</string>
+<string name="restriction_gluten">麸质</string>
+<string name="restriction_spicy">辛辣</string>
+<string name="restriction_alcohol">酒精</string>
+
+<!-- 提示与校验 -->
 <string name="profile_incomplete_hint">档案未填全，已按默认值估算，去「我的档案」补全更准</string>
+<string name="profile_equipment_missing_hint">还没勾选可用器械，去「我的档案」选一项（没有器械就选「无器械」）</string>
 <string name="error_profile_age_range">请输入 14–100 之间的年龄</string>
 <string name="error_profile_height_range">请输入 140–220 cm 之间的身高</string>
+<string name="error_profile_body_fat_range">请输入 3–60 之间的体脂率</string>
+<string name="error_profile_goal_weight_range">请输入 30–300 kg 之间的目标体重</string>
 ```
 
 > 复用既有 `action_save` / 通用文案，不重复定义。**禁止硬编码中文**（架构 §7.5）：性别 / 目标 / 单位一律走资源。
 
 #### 7.5.7 任务分解（插入位置 + 依赖）
 
-「我的档案」必须**先于「生成饮食计划」可用**（它是规则引擎的输入）。故**新增任务 `M2.5`，插在 `M2`（Domain 契约）之后、`M3`（规则引擎）之前**（见 §9）：
+「我的档案」必须先于**任何"按档案生成"**的能力可用 —— 它同时是：① 饮食规则引擎（本文件 §7）、② **本地 AI 教练**（`docs/ai-coach-local.md`）的输入。故**新增任务 `M2.5`，插在 `M2`（Domain 契约）之后、`M3`（规则引擎）之前**（见 §9）：
 
 | ID | 任务 | 涉及文件 | 依赖 | 优先级 |
 |----|------|---------|------|-------|
-| **M2.5** | **用户档案（我的档案）**：`UserProfile` 模型 + 设置仓库/DataStore 加 profile 读写 + 设置页「我的档案」区块 + 文案 | `domain/model/UserProfile.kt`(新)、`domain/repository/SettingsRepository.kt`、`data/repository/SettingsRepositoryImpl.kt`、`data/preferences/SettingsDataStore.kt`、`ui/screens/settings/SettingsScreen.kt`、`ui/screens/settings/SettingsViewModel.kt`、`res/values/strings.xml` | M2 | **P0** |
+| **M2.5** | **用户档案（完整版）**：`UserProfile`（+5 枚举）+ 设置仓库/DataStore（含 3 个 `stringSetPreferencesKey`）+ **`ProfileEditScreen` 独立编辑页** + `ProfileSummaryCard` + 设置页跳转条目 + 文案 | `domain/model/UserProfile.kt`(新)、`ui/screens/profile/ProfileEditScreen.kt`(新)、`ProfileEditViewModel.kt`(新)、`ui/components/ProfileSummaryCard.kt`(新)、`domain/repository/SettingsRepository.kt`、`data/repository/SettingsRepositoryImpl.kt`、`data/preferences/SettingsDataStore.kt`、`ui/navigation/Destinations.kt`、`ui/screens/settings/SettingsScreen.kt`、`SettingsViewModel.kt`、`res/values/strings.xml` | M2 | **P0** |
 
-**依赖变更**：`M3`（规则引擎）与 `M5`（今日页 UI，显示"档案未填全"提示）**新增对 `M2.5` 的依赖**（M3 需要 `UserProfile` 类型；M5 需要 `usedDefaults` 提示）。M1 / M2 / M4 / M6 不受影响。
+**依赖变更**：
+- `M3`（饮食规则引擎）与 `M5`（今日页 UI，显示"档案未填全"提示）**新增对 `M2.5` 的依赖**（M3 需 `UserProfile` 类型；M5 需 `usedDefaults` 提示）。
+- **`docs/ai-coach-local.md` 的全部任务（AC 系列）依赖 `M2.5`**（档案是本地 AI 的共同前置）。
+- M1 / M2 / M4 / M6 不受影响。
 
 ---
 
@@ -579,34 +734,58 @@ GenerateDietPlanUseCase(epochDay)          // domain 层；构造注入 Settings
 > 🔴 **禁止硬编码中文**（架构 §7.5）：餐次名（早餐/午餐/加餐/晚餐）**必须**走 `strings.xml`，
 > 与预览的 `n:"早餐"` 不同 —— 预览是 HTML 无法外置，App 侧必须资源化。
 
-### 8.3 用户档案增量（见 §7.5）
+### 8.3 用户档案增量（**完整版** · 见 §7.5）
 
-**新增（1）**
+**新增（4）**
 
 | 相对路径 | 职责 |
 |------|------|
-| `domain/model/UserProfile.kt` | `UserProfile` + `Gender` + `Goal`（§7.5.2）；**不新增 UseCase**（沿用 `SettingsViewModel` 直接用 `SettingsRepository` 的既有范式） |
+| `domain/model/UserProfile.kt` | `UserProfile` + `Gender` / `Goal` / `Equipment` / `InjuryArea` / `DietRestriction`（§7.5.2，同文件多模型） |
+| `ui/screens/profile/ProfileEditScreen.kt` | **唯一的档案编辑器**（§7.5.5 的分区与控件） |
+| `ui/screens/profile/ProfileEditViewModel.kt` | 档案读写 + 越界校验 + 当前体重取数（`BodyMetricRepository.latest(WEIGHT)`）；`UiState` 内联于此（沿用 `SettingsViewModel` 范式） |
+| `ui/components/ProfileSummaryCard.kt` | 档案**只读概要卡**（AI 教练页 / 我的页 / 设置页 共用） |
 
-**修改（6）**
+**修改（9）**
+
+> ⚠️ **计数更正**：本节标题原写「修改（7）」，但**实为 9 行** —— 原漏登**「我的页」卡片入口**与**导航注册**两处（§7.5.5 的入口③需要改 `ProfileScreen.kt`；新增 `profile/edit` 路由必须改 `IronHabitNavGraph.kt`）。
+> **原登记 7，实际 9，原因：漏登 `ProfileScreen.kt` 与 `IronHabitNavGraph.kt`（新增二级路由的必经改动）**。已更正为 **9**。
 
 | 文件 | 改什么 |
 |------|--------|
-| `domain/repository/SettingsRepository.kt` | 新增 `profile(): Flow<UserProfile>` 与 `saveProfile(...)`（或分字段 setter） |
+| `domain/repository/SettingsRepository.kt` | 新增 `profile(): Flow<UserProfile>` + 保存方法 |
 | `data/repository/SettingsRepositoryImpl.kt` | 委托到 `SettingsDataStore` |
-| `data/preferences/SettingsDataStore.kt` | `Keys` 增 4 个 `profile_*` 键 + `profile` Flow + 写方法（§7.5.2） |
-| `ui/screens/settings/SettingsScreen.kt` | 新增「我的档案」区块（§7.5.5） |
-| `ui/screens/settings/SettingsViewModel.kt` | profile 状态 + 变更处理 + 越界校验提示 |
-| `res/values/strings.xml` | §7.5.6 的 18 条文案（**与 §8.2 共用同一文件，去重只计 1 行**） |
+| `data/preferences/SettingsDataStore.kt` | `Keys` 增 **10 个** `profile_*` 键（含 3 个 `stringSetPreferencesKey`）+ `profile` Flow + 写方法（§7.5.2） |
+| `ui/navigation/Destinations.kt` | 新增二级页路由 `profile/edit`（**同文件另被 `ai-coach-local.md` 加 `ai_coach` 路由，去重只计 1 次**） |
+| `ui/navigation/IronHabitNavGraph.kt` | **注册 `profile/edit` 二级路由**（`registerSecondaryRoutes`「8 条」→「9 条」）；**同文件另被 `ai-coach-local.md` 注册 `AI_COACH` 一级页与第 5 个 Tab，去重只计 1 次** ⚠️ **本行系计数更正补登** |
+| `ui/screens/settings/SettingsScreen.kt` | 新增「我的档案」跳转条目（§7.5.5 入口①） |
+| `ui/screens/settings/SettingsViewModel.kt` | 档案概要状态（供设置页那行展示） |
+| `ui/screens/profile/ProfileScreen.kt` | 「我的」页新增**身体档案概要卡**（§7.5.5 入口③），复用 `ProfileSummaryCard` ⚠️ **本行系计数更正补登** |
+| `res/values/strings.xml` | §7.5.6 文案（**与 §8.2 共用同一文件，去重只计 1 行**；同样被 `ai-coach-local.md` 追加文案，仍只计 1 行） |
+
+> ⚠️ **本文件不重复登记**：`UserProfile` 的**消费方**（饮食规则 §7、本地 AI 教练 `docs/ai-coach-local.md`）只在各自章节登记自己的文件；档案文件**只登记在此处**，避免两处重复计数。
+> ⚠️ **三处跨增量共用文件**（`Destinations.kt` / `IronHabitNavGraph.kt` / `strings.xml`）同时被「饮食」「档案」「AI 教练」三个增量修改 → **全局去重后各只计 1 次**（见 §8.4）。
 
 ### 8.4 对文件计数的影响（以 **git 事实**为准）
 
-**v3 本轮净增**：新增 **20** = 饮食 19（§8.1）+ 用户档案 1（§8.3）；
-修改**去重后 13** = 饮食 8（§8.2）+ 档案 5（§8.3 六行去掉与 §8.2 重复的 `strings.xml`）。
+> ⚠️ **计数更正 + 扩展**：本节原按"档案 1 个新文件"计（新增 20 / 修改 13）。现档案已扩为**完整版（4 新）**，且新增独立的**本地 AI 教练增量**（`docs/ai-coach-local.md`，8 新 / 5 改）。**原登记 20，现 31，原因：档案由 1 个新文件扩为 4 个（+3）、并新增 AI 教练模块（+8）**。
+
+**① 本文件范围（饮食 + 档案）净增**：
+- 新增 **23** = 饮食 19（§8.1）+ 用户档案 **4**（§8.3）；
+- 修改**去重后 16** = 饮食 8（§8.2）+ 档案 8（§8.3 的 9 行，去掉与 §8.2 重复的 `strings.xml`）。
+
+**② 含 AI 教练增量（`docs/ai-coach-local.md` §7）**：
+- 新增 **8**（`PlanAdvisor` / `AdviceModels` / `LocalRuleAdvisor` / `GenerateTrainingPlanUseCase` / `SuggestExercisesUseCase` / `AiCoachScreen` / `AiCoachViewModel` / `LocalRuleAdvisorTest`）；
+- 修改 **9**（`Destinations.kt` / `BottomBar.kt` / `IronHabitNavGraph.kt` / `AppModule.kt` / `strings.xml` / `domain/repository/CheckInRepository.kt` / `data/repository/CheckInRepositoryImpl.kt` / `data/local/dao/CheckInDao.kt` / `app/src/androidTest/.../CheckInDaoTest.kt`）—— 后 4 个源于「**只增不改**地加一条按动作聚合的只读查询」（见 `ai-coach-local.md` §4.5 / §11 #5）。
+  其中 `Destinations.kt`、`IronHabitNavGraph.kt`、`strings.xml` 与①②**重复** → 去重后**再 +6**（`BottomBar.kt` / `AppModule.kt` / `CheckInRepository.kt` / `CheckInRepositoryImpl.kt` / `CheckInDao.kt` / `CheckInDaoTest.kt`）。
+
+**③ v3 全域合计**（= 饮食 + 档案 + AI 教练）：
+- **新增 31** = 23 + 8；
+- **修改去重 22** = 16 + 6。
 
 **`docs/ARCHITECTURE.md` 计数联动**（同步动作见本轮「计数对齐」报告）：
-- §2 **当前已落地**总数已由 **182 更正为 183**（原登记 182，实际 183，原因：v2 新增实为 **12** 个而非 11，见 ARCHITECTURE §2.9 说明）。
-- 本模块 + 档案落地后 → 需新增 **§2.10「v3 增量新增文件（20）」**，总数 **183 → 203**，并同步 §5.1 依赖图与 §5.2 认领表。
-- **施工落地前**，ARCHITECTURE §2 主计数保持"**已落地 183**"，§2.10 明确标注为"**设计预留（待施工）**"，避免"数字先到、代码未到"的脱节（§0.1 红线）。
+- §2 **当前已落地**总数：原登记 182 → 更正 **183**（v2 实为 12 个新增，见 ARCHITECTURE §2.9）；**再更正 183 → 189**（`938210c` 之后新增 6 个 `.kt`，见 ARCHITECTURE §2.11）。
+- 本文件 + AI 教练落地后 → §2.10 由「v3 增量新增文件（20）」更新为 **「v3 增量新增文件（31）」**，总数 **189 → 220**，并同步 §5.1 依赖图与 §5.2 认领表。
+- **施工落地前**，ARCHITECTURE §2 主计数保持"**已落地 189**"，§2.10 明确标注为"**设计预留（待施工）**"，避免"数字先到、代码未到"的脱节（§0.1 红线）。
 
 ---
 
