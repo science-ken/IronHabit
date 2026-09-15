@@ -3,6 +3,9 @@
   Android 11 及以下（fullBackupContent）：
   允许备份本地数据库与 DataStore，实现换机不丢数据。
   Android 12+ 的对应规则见 data_extraction_rules.xml。
+
+  ⚠️ DeepSeek API Key（EncryptedSharedPreferences 文件 ai_credentials.xml）：
+  **绝不备份 / 绝不迁移** —— exclude 优先级高于 include。
 -->
 <full-backup-content>
     <!-- Room 数据库（唯一真源） -->
@@ -11,4 +14,7 @@
     <include domain="file" path="datastore" />
     <!-- SharedPreferences（如有） -->
     <include domain="sharedpref" path="." />
+
+    <!-- API Key 绝不备份（与 AiCredentialsStore.PREFS_FILE 同名） -->
+    <exclude domain="sharedpref" path="ai_credentials.xml" />
 </full-backup-content>

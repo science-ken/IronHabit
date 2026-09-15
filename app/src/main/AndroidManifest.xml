@@ -1,13 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   IronHabit（自律健身）应用清单
-  零网络红线：本文件【绝不】声明任何联网权限（CI 会对本文件做 grep 校验，
-  一旦出现联网权限字面量即判定失败）。此处刻意不写出该权限名以避免误命中。
+  联网一期（主理人已拍板）：接入 DeepSeek，「生成计划 / 补充动作」可由真 AI 生成，
+  断网 / 未配 Key / 调用失败自动回落本地规则（见 domain/ai/DelegatingPlanAdvisor）。
+  本期权限变更**仅此一处**：新增 INTERNET；其余权限仍全部为本地能力。
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- ===== 本地提醒所需权限（全部为本地能力，无网络）===== -->
+    <!-- ===== 联网能力（DeepSeek chat/completions，用户自填 Key，无内置 Key）===== -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- ===== 本地提醒所需权限（全部为本地能力）===== -->
     <!-- API 31+ 精确闹钟（到点提醒）；未授予时应用自动降级为不精确闹钟 -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />

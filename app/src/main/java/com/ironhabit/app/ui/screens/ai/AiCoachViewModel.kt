@@ -5,10 +5,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.AdoptResult
+import com.ironhabit.app.domain.model.AdviceSource
 import com.ironhabit.app.domain.model.BodyMetricType
 import com.ironhabit.app.domain.model.ExerciseSuggestion
 import com.ironhabit.app.domain.model.Gender
 import com.ironhabit.app.domain.model.PlanNote
+import com.ironhabit.app.domain.model.RemoteFallbackReason
 import com.ironhabit.app.domain.model.UserProfile
 import com.ironhabit.app.domain.repository.BodyMetricRepository
 import com.ironhabit.app.domain.repository.ExerciseRepository
@@ -35,6 +37,10 @@ data class PlanResultUi(
     val preservedCount: Int = 0,
     /** 「为什么这样排」的理由列表。 */
     val notes: List<PlanNote> = emptyList(),
+    /** 本次实际来源（本地规则 / AI 联网）——诚实标注，不许 UI 猜。 */
+    val source: AdviceSource = AdviceSource.LOCAL_RULES,
+    /** 走本地时的回落原因（`null` = 没有回落）。 */
+    val fallbackReason: RemoteFallbackReason? = null,
 )
 
 /**
@@ -62,6 +68,10 @@ data class AiCoachUiState(
     val suggestions: List<ExerciseSuggestion> = emptyList(),
     val adoptedNames: Set<String> = emptySet(),
     val exerciseNames: Map<Long, String> = emptyMap(),
+    /** 最近一次建议结果的来源（本地规则 / AI 联网）。 */
+    val suggestionSource: AdviceSource = AdviceSource.LOCAL_RULES,
+    /** 建议走本地时的回落原因（`null` = 没有回落）。 */
+    val suggestionFallbackReason: RemoteFallbackReason? = null,
     @StringRes val errorRes: Int? = null,
     @StringRes val snackbarRes: Int? = null,
     val snackbarArgs: List<Any> = emptyList(),
@@ -134,6 +144,8 @@ class AiCoachViewModel @Inject constructor(
                                 writtenCount = summary.writtenCount,
                                 preservedCount = summary.preservedCount,
                                 notes = summary.notes,
+                                source = summary.source,
+                                fallbackReason = summary.fallbackReason,
                             ),
                             snackbarRes = R.string.ai_plan_written_hint,
                             snackbarArgs = listOf(summary.writtenCount),
@@ -155,7 +167,15 @@ class AiCoachViewModel @Inject constructor(
     fun loadSuggestions() {
         viewModelScope.launch {
             runCatching { suggestExercises.suggest() }
-                .onSuccess { list -> _uiState.update { it.copy(suggestions = list) } }
+                .onSuccess { result ->
+                    _uiState.update {
+                        it.copy(
+                            suggestions = result.suggestions,
+                            suggestionSource = result.source,
+                            suggestionFallbackReason = result.fallbackReason,
+                        )
+                    }
+                }
                 .onFailure { _uiState.update { it.copy(errorRes = R.string.error_save_failed) } }
         }
     }

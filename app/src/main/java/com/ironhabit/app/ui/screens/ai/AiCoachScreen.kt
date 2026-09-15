@@ -28,10 +28,12 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ironhabit.app.R
+import com.ironhabit.app.domain.model.AdviceSource
 import com.ironhabit.app.domain.model.ExerciseSuggestion
 import com.ironhabit.app.domain.model.PlanNote
 import com.ironhabit.app.domain.model.PlanNoteDetail
 import com.ironhabit.app.domain.model.PlanReason
+import com.ironhabit.app.domain.model.RemoteFallbackReason
 import com.ironhabit.app.domain.model.SuggestionReason
 import com.ironhabit.app.ui.components.AppSnackbarHost
 import com.ironhabit.app.ui.components.EmptyState
@@ -103,8 +105,7 @@ fun AiCoachScreen(
                     SuggestBlock(
                         uiState = uiState,
                         onAdopt = viewModel::adopt,
-                    )
-                }
+                    )                }
             }
         }
     }
@@ -165,6 +166,7 @@ private fun GeneratePlanBlock(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        SourceLine(source = result.source, fallback = result.fallbackReason)
         if (result.notes.isNotEmpty()) {
             ReasonList(
                 notes = result.notes,
@@ -272,6 +274,7 @@ private fun SuggestBlock(
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+    SourceLine(source = uiState.suggestionSource, fallback = uiState.suggestionFallbackReason)
 
     if (uiState.suggestions.isEmpty()) {
         EmptyState(text = stringResource(R.string.ai_suggest_all_adopted))
@@ -317,6 +320,29 @@ private fun SuggestionRow(
             Text(text = stringResource(R.string.ai_suggest_adopt))
         }
     }
+}
+
+/**
+ * 来源诚实标注：本次结果到底是谁产的。
+ *
+ * 三态：联网失败回落本地 > AI 联网生成 > 本地规则。**不许 UI 猜、不许美化**——
+ * 这是你自己的原则「离线仍可用，AI 只是增强」落到界面上的部分。
+ */
+@Composable
+private fun SourceLine(
+    source: AdviceSource,
+    fallback: RemoteFallbackReason?,
+) {
+    val text = when {
+        fallback != null -> stringResource(R.string.ai_source_fallback)
+        source == AdviceSource.REMOTE_LLM -> stringResource(R.string.ai_source_remote)
+        else -> stringResource(R.string.ai_source_local)
+    }
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 /** 页首「本地规则版」徽标：让用户一眼看出这不是大模型。 */

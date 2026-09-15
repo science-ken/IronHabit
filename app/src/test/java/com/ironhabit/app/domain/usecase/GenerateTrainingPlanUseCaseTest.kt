@@ -16,6 +16,7 @@ import io.mockk.mockk
 import io.mockk.slot
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
@@ -52,6 +53,7 @@ class GenerateTrainingPlanUseCaseTest {
         advisor = LocalRuleAdvisor,
         clock = fixedClock,
         timeZone = TimeZone.UTC,
+        ioDispatcher = UnconfinedTestDispatcher(),
     )
 
     private val library: List<Exercise> = listOf(

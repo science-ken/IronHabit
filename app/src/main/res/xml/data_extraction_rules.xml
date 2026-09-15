@@ -3,6 +3,9 @@
   Android 12+（API 31+）数据提取规则：
   允许云备份与设备间迁移包含本地数据库与 DataStore，实现换机不丢数据。
   Android 11 及以下的对应规则见 backup_rules.xml。
+
+  ⚠️ DeepSeek API Key（EncryptedSharedPreferences 文件 ai_credentials.xml）：
+  云备份与设备迁移均**排除** —— exclude 优先级高于 include。
 -->
 <data-extraction-rules>
     <cloud-backup>
@@ -12,11 +15,17 @@
         <include domain="file" path="datastore" />
         <!-- SharedPreferences（如有） -->
         <include domain="sharedpref" path="." />
+
+        <!-- API Key 绝不云备份（与 AiCredentialsStore.PREFS_FILE 同名） -->
+        <exclude domain="sharedpref" path="ai_credentials.xml" />
     </cloud-backup>
 
     <device-transfer>
         <include domain="database" path="." />
         <include domain="file" path="datastore" />
         <include domain="sharedpref" path="." />
+
+        <!-- API Key 绝不随设备迁移 -->
+        <exclude domain="sharedpref" path="ai_credentials.xml" />
     </device-transfer>
 </data-extraction-rules>

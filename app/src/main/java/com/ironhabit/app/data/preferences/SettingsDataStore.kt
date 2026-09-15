@@ -211,6 +211,21 @@ class SettingsDataStore @Inject constructor(
     }
 
     /**
+     * 是否启用「AI 联网生成」（联网一期，默认 **false** = 纯本地规则）。
+     *
+     * 只控制 `GenerateTrainingPlanUseCase` / `SuggestExercisesUseCase` 走远端还是本地；
+     * **API Key 不在这里**（见 [AiCredentialsStore]，加密存储、不进 DataStore）。
+     */
+    val aiRemoteEnabled: Flow<Boolean> = context.settingsDataStore.data
+        .catch { emit(emptyPreferences()) }
+        .map { preferences -> preferences[Keys.AI_REMOTE_ENABLED] ?: false }
+
+    /** 开关「AI 联网生成」（默认关；打开仍需用户已配置 API Key 才会真正走远端）。 */
+    suspend fun setAiRemoteEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { it[Keys.AI_REMOTE_ENABLED] = enabled }
+    }
+
+    /**
      * 是否仍需向用户申请通知权限（API 33+）。
      *
      * 只要弹过一次系统授权框就不再主动弹，避免反复打扰；
@@ -247,6 +262,9 @@ class SettingsDataStore @Inject constructor(
         val PROFILE_INJURY_AREA = stringSetPreferencesKey("profile_injury_area")
         val PROFILE_INJURY_NOTE = stringPreferencesKey("profile_injury_note")
         val PROFILE_DIET_AVOID = stringSetPreferencesKey("profile_diet_avoid")
+
+        // ---- AI 联网（联网一期）：仅开关，Key 走 AiCredentialsStore（加密、不进 DataStore）----
+        val AI_REMOTE_ENABLED = booleanPreferencesKey("ai_remote_enabled")
     }
 
     companion object {

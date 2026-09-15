@@ -27,6 +27,12 @@ class SettingsRepositoryImpl @Inject constructor(
 
     override fun profile(): Flow<UserProfile> = dataStore.profile
 
+    override fun aiRemoteEnabled(): Flow<Boolean> = dataStore.aiRemoteEnabled
+
+    override suspend fun setAiRemoteEnabled(enabled: Boolean) {
+        dataStore.setAiRemoteEnabled(enabled)
+    }
+
     override suspend fun setProfileGender(gender: Gender?) {
         dataStore.setProfileGender(gender)
     }

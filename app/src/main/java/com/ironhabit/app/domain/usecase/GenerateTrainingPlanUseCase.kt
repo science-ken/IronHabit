@@ -1,14 +1,19 @@
 package com.ironhabit.app.domain.usecase
 
+import com.ironhabit.app.di.IoDispatcher
 import com.ironhabit.app.domain.ai.PlanAdvisor
+import com.ironhabit.app.domain.model.AdviceSource
 import com.ironhabit.app.domain.model.PlanNote
+import com.ironhabit.app.domain.model.RemoteFallbackReason
 import com.ironhabit.app.domain.model.WeekPlan
 import com.ironhabit.app.domain.repository.CheckInRepository
 import com.ironhabit.app.domain.repository.ExerciseRepository
 import com.ironhabit.app.domain.repository.PlanRepository
 import com.ironhabit.app.domain.repository.SettingsRepository
 import javax.inject.Inject
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
@@ -20,11 +25,15 @@ import kotlinx.datetime.toLocalDateTime
  * @property writtenCount 本次实际写入的计划条目数
  * @property preservedCount 被完整保留的**用户手改行**条数（含软删除行），对应 `ai_plan_preserved_hint`
  * @property notes "为什么这样排"的确定性理由，对应 `ai_*` 文案
+ * @property source 本次实际使用的来源（本地规则 / AI 联网生成；联网失败回落时为 LOCAL_RULES）
+ * @property fallbackReason 走本地规则时的回落原因；`null` = 未发生回落（联网一期 §6.2 N4）
  */
 data class GeneratedPlanSummary(
     val writtenCount: Int = 0,
     val preservedCount: Int = 0,
     val notes: List<PlanNote> = emptyList(),
+    val source: AdviceSource = AdviceSource.LOCAL_RULES,
+    val fallbackReason: RemoteFallbackReason? = null,
 )
 
 /**
@@ -40,7 +49,12 @@ data class GeneratedPlanSummary(
  *    写入统一走 `PlanRepository.upsertGenerated`（内部是显式 upsert）。
  * 3. **纯函数外置**：规则判断全在 [PlanAdvisor]，本用例只负责取数与写入。
  *
- * @param advisor 注入接口，不 new 具体实现（将来切换联网实现时本文件零改动）
+ * ## 联网一期
+ * 顾问调用包 `withContext(ioDispatcher)`：本地实现是纯计算（快），远端实现是
+ * **阻塞 HTTP**（[com.ironhabit.app.domain.ai.remote.DeepSeekClient]，30s 超时），
+ * 必须离开主线程；是否走远端 / 失败回落由 [com.ironhabit.app.domain.ai.DelegatingPlanAdvisor] 决定。
+ *
+ * @param advisor 注入接口，不 new 具体实现（本地 / 远端 / 委托切换对本用例透明）
  */
 class GenerateTrainingPlanUseCase @Inject constructor(
     private val planRepository: PlanRepository,
@@ -50,6 +64,7 @@ class GenerateTrainingPlanUseCase @Inject constructor(
     private val advisor: PlanAdvisor,
     private val clock: Clock,
     private val timeZone: TimeZone,
+    @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
 
     suspend operator fun invoke(): GeneratedPlanSummary {
@@ -60,13 +75,16 @@ class GenerateTrainingPlanUseCase @Inject constructor(
         val history = checkInRepository.latestProgressPerExercise().first()
         val today: LocalDate = clock.now().toLocalDateTime(timeZone).date
 
-        val proposal = advisor.planWeek(
-            profile = profile,
-            library = library,
-            existing = existing,
-            history = history,
-            today = today,
-        )
+        // 本地实现 = 纯计算；远端实现 = 阻塞 HTTP（DeepSeekClient 30s 超时）→ 必须在 IO 上跑。
+        val proposal = withContext(ioDispatcher) {
+            advisor.planWeek(
+                profile = profile,
+                library = library,
+                existing = existing,
+                history = history,
+                today = today,
+            )
+        }
 
         // 🔒 双保险：即使规则层漏判，写入前也再排除一次手改槽位（"天 × 动作"）。
         val blockedSlots: Set<Pair<Int, Long>> = existing
@@ -97,6 +115,8 @@ class GenerateTrainingPlanUseCase @Inject constructor(
             writtenCount = drafts.size,
             preservedCount = proposal.preservedUserEditedIds.size,
             notes = proposal.notes,
+            source = proposal.source,
+            fallbackReason = advisor.lastFallbackReason,
         )
     }
 }

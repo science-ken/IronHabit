@@ -379,4 +379,27 @@
     <string name="reason_progressive_overload">上次做满且有余量，本次加重至 %1$s kg</string>
     <string name="reason_maintain">上次未做满 / 偏吃力，本次维持 %1$s kg</string>
 
+    <!-- ===== AI 联网（v3 增量二期 · DeepSeek）===== -->
+    <!-- 来源诚实标注 -->
+    <string name="ai_source_local">本次结果来自本地规则（未联网）</string>
+    <string name="ai_source_remote">本次结果由 AI（DeepSeek）生成</string>
+    <string name="ai_source_fallback">联网失败，本次已自动改用本地规则</string>
+
+    <!-- 设置页「AI 设置」区块 -->
+    <string name="settings_section_ai">AI 设置</string>
+    <string name="settings_ai_remote_enabled">AI 联网增强</string>
+    <string name="settings_ai_remote_hint">开启后「生成计划 / 补充动作」由 AI（DeepSeek）生成；关闭、未填 Key 或断网时自动改用本地规则，App 照常可用</string>
+    <string name="settings_ai_key_label">DeepSeek API Key</string>
+    <string name="settings_ai_key_hint">粘贴 sk- 开头的密钥；加密保存在本机，不上传、不进备份</string>
+    <string name="settings_ai_key_saved">Key 已保存</string>
+    <string name="settings_ai_key_cleared">已清除 Key</string>
+    <string name="settings_ai_key_invalid">Key 格式不对：应以 sk- 开头</string>
+    <string name="settings_ai_privacy">隐私说明：开启后，你的身体档案（性别/年龄/身高/体重/伤病/目标）与动作库信息会发送给 DeepSeek 用于生成建议；关闭或断网时数据不出设备。是否发送由这个开关控制。</string>
+
+    <!-- AI 页动态徽标 -->
+    <string name="ai_badge_local">本地规则版 · 完全离线</string>
+    <string name="ai_badge_remote_on">AI 增强已开启（DeepSeek）· 断网自动回落本地规则</string>
+    <string name="ai_badge_remote_no_key">AI 增强未启用（缺 API Key）· 当前使用本地规则</string>
+    <string name="ai_action_go_settings">去开启</string>
+
 </resources>

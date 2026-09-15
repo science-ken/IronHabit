@@ -24,6 +24,12 @@ interface SettingsRepository {
     /** 观察用户档案变化（不落 Room，存 DataStore）。 */
     fun profile(): Flow<UserProfile>
 
+    /** 是否启用「AI 联网生成」（默认 false = 纯本地规则；Key 配置见 AiCredentialsStore）。 */
+    fun aiRemoteEnabled(): Flow<Boolean>
+
+    /** 开关「AI 联网生成」。 */
+    suspend fun setAiRemoteEnabled(enabled: Boolean)
+
     /** 写入性别；`null` = 清空。 */
     suspend fun setProfileGender(gender: Gender?)
 

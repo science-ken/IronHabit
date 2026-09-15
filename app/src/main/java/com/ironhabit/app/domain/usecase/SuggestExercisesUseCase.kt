@@ -1,15 +1,20 @@
 package com.ironhabit.app.domain.usecase
 
+import com.ironhabit.app.di.IoDispatcher
 import com.ironhabit.app.domain.ai.PlanAdvisor
 import com.ironhabit.app.domain.model.AdoptResult
+import com.ironhabit.app.domain.model.AdviceSource
 import com.ironhabit.app.domain.model.Exercise
 import com.ironhabit.app.domain.model.ExerciseCategory
 import com.ironhabit.app.domain.model.ExerciseSource
 import com.ironhabit.app.domain.model.ExerciseSuggestion
+import com.ironhabit.app.domain.model.SuggestionResult
 import com.ironhabit.app.domain.repository.ExerciseRepository
 import com.ironhabit.app.domain.repository.SettingsRepository
 import javax.inject.Inject
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 
 /**
  * **补充动作建议 + 一键收入**（对应预览 `AI_SUG` / `adoptAi()`，`docs/ai-coach-local.md` §4.5）。
@@ -31,16 +36,28 @@ class SuggestExercisesUseCase @Inject constructor(
     private val exerciseRepository: ExerciseRepository,
     private val settingsRepository: SettingsRepository,
     private val advisor: PlanAdvisor,
+    @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
 
-    /** 只读：产出"还能收入哪些补充动作"。 */
-    suspend fun suggest(): List<ExerciseSuggestion> {
+    /**
+     * 只读：产出"还能收入哪些补充动作"（**带来源标注**，联网一期接口变更）。
+     *
+     * 顾问调用包 `withContext(ioDispatcher)`：本地 = 纯计算，远端 = 阻塞 HTTP。
+     */
+    suspend fun suggest(): SuggestionResult {
         val profile = settingsRepository.profile().first()
         val library = library()
-        return advisor.suggestExercises(
-            profile = profile,
-            candidates = SupplementPool.entries,
-            existing = library,
+        val suggestions: List<ExerciseSuggestion> = withContext(ioDispatcher) {
+            advisor.suggestExercises(
+                profile = profile,
+                candidates = SupplementPool.entries,
+                existing = library,
+            )
+        }
+        return SuggestionResult(
+            suggestions = suggestions,
+            source = advisor.source,
+            fallbackReason = advisor.lastFallbackReason,
         )
     }
 
@@ -61,9 +78,9 @@ class SuggestExercisesUseCase @Inject constructor(
         if (library.any { it.name.trim() == target }) return AdoptResult.ALREADY_EXISTS
 
         // 幂等第二道闸：不在"还能收入"的候选里（非法输入）→ 不写入。
-        val suggestion: ExerciseSuggestion = advisor
-            .suggestExercises(profile, SupplementPool.entries, library)
-            .firstOrNull { it.name == target }
+        val suggestion: ExerciseSuggestion = withContext(ioDispatcher) {
+            advisor.suggestExercises(profile, SupplementPool.entries, library)
+        }.firstOrNull { it.name == target }
             ?: return AdoptResult.ALREADY_EXISTS
 
         exerciseRepository.upsert(

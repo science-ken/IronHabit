@@ -133,6 +133,13 @@ dependencies {
     // ---- DataStore ----
     implementation(libs.androidx.datastore.preferences)
 
+    // ---- 安全存储：DeepSeek API Key 存 EncryptedSharedPreferences（绝不进 DataStore/备份/日志）----
+    // ⚠️ 暂以字面量引入（版本 security-crypto 1.1.0-alpha06）：
+    //    曾按规范写入 gradle/libs.versions.toml，但本机在「catalog 变更 → Kotlin DSL
+    //    accessors 重新生成」这一步稳定触发 60s TimeoutException（详见汇报），
+    //    为不阻塞联调暂退回字面量；engineer 已登记，待环境问题解除后再归位 catalog。
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+
     // ---- 业务库（均为纯本地/离线）----
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.datetime)

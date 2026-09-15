@@ -1,7 +1,13 @@
 package com.ironhabit.app.di
 
+import com.ironhabit.app.data.preferences.AiCredentialsStore
+import com.ironhabit.app.domain.ai.DelegatingPlanAdvisor
 import com.ironhabit.app.domain.ai.LocalRuleAdvisor
 import com.ironhabit.app.domain.ai.PlanAdvisor
+import com.ironhabit.app.domain.ai.remote.DeepSeekApi
+import com.ironhabit.app.domain.ai.remote.DeepSeekClient
+import com.ironhabit.app.domain.ai.remote.RemoteLlmAdvisor
+import com.ironhabit.app.domain.repository.SettingsRepository
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -52,14 +58,37 @@ object AppModule {
     @Singleton
     fun provideTimeZone(): TimeZone = TimeZone.currentSystemDefault()
 
+    /** DeepSeek HTTP 客户端（`HttpURLConnection`，零第三方 HTTP 依赖）。接口化便于单测注入 fake。 */
+    @Provides
+    @Singleton
+    fun provideDeepSeekApi(): DeepSeekApi = DeepSeekClient()
+
+    /** 远端顾问：解析是纯函数（JVM 单测直接测），本类只负责"提示词 → HTTP → 解析"。 */
+    @Provides
+    @Singleton
+    fun provideRemoteLlmAdvisor(
+        api: DeepSeekApi,
+        credentialsStore: AiCredentialsStore,
+    ): RemoteLlmAdvisor = RemoteLlmAdvisor(api = api, credentials = credentialsStore)
+
     /**
-     * 计划 / 建议来源（`docs/ai-coach-local.md` §6.1）。
+     * 计划 / 建议来源（联网一期）。
      *
-     * 本期**只有一个实现**：[LocalRuleAdvisor]（`source = LOCAL_RULES`，完全离线）。
-     * 将来接入联网模型时，**只改这一处**（改为注入 `RemoteLlmAdvisor` 或按设置二选一），
-     * UI 与 UseCase **零改动**。
+     * 绑定不变（仍是 [PlanAdvisor] 接口），实现从「直接本地」换成**委托切换**：
+     * [DelegatingPlanAdvisor] 按设置开关 + Key 配置决定走远端（[RemoteLlmAdvisor]）还是
+     * 本地（[LocalRuleAdvisor]），远端任何失败自动回落本地。
+     * UseCase / UI 零改动（这正是当初做 PlanAdvisor 抽象的目的）。
      */
     @Provides
     @Singleton
-    fun providePlanAdvisor(): PlanAdvisor = LocalRuleAdvisor
+    fun providePlanAdvisor(
+        credentialsStore: AiCredentialsStore,
+        settingsRepository: SettingsRepository,
+        remoteLlmAdvisor: RemoteLlmAdvisor,
+    ): PlanAdvisor = DelegatingPlanAdvisor(
+        local = LocalRuleAdvisor,
+        remote = remoteLlmAdvisor,
+        credentials = credentialsStore,
+        settingsRepository = settingsRepository,
+    )
 }

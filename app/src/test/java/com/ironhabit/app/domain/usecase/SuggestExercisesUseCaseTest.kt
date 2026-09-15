@@ -2,6 +2,7 @@ package com.ironhabit.app.domain.usecase
 
 import com.ironhabit.app.domain.ai.LocalRuleAdvisor
 import com.ironhabit.app.domain.model.AdoptResult
+import com.ironhabit.app.domain.model.AdviceSource
 import com.ironhabit.app.domain.model.Equipment
 import com.ironhabit.app.domain.model.Exercise
 import com.ironhabit.app.domain.model.ExerciseSource
@@ -16,6 +17,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -55,6 +57,7 @@ class SuggestExercisesUseCaseTest {
             exerciseRepository = exerciseRepository,
             settingsRepository = settingsRepository,
             advisor = LocalRuleAdvisor,
+            ioDispatcher = UnconfinedTestDispatcher(),
         )
     }
 
@@ -123,17 +126,19 @@ class SuggestExercisesUseCaseTest {
         setUp()
 
         val before = useCase.suggest()
-        assertTrue("初始应有可收入的建议", before.isNotEmpty())
+        assertTrue("初始应有可收入的建议", before.suggestions.isNotEmpty())
+        assertEquals("本地规则顾问（开关默认关）→ 来源标注为 LOCAL_RULES", AdviceSource.LOCAL_RULES, before.source)
+        assertEquals("未发生回落 → fallbackReason 为 null", null, before.fallbackReason)
 
-        val target: String = before.first().name
+        val target: String = before.suggestions.first().name
         useCase.adopt(target)
 
         val after = useCase.suggest()
         assertFalse(
             "已收入的动作不得再从建议里出现（幂等：多次调用结果收敛）",
-            after.any { it.name == target },
+            after.suggestions.any { it.name == target },
         )
-        assertEquals(before.size - 1, after.size)
+        assertEquals(before.suggestions.size - 1, after.suggestions.size)
     }
 
     @Test
@@ -141,7 +146,7 @@ class SuggestExercisesUseCaseTest {
         // 膝伤 → 排除腿部候选；无器械（空集 → {NONE}）→ 排除力量候选。
         setUp(profile = UserProfile(injuryAreas = setOf(InjuryArea.KNEE)))
 
-        val suggestions = useCase.suggest()
+        val suggestions = useCase.suggest().suggestions
 
         assertFalse("膝伤 → 排除「靠墙静蹲」（腿部）", suggestions.any { it.name == "靠墙静蹲" })
         assertFalse("膝伤 → 排除「坐姿提踵」（腿部）", suggestions.any { it.name == "坐姿提踵" })

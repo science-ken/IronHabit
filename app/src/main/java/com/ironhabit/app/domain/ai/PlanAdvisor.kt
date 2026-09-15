@@ -5,6 +5,7 @@ import com.ironhabit.app.domain.model.Exercise
 import com.ironhabit.app.domain.model.ExerciseProgress
 import com.ironhabit.app.domain.model.ExerciseSuggestion
 import com.ironhabit.app.domain.model.PlanProposal
+import com.ironhabit.app.domain.model.RemoteFallbackReason
 import com.ironhabit.app.domain.model.UserProfile
 import com.ironhabit.app.domain.model.WeekPlan
 import kotlinx.datetime.LocalDate
@@ -23,6 +24,15 @@ interface PlanAdvisor {
 
     /** 建议来源（诚实标注）。 */
     val source: AdviceSource
+
+    /**
+     * 最近一次调用的**回落原因**（联网一期 §6.2 N4）。
+     *
+     * `null` = 未发生回落；非 `null` = 本次结果实际来自本地规则，但原因不是"用户选了本地"。
+     * 默认实现恒为 `null`（[LocalRuleAdvisor] 等本地实现天然不回落）；
+     * 只有 [com.ironhabit.app.domain.ai.DelegatingPlanAdvisor] 会覆写。
+     */
+    val lastFallbackReason: RemoteFallbackReason? get() = null
 
     /**
      * 【纯函数 ①】按档案生成「一周训练计划草案」。

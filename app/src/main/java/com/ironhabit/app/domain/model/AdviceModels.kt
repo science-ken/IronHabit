@@ -98,6 +98,36 @@ enum class AdoptResult {
 }
 
 /**
+ * 远端（DeepSeek）不可用时回落本地规则的原因（联网一期 §6.2 N4）。
+ *
+ * 由 [com.ironhabit.app.domain.ai.DelegatingPlanAdvisor] 记录，供 UI 显示
+ * "本次来自本地规则（联网失败）"之类的**诚实提示**。
+ */
+enum class RemoteFallbackReason {
+    /** 用户未开启「AI 联网生成」开关（默认关）。 */
+    REMOTE_DISABLED,
+
+    /** 未配置 API Key（或已清空）。 */
+    KEY_NOT_CONFIGURED,
+
+    /** 远端调用失败：网络 / 超时 / HTTP 非 200 / 响应解析失败。 */
+    REMOTE_ERROR,
+}
+
+/**
+ * 补充动作建议 + **来源标注**（联网一期：UI 据此区分"本地规则 / AI 联网生成"）。
+ *
+ * @property suggestions 建议列表（已排除库里已有的）
+ * @property source 本次实际使用的来源
+ * @property fallbackReason 走本地规则时的回落原因；`null` = 未发生回落
+ */
+data class SuggestionResult(
+    val suggestions: List<ExerciseSuggestion>,
+    val source: AdviceSource,
+    val fallbackReason: RemoteFallbackReason? = null,
+)
+
+/**
  * 计划草案（**纯数据**，不落库、不改状态）。
  *
  * "要不要写、怎么写"由 UseCase 决定（见 `docs/ai-coach-local.md` §4.2）。
@@ -105,11 +135,13 @@ enum class AdoptResult {
  * @property days 各训练日的草案（只含**可写槽位**）
  * @property preservedUserEditedIds 被完整保留的既有**用户手改行** id（**含软删除行**），供 UI 展示"已保留 N 条"
  * @property notes "为什么这样排"的确定性理由
+ * @property source 本次草案的实际来源（本地规则 / AI 联网生成；联网失败回落时为 LOCAL_RULES）
  */
 data class PlanProposal(
     val days: List<PlannedDay> = emptyList(),
     val preservedUserEditedIds: List<Long> = emptyList(),
     val notes: List<PlanNote> = emptyList(),
+    val source: AdviceSource = AdviceSource.LOCAL_RULES,
 )
 
 /** 某一天的训练草案。 */
