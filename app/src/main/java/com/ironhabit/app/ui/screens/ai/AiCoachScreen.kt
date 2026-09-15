@@ -29,6 +29,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.ExerciseSuggestion
+import com.ironhabit.app.domain.model.PlanNote
+import com.ironhabit.app.domain.model.PlanNoteDetail
+import com.ironhabit.app.domain.model.PlanReason
 import com.ironhabit.app.domain.model.SuggestionReason
 import com.ironhabit.app.ui.components.AppSnackbarHost
 import com.ironhabit.app.ui.components.EmptyState
@@ -162,7 +165,63 @@ private fun GeneratePlanBlock(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        if (result.notes.isNotEmpty()) {
+            ReasonList(
+                notes = result.notes,
+                exerciseNames = uiState.exerciseNames,
+            )
+        }
     }
+}
+
+/**
+ * 「为什么这样排」列表：把规则层给出的 [PlanNote] 渲染成"动作名 · 理由"。
+ *
+ * 规则层只产枚举与结构化参数，文案一律在此处经 `strings.xml` 映射（禁止硬编码中文）。
+ */
+@Composable
+private fun ReasonList(
+    notes: List<PlanNote>,
+    exerciseNames: Map<Long, String>,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        notes.forEach { note ->
+            val name = exerciseNames[note.exerciseId] ?: return@forEach
+            Text(
+                text = "$name · ${planReasonText(note)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/** [PlanNote] → 理由文案（含重量/组数参数）。 */
+@Composable
+private fun planReasonText(note: PlanNote): String = when (note.kind) {
+    PlanReason.PRIMARY_LIFT -> stringResource(R.string.reason_primary_lift)
+    PlanReason.SUPPLEMENT -> stringResource(R.string.reason_supplement)
+    PlanReason.EQUIPMENT_MATCHED -> stringResource(R.string.reason_equipment_matched)
+    PlanReason.INJURY_SAFE -> stringResource(R.string.reason_injury_safe)
+    PlanReason.PROGRESSIVE_OVERLOAD -> stringResource(
+        R.string.reason_progressive_overload,
+        formatWeight(note.detail),
+    )
+
+    PlanReason.MAINTAIN -> stringResource(R.string.reason_maintain, formatWeight(note.detail))
+}
+
+/** 从 [PlanNoteDetail] 取"新重量/新组数"作为展示参数。 */
+private fun formatWeight(detail: PlanNoteDetail): String = when (detail) {
+    is PlanNoteDetail.WeightDelta -> detail.newWeightKg?.let { formatKg(it) } ?: ""
+    is PlanNoteDetail.SetsDelta -> "${detail.newSets}"
+    PlanNoteDetail.None -> ""
+}
+
+/** 整数重量不带小数点（避免显示成 `20.0`）。 */
+private fun formatKg(kg: Float): String {
+    val rounded = kotlin.math.round(kg * 10) / 10f
+    return if (rounded % 1f == 0f) rounded.toInt().toString() else rounded.toString()
 }
 
 /** ③ 教练解读（含自由问答的诚实禁用说明）。 */

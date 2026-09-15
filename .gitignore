@@ -20,3 +20,6 @@ captures/
 
 # Gradle Wrapper 的 jar 必须纳入版本管理，切勿忽略
 !gradle/wrapper/gradle-wrapper.jar
+
+# Kotlin 编译错误日志（构建产物）
+.kotlin/

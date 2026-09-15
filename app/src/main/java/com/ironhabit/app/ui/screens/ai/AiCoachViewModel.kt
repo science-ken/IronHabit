@@ -4,12 +4,14 @@ import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ironhabit.app.R
+import com.ironhabit.app.domain.model.AdoptResult
 import com.ironhabit.app.domain.model.BodyMetricType
 import com.ironhabit.app.domain.model.ExerciseSuggestion
 import com.ironhabit.app.domain.model.Gender
 import com.ironhabit.app.domain.model.PlanNote
 import com.ironhabit.app.domain.model.UserProfile
 import com.ironhabit.app.domain.repository.BodyMetricRepository
+import com.ironhabit.app.domain.repository.ExerciseRepository
 import com.ironhabit.app.domain.repository.SettingsRepository
 import com.ironhabit.app.domain.usecase.GenerateTrainingPlanUseCase
 import com.ironhabit.app.domain.usecase.SuggestExercisesUseCase
@@ -45,6 +47,7 @@ data class PlanResultUi(
  * @property isGenerating 生成计划进行中（本地规则为纯计算，通常很快）
  * @property suggestions 补充动作建议（已排除动作库中已有的）
  * @property adoptedNames 本次会话已收入的动名称（幂等：重复点击不再写入）
+ * @property exerciseNames 动作 id → 名称（用于把"为什么这样排"里的 id 显示成动作名）
  * @property errorRes 页面级错误资源 id
  * @property snackbarRes 一次性提示资源 id
  * @property snackbarArgs 提示的格式化参数
@@ -57,6 +60,7 @@ data class AiCoachUiState(
     val isGenerating: Boolean = false,
     val suggestions: List<ExerciseSuggestion> = emptyList(),
     val adoptedNames: Set<String> = emptySet(),
+    val exerciseNames: Map<Long, String> = emptyMap(),
     @StringRes val errorRes: Int? = null,
     @StringRes val snackbarRes: Int? = null,
     val snackbarArgs: List<String> = emptyList(),
@@ -77,6 +81,7 @@ data class AiCoachUiState(
 class AiCoachViewModel @Inject constructor(
     settingsRepository: SettingsRepository,
     bodyMetricRepository: BodyMetricRepository,
+    exerciseRepository: ExerciseRepository,
     private val generateTrainingPlan: GenerateTrainingPlanUseCase,
     private val suggestExercises: SuggestExercisesUseCase,
 ) : ViewModel() {
@@ -107,6 +112,11 @@ class AiCoachViewModel @Inject constructor(
                 }
         }
         loadSuggestions()
+        viewModelScope.launch {
+            exerciseRepository.observeActive().collect { exercises ->
+                _uiState.update { it.copy(exerciseNames = exercises.associate { e -> e.id to e.name }) }
+            }
+        }
     }
 
     /** 生成 / 重新生成训练计划（写入本周计划，用户手改行保持不动）。 */
