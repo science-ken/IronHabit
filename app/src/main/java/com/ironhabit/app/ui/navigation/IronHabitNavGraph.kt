@@ -48,6 +48,9 @@ fun IronHabitNavGraph(
                 onOpenExerciseDetail = { exerciseId ->
                     navController.navigate(Destinations.exerciseDetail(exerciseId))
                 },
+                onEditPlan = { planId, dayOfWeek ->
+                    navController.navigate(Destinations.planAddEdit(planId = planId, dayOfWeek = dayOfWeek))
+                },
             )
         }
         composable(Destinations.TRAIN) {

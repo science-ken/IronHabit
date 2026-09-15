@@ -321,6 +321,19 @@
     <!-- 顶部徽标 -->
     <string name="ai_local_badge">本地规则版 · 完全离线，无需联网</string>
 
+    <!-- 计划行编辑 -->
+    <string name="action_edit_plan">编辑这条计划</string>
+
+    <!-- 动作来源标签 + 筛选 -->
+    <string name="label_source_built_in">内置</string>
+    <string name="label_source_custom">自建</string>
+    <string name="label_source_ai">AI 推荐</string>
+    <string name="label_filter_all">全部</string>
+
+    <!-- AI 输出明细 -->
+    <string name="ai_output_title">本次挑了这些动作</string>
+    <string name="ai_output_empty">还没有生成记录，点上面的按钮生成一次</string>
+
     <!-- 区块①：我的身体档案 -->
     <string name="ai_section_profile">我的身体档案</string>
     <string name="ai_action_edit_profile">编辑完整档案</string>
@@ -377,7 +390,9 @@
     <string name="reason_equipment_matched">按你拥有的器械选择</string>
     <string name="reason_injury_safe">避开伤病的安全替代</string>
     <string name="reason_progressive_overload">上次做满且有余量，本次加重至 %1$s kg</string>
+    <string name="reason_progressive_overload_sets">上次做满且有余量（自重），本次增至 %1$s 组</string>
     <string name="reason_maintain">上次未做满 / 偏吃力，本次维持 %1$s kg</string>
+    <string name="reason_maintain_plain">上次未做满 / 偏吃力，本次维持原目标</string>
 
     <!-- ===== AI 联网（v3 增量二期 · DeepSeek）===== -->
     <!-- 来源诚实标注 -->

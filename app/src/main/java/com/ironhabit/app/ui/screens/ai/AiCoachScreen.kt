@@ -179,49 +179,92 @@ private fun GeneratePlanBlock(
         )
         SourceLine(source = result.source, fallback = result.fallbackReason)
         if (result.notes.isNotEmpty()) {
-            ReasonList(
+            AiOutputCard(
                 notes = result.notes,
                 exerciseNames = uiState.exerciseNames,
+                source = result.source,
             )
         }
     }
 }
 
 /**
- * 「为什么这样排」列表：把规则层给出的 [PlanNote] 渲染成"动作名 · 理由"。
+ * 「本次挑了这些动作」——把规则/AI 给出的每一条选择**连同理由**摊开给用户看。
  *
- * 规则层只产枚举与结构化参数，文案一律在此处经 `strings.xml` 映射（禁止硬编码中文）。
+ * 只报"写了几条"看不出差别，这里逐条列出「动作名 · 为什么选它」：
+ * 主项 / 辅助 / 按器械 / 避伤病 / 加重 / 维持。来源标签一并显示（AI 还是本地规则）。
  */
 @Composable
-private fun ReasonList(
+private fun AiOutputCard(
     notes: List<PlanNote>,
     exerciseNames: Map<Long, String>,
+    source: AdviceSource,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        notes.forEach { note ->
-            val name = exerciseNames[note.exerciseId] ?: return@forEach
-            Text(
-                text = "$name · ${planReasonText(note)}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = stringResource(R.string.ai_output_title),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = stringResource(
+                        if (source == AdviceSource.REMOTE_LLM) {
+                            R.string.ai_source_remote
+                        } else {
+                            R.string.ai_source_local
+                        },
+                    ),
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
+            notes.forEach { note ->
+                val name = exerciseNames[note.exerciseId] ?: return@forEach
+                Text(
+                    text = "$name · ${planReasonText(note)}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
         }
     }
 }
 
-/** [PlanNote] → 理由文案（含重量/组数参数）。 */
+/** [PlanNote] → 理由文案。按明细类型选句子：重量变化说 kg、组数变化说组、无参数说"维持原目标"。 */
 @Composable
 private fun planReasonText(note: PlanNote): String = when (note.kind) {
     PlanReason.PRIMARY_LIFT -> stringResource(R.string.reason_primary_lift)
     PlanReason.SUPPLEMENT -> stringResource(R.string.reason_supplement)
     PlanReason.EQUIPMENT_MATCHED -> stringResource(R.string.reason_equipment_matched)
     PlanReason.INJURY_SAFE -> stringResource(R.string.reason_injury_safe)
-    PlanReason.PROGRESSIVE_OVERLOAD -> stringResource(
-        R.string.reason_progressive_overload,
-        formatWeight(note.detail),
-    )
+    PlanReason.PROGRESSIVE_OVERLOAD -> when (val detail = note.detail) {
+        is PlanNoteDetail.SetsDelta ->
+            stringResource(R.string.reason_progressive_overload_sets, detail.newSets.toString())
+        else -> stringResource(
+            R.string.reason_progressive_overload,
+            formatWeight(detail),
+        )
+    }
 
-    PlanReason.MAINTAIN -> stringResource(R.string.reason_maintain, formatWeight(note.detail))
+    PlanReason.MAINTAIN -> when (note.detail) {
+        is PlanNoteDetail.WeightDelta ->
+            stringResource(R.string.reason_maintain, formatWeight(note.detail))
+        else -> stringResource(R.string.reason_maintain_plain)
+    }
 }
 
 /** 从 [PlanNoteDetail] 取"新重量/新组数"作为展示参数。 */

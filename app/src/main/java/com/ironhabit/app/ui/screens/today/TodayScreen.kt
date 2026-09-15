@@ -61,6 +61,8 @@ fun TodayScreen(
     onCreateHabit: () -> Unit,
     onEditHabit: (Long) -> Unit = {},
     onOpenExerciseDetail: (Long) -> Unit = {},
+    /** 编辑今日某条计划（参数：计划 id、星期 1..7）。今日页此前只能打卡、不能改，这是补上的入口。 */
+    onEditPlan: (Long, Int) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
     viewModel: TodayViewModel = hiltViewModel(),
 ) {
@@ -169,6 +171,7 @@ fun TodayScreen(
                             onOpenSheet = { sheetItem = item },
                             onToggleSet = { setIndex -> viewModel.onToggleSet(item, setIndex) },
                             onSetRpe = { rpe -> viewModel.onSetRpe(item, rpe) },
+                            onEditPlan = { onEditPlan(item.plan.id, item.plan.dayOfWeek) },
                             enabled = !isFutureDay,
                         )
                     }

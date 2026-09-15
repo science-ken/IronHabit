@@ -30,6 +30,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,6 +41,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.Exercise
 import com.ironhabit.app.domain.model.ExerciseCategory
+import com.ironhabit.app.domain.model.ExerciseSource
+import com.ironhabit.app.ui.components.ExerciseSourceChip
+import com.ironhabit.app.ui.components.exerciseSourceLabelRes
+import com.ironhabit.app.ui.components.hasVisibleSourceChip
 import com.ironhabit.app.domain.model.WeekPlan
 import com.ironhabit.app.ui.components.EmptyState
 import com.ironhabit.app.ui.components.LoadingSkeleton
@@ -274,14 +279,31 @@ private fun LibrarySection(
         return
     }
 
+    // 来源筛选：全部 / 内置 / 自建 / AI 推荐（仅影响启用列表，已停用分组始终可见以便恢复）
+    var sourceFilter by rememberSaveable { mutableStateOf(ExerciseSource.BUILT_IN) }
+    var showAll by rememberSaveable { mutableStateOf(true) }
+    val visibleExercises = remember(uiState.exercises, sourceFilter, showAll) {
+        if (showAll) uiState.exercises else uiState.exercises.filter { it.source == sourceFilter }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        SourceFilterRow(
+            showAll = showAll,
+            selected = sourceFilter,
+            onSelectAll = { showAll = true },
+            onSelect = { source ->
+                showAll = false
+                sourceFilter = source
+            },
+        )
+
         ExerciseCategory.entries.forEach { category ->
-            val exercises = uiState.exercises.filter { it.category == category }
+            val exercises = visibleExercises.filter { it.category == category }
             if (exercises.isNotEmpty()) {
                 CategoryHeader(text = stringResource(categoryLabelRes(category)))
                 exercises.forEach { exercise ->
@@ -304,6 +326,34 @@ private fun LibrarySection(
                     onToggleActive = { active -> onToggleActive(exercise.id, active) },
                 )
             }
+        }
+    }
+}
+
+/**
+ * 动作来源筛选条：全部 / 内置 / 自建 / AI 推荐。
+ *
+ * 目的：用户自建与 AI 推荐的动作混在 40+ 个内置动作里很难找，这里给一个一键筛出。
+ */
+@Composable
+private fun SourceFilterRow(
+    showAll: Boolean,
+    selected: ExerciseSource,
+    onSelectAll: () -> Unit,
+    onSelect: (ExerciseSource) -> Unit,
+) {
+    Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+        FilterChip(
+            selected = showAll,
+            onClick = onSelectAll,
+            label = { Text(text = stringResource(R.string.label_filter_all)) },
+        )
+        ExerciseSource.entries.forEach { source ->
+            FilterChip(
+                selected = !showAll && selected == source,
+                onClick = { onSelect(source) },
+                label = { Text(text = stringResource(exerciseSourceLabelRes(source))) },
+            )
         }
     }
 }
@@ -336,11 +386,16 @@ private fun ExerciseRow(
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = exercise.name,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Text(
+                    text = exercise.name,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                if (exercise.hasVisibleSourceChip()) {
+                    ExerciseSourceChip(source = exercise.source)
+                }
+            }
             val muscle = exercise.primaryMuscleGroup
             if (!muscle.isNullOrBlank()) {
                 Text(

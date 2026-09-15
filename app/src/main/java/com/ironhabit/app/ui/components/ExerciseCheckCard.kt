@@ -13,6 +13,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
@@ -65,6 +66,8 @@ fun ExerciseCheckCard(
     enabled: Boolean = true,
     onToggleSet: (Int) -> Unit = {},
     onSetRpe: (Int) -> Unit = {},
+    /** 编辑本条计划（跳转计划编辑页）；未来日只读时由调用方禁用。 */
+    onEditPlan: () -> Unit = {},
 ) {
     val colorScheme = MaterialTheme.colorScheme
     val completed = item.isCompleted
@@ -115,6 +118,10 @@ fun ExerciseCheckCard(
                         text = item.exercise.name,
                         style = MaterialTheme.typography.titleMedium,
                     )
+                    // 自建 / AI 推荐动作打标，一眼看出这条来自哪里
+                    if (item.exercise.hasVisibleSourceChip()) {
+                        ExerciseSourceChip(source = item.exercise.source)
+                    }
                 }
                 Text(
                     text = goalText,
@@ -169,6 +176,14 @@ fun ExerciseCheckCard(
                         imageVector = Icons.Filled.Description,
                         // 图标行为 = 打开动作详情，contentDescription 必须与行为一致
                         contentDescription = stringResource(R.string.title_exercise_detail),
+                    )
+                }
+                // 编辑本条计划（组数/次数/重量）。未来日为只读 → 不给编辑。
+                IconButton(onClick = onEditPlan, enabled = enabled) {
+                    Icon(
+                        imageVector = Icons.Filled.Edit,
+                        // 图标行为 = 编辑本条计划，contentDescription 必须与行为一致
+                        contentDescription = stringResource(R.string.action_edit_plan),
                     )
                 }
             }
