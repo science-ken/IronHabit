@@ -8,6 +8,7 @@ import androidx.room.Transaction
 import androidx.room.Update
 import com.ironhabit.app.data.local.dto.ExerciseProgressRaw
 import com.ironhabit.app.data.local.entity.CheckInEntity
+import com.ironhabit.app.domain.model.MAX_SETS
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -102,6 +103,68 @@ interface CheckInDao {
             "WHERE exercise_id = :exerciseId AND date_epoch_day = :epochDay"
     )
     suspend fun updateSetMask(exerciseId: Long, epochDay: Long, mask: Int, completedSets: Int)
+
+    /**
+     * 逐组勾选的**原子**读改写：缺行则插种子 → 读 mask → `XOR` 翻转第 [setIndex] 位 → 同写两列。
+     *
+     * 修复（BUG 1 — 静默丢更新）：此前 `CheckInRepositoryImpl.toggleSet` 自己分三条语句做
+     * 「`SELECT` 判空 → 可能 `INSERT` 种子 → 再 `SELECT` 取 mask → `UPDATE`」，**三条语句之间
+     * 没有事务**。两次快速连点（或两个并发收集器）会读到**同一个**旧 mask，各自 `xor` 后写回，
+     * 于是其中一次勾选被静默吞掉；种子插入还会撞上 `UNIQUE(exercise_id, date_epoch_day)` 的
+     * `ABORT` 冲突而抛异常（真机即崩）。
+     *
+     * 本方法把整段读改写收进**同一个事务**：Room 会把并发的事务体串行化，第二个调用读到的一定是
+     * 第一个提交后的 mask，故两次点击不会互相覆盖；种子行也已在同一事务内落库，第二个调用
+     * 直接走 `UPDATE`，不再撞唯一约束。
+     *
+     * **不变量**：`completed_sets` 是 `completed_sets_mask` 的派生列，
+     * 二者**必须同写**（此处复用 [updateSetMask]，单条 `UPDATE` 同时写两列），
+     * 从而恒有 `completed_sets == completed_sets_mask.countOneBits()`。
+     *
+     * **绝不抛异常**：[setIndex] 越界（`!in 0 until MAX_SETS`，含负数）时**静默忽略**并返回
+     * 当前 mask（无行则返回 `0`）—— 与仓库层既有策略一致（真机崩溃比一次错点严重得多）。
+     *
+     * @param seed 行不存在时插入的模板行；其 `exerciseId` / `dateEpochDay` 以入参为准，
+     *   两个 mask 列一律**强制为 `0`**（本方法只做「从空开始翻转」，不接受调用方预处理过的位图）。
+     *   行已存在时该参数被忽略。
+     * @return 事务提交后的 `completed_sets_mask`
+     */
+    @Transaction
+    suspend fun toggleSetBit(
+        exerciseId: Long,
+        epochDay: Long,
+        setIndex: Int,
+        seed: CheckInEntity,
+    ): Int {
+        if (setIndex !in 0 until MAX_SETS) {
+            return getForExerciseOnDate(exerciseId, epochDay)?.completedSetsMask ?: 0
+        }
+
+        // 行不存在时先落一条空记录，保证后续 UPDATE 命中。此处**直接 INSERT**（而非 upsert）：
+        // 同一事务内上一条 SELECT 已确认该 `(exercise_id, date_epoch_day)` 槽位为空，
+        // 事务串行化保证并发调用不会插在 SELECT 与 INSERT 之间，故不会触发 ABORT 冲突；
+        // 全新行也没有旧 rpe 需要保留（upsert 的合并逻辑在此无用）。
+        if (getForExerciseOnDate(exerciseId, epochDay) == null) {
+            insert(
+                seed.copy(
+                    exerciseId = exerciseId,
+                    dateEpochDay = epochDay,
+                    completedSetsMask = 0,
+                    completedSets = 0,
+                ),
+            )
+        }
+
+        val currentMask: Int = getForExerciseOnDate(exerciseId, epochDay)?.completedSetsMask ?: 0
+        val newMask: Int = currentMask xor (1 shl setIndex)
+        updateSetMask(
+            exerciseId = exerciseId,
+            epochDay = epochDay,
+            mask = newMask,
+            completedSets = newMask.countOneBits(),
+        )
+        return newMask
+    }
 
     /** 写入 / 清除 RPE（`1..10`，可空）。 */
     @Query(

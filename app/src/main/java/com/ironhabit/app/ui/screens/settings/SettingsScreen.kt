@@ -381,7 +381,7 @@ private fun AiSettingsSection(
     )
     if (uiState.hasApiKey) {
         TextButton(onClick = viewModel::onApiKeyClear) {
-            Text(text = stringResource(R.string.settings_ai_key_cleared))
+            Text(text = stringResource(R.string.action_clear_key))
         }
     }
 

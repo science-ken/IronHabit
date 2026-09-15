@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.BodyMetric
 import com.ironhabit.app.domain.model.BodyMetricType
+import com.ironhabit.app.domain.model.InputLimits
 import com.ironhabit.app.domain.repository.BodyMetricRepository
 import com.ironhabit.app.domain.util.DateUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -128,10 +129,16 @@ class BodyMetricsViewModel @Inject constructor(
 
     fun onConsumeSnackbar() = _form.update { it.copy(snackbarRes = null) }
 
-    /** 新增一条身体数据（日期 = 今天）。 */
+    /**
+     * 新增一条身体数据（日期 = 今天）。
+     *
+     * 数值必须落在**当前指标类型**的区间内（[InputLimits.rangeFor]：体重 `20..400 kg`、
+     * 体脂 `3..70 %`、肌肉量 `5..100 kg`、围度 `20..300 cm`），且必须是有限值 ——
+     * 「不是数字」与「越界」（含 `NaN` / `±Infinity`）共用同一条提示，**一律不写库**。
+     */
     fun onAddRecord() {
         val value = _form.value.valueText.trim().toFloatOrNull()
-        if (value == null) {
+        if (value == null || !InputLimits.isValidBodyMetric(selectedType, value)) {
             _form.update { it.copy(numberErrorRes = R.string.error_invalid_number) }
             return
         }

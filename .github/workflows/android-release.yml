@@ -11,6 +11,11 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    # 安全约定（勿改）：
+    #   1) 签名私钥只以 Secret 形式保存，永不写入日志、永不作为 Artifact 上传；
+    #   2) 缺少任一签名 Secret 时直接失败（不再回退到临时 keystore，避免签名身份泄露且无法吊销）；
+    #   3) 任何步骤都不得 echo / cat 出 Secret 的值。
+    # keystore 的本地生成与 4 个 Secret 的说明见 docs/CI.md 第 2、3 节。
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -37,22 +42,30 @@ jobs:
       - name: Prepare signing config
         env:
           SIGNING_KEY_B64: ${{ secrets.SIGNING_KEY }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          if [ -z "$SIGNING_KEY_B64" ]; then
-            echo "::warning::未检测到 SIGNING_KEY Secret，改用临时 keystore。生成的 APK 签名每次构建都会变化，无法覆盖安装升级。请先运行 generate-keystore 工作流并配置 Secret。"
-            keytool -genkeypair -v -keystore keystore.jks -alias ironhabit \
-              -keyalg RSA -keysize 2048 -validity 10000 \
-              -storepass ironhabitStore123 -keypass ironhabitKey123 \
-              -dname "CN=IronHabit, OU=Personal, O=IronHabit, L=NA, ST=NA, C=CN"
-            echo "KEY_STORE_PASSWORD=ironhabitStore123" >> "$GITHUB_ENV"
-            echo "KEY_ALIAS=ironhabit" >> "$GITHUB_ENV"
-            echo "KEY_PASSWORD=ironhabitKey123" >> "$GITHUB_ENV"
-          else
-            echo "$SIGNING_KEY_B64" | base64 -d > keystore.jks
-            echo "KEY_STORE_PASSWORD=${{ secrets.KEY_STORE_PASSWORD }}" >> "$GITHUB_ENV"
-            echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> "$GITHUB_ENV"
-            echo "KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}" >> "$GITHUB_ENV"
+          missing=""
+          if [ -z "$SIGNING_KEY_B64" ]; then missing="$missing SIGNING_KEY"; fi
+          if [ -z "$SIGNING_STORE_PASSWORD" ]; then missing="$missing KEY_STORE_PASSWORD"; fi
+          if [ -z "$SIGNING_KEY_ALIAS" ]; then missing="$missing KEY_ALIAS"; fi
+          if [ -z "$SIGNING_KEY_PASSWORD" ]; then missing="$missing KEY_PASSWORD"; fi
+          if [ -n "$missing" ]; then
+            echo "::error::缺少签名所需的 Secret：$missing"
+            echo "::error::本流水线不再生成临时 keystore（那会泄露签名私钥），缺少 Secret 时直接失败。"
+            echo "::error::请在 仓库 Settings → Secrets and variables → Actions 中配置全部 4 个 Secret：SIGNING_KEY、KEY_STORE_PASSWORD、KEY_ALIAS、KEY_PASSWORD。"
+            echo "::error::keystore 需在你自己电脑上生成、并取出 base64 填入 SIGNING_KEY，完整步骤见 docs/CI.md 第 2 节；Secret 配置位置见第 3 节。"
+            exit 1
           fi
+          echo "$SIGNING_KEY_B64" | base64 -d > keystore.jks
+          if [ ! -s keystore.jks ]; then
+            echo "::error::SIGNING_KEY 解码失败或为空：请确认该 Secret 的值是 keystore 文件的一整行 base64（生成方法见 docs/CI.md 第 2.2 节）。"
+            exit 1
+          fi
+          echo "KEY_STORE_PASSWORD=$SIGNING_STORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "KEY_ALIAS=$SIGNING_KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "KEY_PASSWORD=$SIGNING_KEY_PASSWORD" >> "$GITHUB_ENV"
 
       - name: Write keystore.properties
         run: |

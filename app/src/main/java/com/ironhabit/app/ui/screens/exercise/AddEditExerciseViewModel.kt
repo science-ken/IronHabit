@@ -8,6 +8,7 @@ import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.Exercise
 import com.ironhabit.app.domain.model.ExerciseCategory
 import com.ironhabit.app.domain.model.ExerciseSource
+import com.ironhabit.app.domain.model.InputLimits
 import com.ironhabit.app.domain.repository.ExerciseRepository
 import com.ironhabit.app.ui.navigation.Destinations
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -169,7 +170,11 @@ class AddEditExerciseViewModel @Inject constructor(
     /**
      * 校验并保存。
      *
-     * 校验顺序：名称非空 → 数字合法 → 名称不重复（`nameExists` 排除自身）。
+     * 校验顺序：名称非空 → 数字合法且在范围内 → 名称不重复（`nameExists` 排除自身）。
+     * 数值范围以 [InputLimits] 为唯一真源：`defaultSets` `1..31`（= 打卡位图位宽）、
+     * `defaultReps` `1..100`、`defaultDurationSec` `1..7200`（秒口径；上限刻意大于内置有氧
+     * 动作的最大默认值 `2400`，否则编辑内置动作会被自身校验拦下）。「不是数字」与「越界」
+     * 共用同一条提示（[R.string.error_invalid_number]，不新增资源）。
      * 内置动作仅允许改默认值/肌群/备注，名称与分类保持不变。
      * 保存时强制 `source = CUSTOM`（用户编辑动作 → 降级为自定义）。
      */
@@ -185,8 +190,12 @@ class AddEditExerciseViewModel @Inject constructor(
             _uiState.update { it.copy(nameErrorRes = R.string.error_name_empty) }
             return
         }
-        val durationValid = durationInput.isEmpty() || duration != null
-        if (sets == null || reps == null || !durationValid) {
+        // 留空 = 不设默认时长（合法，落 null）；填了就必须落在范围内，越界一律拒绝写入。
+        val durationValid = durationInput.isEmpty() ||
+            (duration != null && InputLimits.isValidDurationSec(duration))
+        if (sets == null || !InputLimits.isValidSets(sets) ||
+            reps == null || !InputLimits.isValidReps(reps) || !durationValid
+        ) {
             _uiState.update { it.copy(numberErrorRes = R.string.error_invalid_number) }
             return
         }

@@ -177,7 +177,7 @@ internal object RemotePromptBuilder {
 3. 用户伤病的部位必须避开其对应肌群（如膝伤避开腿部/臀腿/全身类动作）。
 4. 每周安排 3 个训练日，优先周一(1)、周三(3)、周五(5)；dayOfWeek 取值 1..7（1=周一，7=周日）。
 5. focus 只能取：FULL_BODY / LOWER_BODY / UPPER_PUSH / UPPER_PULL / CARDIO_CORE。
-6. targetSets 为 1..50 的整数，targetReps 为 1..100 的整数；自重动作 targetWeightKg 填 null。
+6. targetSets 为 1..31 的整数（31 是逐组打卡位图的上限），targetReps 为 1..100 的整数；自重动作 targetWeightKg 填 null。
 7. 优先使用用户做过的动作并参考 history：上次做满且 RPE<=6 可小幅加重（约 +2.5kg），否则维持。
 8. analysis：1~3 句简体中文，说明这份计划如何结合用户的身体档案（性别/年龄/身高/目标/伤病/可用器械）与近次完成情况来安排训练日、训练重点与动作，让用户理解"为什么这样练"；若档案信息不足，说明"已用基础目标值，练几次后会自动进阶"。
 

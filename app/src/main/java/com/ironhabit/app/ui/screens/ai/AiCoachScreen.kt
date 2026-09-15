@@ -105,6 +105,16 @@ fun AiCoachScreen(
                 onGoSettings = onEditProfile,
             )
 
+            // 失败必须可见：生成 / 建议加载 / 收入失败都在这里给内联错误卡 + 一键重试，
+            // 而不是像以前那样"什么都没发生"。放在 when 之外，加载中也照样能看到错误。
+            val errorRes: Int? = uiState.errorRes
+            if (errorRes != null) {
+                ErrorCard(
+                    message = stringResource(errorRes),
+                    onRetry = viewModel::onRetry,
+                )
+            }
+
             when {
                 uiState.isLoading -> {
                     LoadingSkeleton()
@@ -680,6 +690,44 @@ private fun badgeRes(aiRemoteEnabled: Boolean, hasApiKey: Boolean): Int = when {
     aiRemoteEnabled && hasApiKey -> R.string.ai_badge_remote_on
     aiRemoteEnabled -> R.string.ai_badge_remote_no_key
     else -> R.string.ai_badge_local
+}
+
+/**
+ * 内联错误卡：把「生成 / 建议加载 / 收入」的失败摆到页面上，并给一个**真正有用**的重试按钮。
+ *
+ * 配色用 `errorContainer` 与正常卡片区分；按钮文案走 [R.string.action_retry]（不在状态里存字符串）。
+ *
+ * @param message 已由调用方 `stringResource` 解析好的错误文案
+ * @param onRetry 重试回调（ViewModel 会重跑失败的那个动作）
+ */
+@Composable
+private fun ErrorCard(
+    message: String,
+    onRetry: () -> Unit,
+) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer,
+            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        ),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = onRetry) {
+                Text(text = stringResource(R.string.action_retry))
+            }
+        }
+    }
 }
 
 @Composable

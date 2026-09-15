@@ -36,7 +36,7 @@ class RemoteAdvisorException(message: String, cause: Throwable? = null) : Except
  * ## 三道防线（每条都有单测）
  * 1. `exerciseId` 不在 [library] → **丢弃该条**（不崩、不写入幻觉 id）；
  * 2. JSON 缺字段 / 畸形 / 不是合法 JSON → 抛 [RemoteAdvisorException]，由委托层回落本地；
- * 3. `targetSets` / `targetReps` ≤ 0 或离谱 → **coerce** 到 `1..50` / `1..100`；
+ * 3. `targetSets` / `targetReps` ≤ 0 或离谱 → **coerce** 到 `1..31` / `1..100`（31 = 打卡位图宽度）；
  *    `targetWeightKg` ≤ 0 → 视为自重（`null`）。
  *
  * 额外兜底（与本地规则层同口径）：`dayOfWeek` clamp 到 `1..7`；
@@ -278,6 +278,15 @@ private const val DEFAULT_REPS: Int = 12
 private const val MIN_DAY_OF_WEEK: Int = 1
 private const val MAX_DAY_OF_WEEK: Int = 7
 private const val MIN_SETS: Int = 1
-private const val MAX_SETS: Int = 50
+
+/**
+ * 组数上界 = [com.ironhabit.app.domain.model.MAX_SETS]（31）。
+ *
+ * 与 `CheckIn` 的逐组打卡位图同宽：`completed_sets_mask` 是 `Int`，第 32 组无法表示。
+ * 若这里放宽到 50（历史值），AI 会写出"目标 40 组、但最多只能勾满 31 组"的行，
+ * 该行的 `lastSetsCompleted >= lastTargetSets` 永远不成立 → 渐进超负荷永久失效。
+ * 同时与表单校验（`InputLimits.MAX_SETS`）保持同一口径。
+ */
+private const val MAX_SETS: Int = 31
 private const val MIN_REPS: Int = 1
 private const val MAX_REPS: Int = 100

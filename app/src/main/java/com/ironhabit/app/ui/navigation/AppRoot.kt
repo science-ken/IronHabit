@@ -103,6 +103,7 @@ private fun titleResFor(entry: NavBackStackEntry?): Int {
         Destinations.TODAY -> R.string.title_today
         Destinations.TRAIN -> R.string.title_train
         Destinations.DISCIPLINE -> R.string.title_discipline
+        Destinations.AI_COACH -> R.string.title_ai_coach
         Destinations.PROFILE -> R.string.title_profile
         Destinations.EXERCISE_ADD_EDIT_PATTERN ->
             if (isEditing(entry, Destinations.EXERCISE_ADD_EDIT_ARG)) {

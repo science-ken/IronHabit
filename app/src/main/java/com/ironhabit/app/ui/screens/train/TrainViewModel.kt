@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -47,6 +48,9 @@ class TrainViewModel @Inject constructor(
     /** 当前选中星期（`1..7`）。 */
     private val selectedDay = MutableStateFlow(todayWeekday())
 
+    /** 数据流重订阅触发器（失败重试）：自增即让下面的聚合流整体重订阅一次。 */
+    private val retryTrigger = MutableStateFlow(0L)
+
     /** 所选星期的计划（携带 day 以便区分新旧）。 */
     private val plansFlow: Flow<Pair<Int, List<WeekPlan>>> =
         selectedDay.flatMapLatest { day ->
@@ -63,24 +67,30 @@ class TrainViewModel @Inject constructor(
                     .sortedByDescending { it.epochDay }
             }
 
-    private val dataState: StateFlow<TrainUiState> = combine(
-        plansFlow,
-        exerciseRepository.observeActive(),
-        exerciseRepository.observeInactive(),
-        historyFlow,
-    ) { dayPlans, exercises, disabledExercises, history ->
-        TrainUiState(
-            isLoading = false,
-            selectedDay = dayPlans.first,
-            plans = dayPlans.second,
-            exercises = exercises,
-            disabledExercises = disabledExercises,
-            exerciseNameById = exercises.associate { exercise -> exercise.id to exercise.name },
-            history = history,
-        )
-    }
-        .catch {
-            emit(TrainUiState(isLoading = false, errorRes = R.string.error_load_failed))
+    private val dataState: StateFlow<TrainUiState> = retryTrigger
+        .flatMapLatest {
+            combine(
+                plansFlow,
+                exerciseRepository.observeActive(),
+                exerciseRepository.observeInactive(),
+                historyFlow,
+            ) { dayPlans, exercises, disabledExercises, history ->
+                TrainUiState(
+                    isLoading = false,
+                    selectedDay = dayPlans.first,
+                    plans = dayPlans.second,
+                    exercises = exercises,
+                    disabledExercises = disabledExercises,
+                    exerciseNameById = exercises.associate { exercise -> exercise.id to exercise.name },
+                    history = history,
+                )
+            }
+                // 每次（重）订阅都先发一帧「加载中」：否则重试再次失败时，
+                // 与已缓存的错误态完全相同的值会被 StateFlow 去重丢掉，界面会永远卡在重试前的状态。
+                .onStart { emit(TrainUiState()) }
+                .catch {
+                    emit(TrainUiState(isLoading = false, errorRes = R.string.error_load_failed))
+                }
         }
         .stateIn(
             scope = viewModelScope,
@@ -117,6 +127,12 @@ class TrainViewModel @Inject constructor(
     /** 消费一次 Snackbar。 */
     fun onConsumeSnackbar() {
         _uiState.update { state -> state.copy(snackbarRes = null) }
+    }
+
+    /** 加载失败后重试（重新订阅数据源；Room 数据流本身是响应式的，这里只是把整条聚合流重订一次）。 */
+    fun onRetry() {
+        _uiState.update { state -> state.copy(isLoading = true, errorRes = null) }
+        retryTrigger.update { it + 1L }
     }
 
     // ---------------- 内部 ----------------

@@ -46,8 +46,31 @@ data class Habit(
     val sortOrder: Int = 0,
     val createdAt: Long = 0L,
 ) {
+    /**
+     * 「应做日」星期集合（`1` = 周一 … `7` = 周日）；`null` = **每天都应做**。
+     *
+     * 供 [com.ironhabit.app.domain.util.StreakCalculator] 的应做日感知计数使用：
+     * - [HabitFrequency.DAILY] → `null`（每天都算，旧口径）；
+     * - [HabitFrequency.WEEKLY] → 由 [weeklyDaysMask] 展开（bit0 = 周一）；
+     *   掩码为空（理论不可达，UI 会把空掩码兜成全周）时同样返回 `null`。
+     */
+    val expectedWeekdays: Set<Int>?
+        get() {
+            if (frequency != HabitFrequency.WEEKLY) return null
+            val weekdays = (FIRST_WEEKDAY..LAST_WEEKDAY)
+                .filter { day -> (weeklyDaysMask shr (day - FIRST_WEEKDAY)) and 1 == 1 }
+                .toSet()
+            return weekdays.takeIf { it.isNotEmpty() }
+        }
+
     companion object {
         /** 全周掩码：bit0..bit6 全为 1。 */
         const val WEEKLY_DAYS_ALL: Int = 0x7F
+
+        /** 周一（`LocalDate.dayOfWeek.value` 口径）。 */
+        private const val FIRST_WEEKDAY: Int = 1
+
+        /** 周日。 */
+        private const val LAST_WEEKDAY: Int = 7
     }
 }

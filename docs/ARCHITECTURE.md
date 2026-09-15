@@ -94,7 +94,7 @@ Gradle 在 Windows 中文环境下抛出的系统级错误，**错误信息是 G
 | # | 难点 | 本设计的解法 |
 |---|------|-------------|
 | D1 | **本机长期无 JDK / 无 Android SDK，无法本地出包**（v1 设计时的前提） | ⚠️ **前提已变更（基线更正）**：本机现已具备完整工具链，**可本地出包**（详见下方「本地构建环境与已知坑」）。原「全部构建搬到 GitHub Actions」的方案**保留**，用途收敛为产出**已签名 release APK**（keystore Secret 在 CI 侧，见 §附 CI 配方） |
-| D2 | **keystore 无法本地生成**（用户无 JDK 跑不了 keytool） | 提供独立 workflow `generate-keystore.yml`（workflow_dispatch）：在 CI 里用 JDK 自带 `keytool` 生成 `.jks` 并上传 artifact；用户下载后将其 base64 存入 `SIGNING_KEY` Secret。主构建 workflow 检测到 Secret 缺失时**自动降级**为"临时 keystore"并在日志中告警 |
+| D2 | **keystore 无法本地生成**（v1 设计时假设用户无 JDK、跑不了 keytool） | ⚠️ **方案已作废（安全更正）**：原独立 workflow `generate-keystore.yml`（CI 用 `keytool` 生成 `.jks` 并上传 artifact）**已删除**——它把 base64 私钥 `cat` 进 Actions 日志、把 `.jks` 与 `.base64` 上传成**可下载的 Artifact**，口令还是写死的公开值，等于把**签名身份**连同口令一起公开，而 Android 的签名身份**无法吊销**。现口径：keystore 由用户**在本机**生成（见 `docs/CI.md` §2）；`android-release.yml` 在 4 个 Secret 缺任意一个时**立刻失败**，**不再**生成"临时 keystore" |
 | D3 | **streak 跨天 / 补卡 / 断档**边界 | 全部日期以 **`LocalDate.toEpochDays()`（返回 `Int`，落库时 `.toLong()`）为主键口径**（见 7.3），streak 用**纯函数 `StreakCalculator`** 从日志现算，杜绝"缓存与日志不一致"这类 bug；补卡 = 对历史 `dateEpochDay` 做 upsert，天然融入 streak 计算 |
 | D4 | **杀进程数据不丢 + 飞行模式全可用** | Room 落盘为唯一真源；无任何网络依赖库（依赖清单内**无** Retrofit/OkHttp/Ktor）；`Application` 只在首启做一次预置动作写入（幂等 `OnConflictStrategy.IGNORE`） |
 | D5 | **"一键打卡"零摩擦 + 可选补录** | 卡片点击 → `QuickCheckInUseCase` 用计划目标值直接 upsert；长按/展开 → `DetailedCheckInUseCase` 写组/次/重量。「同一动作同一天」用 `UNIQUE(exercise_id, date_epoch_day)`（表列名 snake_case）保证**幂等**，重复点不会产生脏数据 |
@@ -254,8 +254,12 @@ export ANDROID_HOME="C:/Users/science/AppData/Local/Android/Sdk"
 | `README.md` | 项目说明 + 首次部署 / 出包 / 换机安装步骤 |
 | `.github/workflows/android-ci.yml` | push/PR 触发：编译 + 单测 + 产出 debug APK |
 | `.github/workflows/android-release.yml` | 打 tag / 手动触发：构建**已签名** release APK + 上传 artifact + 建 Release |
-| `.github/workflows/generate-keystore.yml` | 手动触发：CI 内用 keytool 生成 `.jks` 并上传，供用户存入 Secret |
-| `docs/CI.md` | keystore 生成 → Secret 配置 → 出包 → 手机安装 的图文步骤 |
+| `.github/workflows/generate-keystore.yml` | ⚠️ **（已删除 · 保留登记）**原职责「CI 内用 keytool 生成 `.jks` 并上传 artifact，供用户存入 Secret」**已作废**：私钥进日志 / 变成可下载 Artifact = **公开签名身份**（原因见 §1.1 D2 与 §附 B）；改由用户**在本机**生成（`docs/CI.md` §2） |
+| `docs/CI.md` | keystore（**本机**生成）→ Secret 配置 → 出包 → 手机安装 的图文步骤 |
+
+> ⚠️ **基线更正（安全）**：本表第 14 项 `.github/workflows/generate-keystore.yml` **已删除**——CI 生成 keystore 必然把私钥带进日志 / 可下载的 Artifact，等于**公开签名身份**（原因与替代口径见 §1.1 D2 与 §附 B）。
+> 该行**保留登记**（不静默抹掉历史），故本表仍计 **14** 项、§5.2 的 T01 仍为 **45** —— 这是**登记口径**，锚点依旧为提交 `015d637`；**当前工作副本里本表实际存在 13 个文件**，`.github/workflows/` 目录下实际只有 **2** 个 workflow。
+> 若要把口径改成「以当前工作副本为准」（§2 抬头 **191 → 190**），须同步更正 `docs/ai-coach-local.md`、`docs/schema-v3-meals.md` 中的同一数字，**不要在单份文档里改一半**。
 
 ### 2.2 `app` 模块构建与清单（4）
 
@@ -1566,9 +1570,9 @@ sequenceDiagram
 |----|------|
 | **任务号** | T01 |
 | **任务名** | 项目基础设施与云端 CI 出包流水线 |
-| **涉及文件** | 根：`settings.gradle.kts`、`build.gradle.kts`、`gradle.properties`、`gradle/libs.versions.toml`、`gradle/wrapper/gradle-wrapper.properties`、`gradle/wrapper/gradle-wrapper.jar`、`gradlew`、`gradlew.bat`、`.gitignore`、`README.md`、`docs/CI.md`；CI：`.github/workflows/android-ci.yml`、`.github/workflows/android-release.yml`、`.github/workflows/generate-keystore.yml`；app：`app/build.gradle.kts`、`app/proguard-rules.pro`、`app/src/main/AndroidManifest.xml`；入口/DI：`IronHabitApp.kt`、`MainActivity.kt`、`di/AppModule.kt`、`di/DatabaseModule.kt`、`di/RepositoryModule.kt`、`di/NotificationModule.kt`、`di/Qualifiers.kt`；资源：`res/values/{strings,colors,themes}.xml`、`res/xml/{backup_rules,data_extraction_rules,file_paths}.xml`、`res/drawable/*`、`res/mipmap-*/*`（共 45 个文件 = §2.1 的 14 + §2.2 的 4 + §2.3 的 7 + §2.7 的 20） |
+| **涉及文件** | 根：`settings.gradle.kts`、`build.gradle.kts`、`gradle.properties`、`gradle/libs.versions.toml`、`gradle/wrapper/gradle-wrapper.properties`、`gradle/wrapper/gradle-wrapper.jar`、`gradlew`、`gradlew.bat`、`.gitignore`、`README.md`、`docs/CI.md`；CI：`.github/workflows/android-ci.yml`、`.github/workflows/android-release.yml`（原 `.github/workflows/generate-keystore.yml` **已删除**，见 §2.1 脚注）；app：`app/build.gradle.kts`、`app/proguard-rules.pro`、`app/src/main/AndroidManifest.xml`；入口/DI：`IronHabitApp.kt`、`MainActivity.kt`、`di/AppModule.kt`、`di/DatabaseModule.kt`、`di/RepositoryModule.kt`、`di/NotificationModule.kt`、`di/Qualifiers.kt`；资源：`res/values/{strings,colors,themes}.xml`、`res/xml/{backup_rules,data_extraction_rules,file_paths}.xml`、`res/drawable/*`、`res/mipmap-*/*`（共 45 个文件 = §2.1 的 14 + §2.2 的 4 + §2.3 的 7 + §2.7 的 20；**登记口径**，其中已删除 1 个，见 §2.1 脚注） |
 | **依赖** | 无 |
-| **完成判据** | ① 仓库 push 后 `android-ci.yml` 绿灯；② 手动触发 `generate-keystore.yml` 得到 `.jks` artifact；③ 配好 3 个 Secret 后触发 `android-release.yml`，`Artifacts` 中可下载**已签名** `app-release.apk`，Release 页有资产；④ 手机安装 APK 能启动（显示空白壳 + 4 Tab 骨架即可） |
+| **完成判据** | ① 仓库 push 后 `android-ci.yml` 绿灯；② 本机生成 keystore 并**配好 4 个 Secret**（`SIGNING_KEY` / `KEY_STORE_PASSWORD` / `KEY_ALIAS` / `KEY_PASSWORD`，见 `docs/CI.md` §2、§3）后触发 `android-release.yml`，`Artifacts` 中可下载**已签名** `app-release.apk`，Release 页有资产；③ 手机安装 APK 能启动（显示空白壳 + 4 Tab 骨架即可） |
 | **优先级** | P0 |
 
 ### T02 · 数据层（Room + DataStore + 预置动作库 + 仓库实现 + 领域模型/接口）（P0）
@@ -1934,6 +1938,9 @@ val events = _events.receiveAsFlow()
 
 ## 附：云端 CI 完整配方（真实可跑）
 
+> ⚠️ **A / C / D 节为与仓库同源的配方；B 节所述工作流已删除**（CI 代生成 keystore = 公开签名身份），
+> 该节保留编号与原因登记，实时行为以 `.github/workflows/` 下现有 **2 个** workflow 为准。
+
 ### A. `.github/workflows/android-ci.yml`（push/PR：编译 + 单测 + debug APK）
 
 ```yaml
@@ -2001,49 +2008,17 @@ jobs:
           if-no-files-found: error
 ```
 
-### B. `.github/workflows/generate-keystore.yml`（一次性：CI 生成 keystore 供用户保存为 Secret）
+### B. `.github/workflows/generate-keystore.yml`（**已删除**；保留编号仅为不动 C / D 的引用）
 
-```yaml
-name: Generate Keystore (run once)
-
-on:
-  workflow_dispatch:
-
-jobs:
-  generate:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - name: Generate keystore
-        run: |
-          keytool -genkeypair -v \
-            -keystore ironhabit-release.jks \
-            -alias ironhabit \
-            -keyalg RSA -keysize 2048 -validity 10000 \
-            -storepass ironhabitStore123 \
-            -keypass ironhabitKey123 \
-            -dname "CN=IronHabit, OU=Personal, O=IronHabit, L=NA, ST=NA, C=CN"
-          base64 -w0 ironhabit-release.jks > ironhabit-release.jks.base64
-          echo "===== 请将下面整行内容保存为仓库 Secret：SIGNING_KEY ====="
-          cat ironhabit-release.jks.base64
-          echo "=========================================================="
-          echo "并新增 Secret: KEY_STORE_PASSWORD=ironhabitStore123"
-          echo "并新增 Secret: KEY_ALIAS=ironhabit"
-          echo "并新增 Secret: KEY_PASSWORD=ironhabitKey123"
-
-      - name: Upload keystore artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: ironhabit-keystore
-          path: |
-            ironhabit-release.jks
-            ironhabit-release.jks.base64
-```
+> **本工作流已删除，不再有对应 YAML。** 原方案是「CI 代生成 keystore」：在云端用 JDK 自带 `keytool`
+> 现场生成 `.jks`，把 base64 私钥 `cat` 进 Actions 日志，并把 `.jks` 与 `.base64` **上传成可下载的 Artifact**；
+> 而当时的两个口令是**写死在 workflow 里的公开值**。三者叠加 = 把**签名身份连同口令一起交给所有人**，
+> 且 Android 的签名身份**无法吊销**（谁能签，谁就能造出一个手机愿意当作"正常升级"安装的 APK）。
+>
+> **现口径（替代方案）**：keystore 由**用户在本机**用 `keytool` 生成，私钥与两个口令只留在
+> **本机 + GitHub Secret** 两处——只填进 Secret 输入框，**不**打印、**不**上传、**不**进仓库。
+> 生成步骤见 `docs/CI.md` §2（生成 + 取 base64）、§3（配置 4 个 Secret）；
+> 若曾使用过本工作流产出的 keystore，一律按**已泄露**处理（补救流程见 `docs/CI.md` §10）。
 
 ### C. `.github/workflows/android-release.yml`（出**已签名** APK + Release）
 
@@ -2087,22 +2062,31 @@ jobs:
       - name: Prepare signing config
         env:
           SIGNING_KEY_B64: ${{ secrets.SIGNING_KEY }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          if [ -z "$SIGNING_KEY_B64" ]; then
-            echo "::warning::未检测到 SIGNING_KEY Secret，改用临时 keystore。生成的 APK 签名每次构建都会变化，无法覆盖安装升级。请先运行 generate-keystore 工作流并配置 Secret。"
-            keytool -genkeypair -v -keystore keystore.jks -alias ironhabit \
-              -keyalg RSA -keysize 2048 -validity 10000 \
-              -storepass ironhabitStore123 -keypass ironhabitKey123 \
-              -dname "CN=IronHabit, OU=Personal, O=IronHabit, L=NA, ST=NA, C=CN"
-            echo "KEY_STORE_PASSWORD=ironhabitStore123" >> "$GITHUB_ENV"
-            echo "KEY_ALIAS=ironhabit" >> "$GITHUB_ENV"
-            echo "KEY_PASSWORD=ironhabitKey123" >> "$GITHUB_ENV"
-          else
-            echo "$SIGNING_KEY_B64" | base64 -d > keystore.jks
-            echo "KEY_STORE_PASSWORD=${{ secrets.KEY_STORE_PASSWORD }}" >> "$GITHUB_ENV"
-            echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> "$GITHUB_ENV"
-            echo "KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}" >> "$GITHUB_ENV"
+          # 4 个 Secret 任一缺失 → 立刻失败；不再生成"临时 keystore"（那等于公开签名身份）
+          missing=""
+          if [ -z "$SIGNING_KEY_B64" ]; then missing="$missing SIGNING_KEY"; fi
+          if [ -z "$SIGNING_STORE_PASSWORD" ]; then missing="$missing KEY_STORE_PASSWORD"; fi
+          if [ -z "$SIGNING_KEY_ALIAS" ]; then missing="$missing KEY_ALIAS"; fi
+          if [ -z "$SIGNING_KEY_PASSWORD" ]; then missing="$missing KEY_PASSWORD"; fi
+          if [ -n "$missing" ]; then
+            echo "::error::缺少签名所需的 Secret：$missing"
+            echo "::error::本流水线不再生成临时 keystore（那会泄露签名私钥），缺少 Secret 时直接失败。"
+            echo "::error::请在 仓库 Settings → Secrets and variables → Actions 中配置全部 4 个 Secret：SIGNING_KEY、KEY_STORE_PASSWORD、KEY_ALIAS、KEY_PASSWORD。"
+            echo "::error::keystore 需在你自己电脑上生成、并取出 base64 填入 SIGNING_KEY，完整步骤见 docs/CI.md 第 2 节；Secret 配置位置见第 3 节。"
+            exit 1
           fi
+          echo "$SIGNING_KEY_B64" | base64 -d > keystore.jks
+          if [ ! -s keystore.jks ]; then
+            echo "::error::SIGNING_KEY 解码失败或为空：请确认该 Secret 的值是 keystore 文件的一整行 base64（生成方法见 docs/CI.md 第 2.2 节）。"
+            exit 1
+          fi
+          echo "KEY_STORE_PASSWORD=$SIGNING_STORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "KEY_ALIAS=$SIGNING_KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "KEY_PASSWORD=$SIGNING_KEY_PASSWORD" >> "$GITHUB_ENV"
 
       - name: Write keystore.properties
         run: |
@@ -2144,7 +2128,7 @@ jobs:
         run: rm -f keystore.jks keystore.properties
 ```
 
-### D. `app/build.gradle.kts` 签名段（读 `keystore.properties`，缺失则回落到 debug 签名）
+### D. `app/build.gradle.kts` 签名段（读 `keystore.properties`，缺失则回落到 debug 签名 —— **仅本地适用**；CI 侧缺 Secret 时流水线直接失败，见 §附 C）
 
 ```kotlin
 import java.util.Properties
@@ -2205,7 +2189,7 @@ android {
 
 > **首次出包三步**（写入 `docs/CI.md`，工程师据此执行）：
 > 1. 把工程 push 到 GitHub 仓库；
-> 2. Actions 手动运行 **Generate Keystore** → 复制日志中的 base64 → 存为 Secret `SIGNING_KEY`，并加 `KEY_STORE_PASSWORD` / `KEY_ALIAS` / `KEY_PASSWORD`；
+> 2. 在**本机**用 `keytool` 生成 keystore（此步需要一台装有 JDK 的电脑，是唯一无法省掉本地环境的环节）→ 取出**一整行** base64 → 在仓库配置 **4 个 Secret**（`SIGNING_KEY` / `KEY_STORE_PASSWORD` / `KEY_ALIAS` / `KEY_PASSWORD`），详见 `docs/CI.md` §2、§3；**私钥与口令不得进日志、Artifact、仓库或聊天**；
 > 3. 打 tag（如 `v1.0.0`）或手动运行 **Android Release** → 在 Release / Artifacts 下载已签名 APK → 手机安装（首次需允许"安装未知来源应用"）。
 
 ---

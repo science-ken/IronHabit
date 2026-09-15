@@ -113,6 +113,68 @@ class CheckInDaoTest {
         assertEquals(listOf(100L, 101L, 102L), all.map { it.dateEpochDay })
     }
 
+    /**
+     * 同一组连点两次 = `xor` 两次 → mask 回到原值（`0`），派生列同步归零。
+     *
+     * 覆盖 [CheckInDao.toggleSetBit] 的「空行自举」：行**不存在**时第一次调用要自己插入种子行，
+     * 第二次调用必须命中同一行（同一事务内串行化，不会撞唯一约束）。
+     */
+    @Test
+    fun togglingSameSetIndexTwiceRestoresOriginalMask() = runBlocking {
+        val seed = seedEntity(exerciseAId, day = 100L)
+
+        val firstMask = checkInDao.toggleSetBit(exerciseAId, 100L, setIndex = 0, seed = seed)
+        val secondMask = checkInDao.toggleSetBit(exerciseAId, 100L, setIndex = 0, seed = seed)
+
+        assertEquals("第一次勾选 → 只有 bit 0", maskOf(1), firstMask)
+        assertEquals("第二次勾选 → 回到原值", 0, secondMask)
+
+        val row = checkInDao.getForExerciseOnDate(exerciseAId, 100L)
+        assertEquals("mask 必须回到 0", 0, row?.completedSetsMask)
+        assertEquals("派生列与 mask 同步归零", 0, row?.completedSets)
+        assertEquals("自举插入不得产生第二行", 1, checkInDao.countOn(100L))
+    }
+
+    /** 依次勾选第 1 组与第 3 组 → mask = `0b101`，派生列 `completed_sets` = 置位数 = 2。 */
+    @Test
+    fun togglingSetsZeroAndTwoYieldsExpectedMaskAndPopcount() = runBlocking {
+        val seed = seedEntity(exerciseAId, day = 100L)
+
+        checkInDao.toggleSetBit(exerciseAId, 100L, setIndex = 0, seed = seed)
+        val mask = checkInDao.toggleSetBit(exerciseAId, 100L, setIndex = 2, seed = seed)
+
+        assertEquals(0b101, mask)
+
+        val row = checkInDao.getForExerciseOnDate(exerciseAId, 100L)
+        assertEquals("(0,2) → 0b101", 0b101, row?.completedSetsMask)
+        assertEquals("completed_sets = 置位数", 2, row?.completedSets)
+        assertEquals(
+            "不变量：completed_sets == completed_sets_mask.countOneBits()",
+            row?.completedSetsMask?.countOneBits(),
+            row?.completedSets,
+        )
+    }
+
+    /**
+     * 越界 `setIndex`（含负数）**静默忽略**：不抛异常、不改 mask、**不建行**
+     * （域层策略：真机崩溃比一次错点严重得多）。
+     */
+    @Test
+    fun outOfRangeSetIndexIsSilentlyIgnored() = runBlocking {
+        val seed = seedEntity(exerciseAId, day = 100L)
+
+        // 越上界（MAX_SETS = 31）+ 负数，两者都必须无声无息。
+        assertEquals(0, checkInDao.toggleSetBit(exerciseAId, 100L, setIndex = 31, seed = seed))
+        assertEquals(0, checkInDao.toggleSetBit(exerciseAId, 100L, setIndex = -1, seed = seed))
+        assertNull("越界调用不得建行", checkInDao.getForExerciseOnDate(exerciseAId, 100L))
+
+        // 合法调用仍然生效，证明前面的越界调用没有污染任何状态。
+        checkInDao.toggleSetBit(exerciseAId, 100L, setIndex = 30, seed = seed)
+        val row = checkInDao.getForExerciseOnDate(exerciseAId, 100L)
+        assertEquals("bit 30", 1 shl 30, row?.completedSetsMask)
+        assertEquals(1, row?.completedSets)
+    }
+
     /** 便捷插入一条打卡记录，返回行 id（用于验证 upsert 命中时 id 稳定）。 */
     private suspend fun checkIn(exerciseId: Long, day: Long, sets: Int): Long =
         checkInDao.upsert(
@@ -130,4 +192,18 @@ class CheckInDaoTest {
     /** 由完成组数折算低 n 位全 1 的 bitmask（与 `CheckIn.maskFromCount` 口径一致）。 */
     private fun maskOf(sets: Int): Int =
         if (sets <= 0) 0 else if (sets >= 31) Int.MAX_VALUE else (1 shl sets) - 1
+
+    /**
+     * [CheckInDao.toggleSetBit] 的种子模板行：行不存在时才会被插入（mask 由 DAO 强制为 `0`）。
+     *
+     * 与生产路径一致：仓库层负责时间戳口径，DAO 只负责位图。
+     */
+    private fun seedEntity(exerciseId: Long, day: Long): CheckInEntity = CheckInEntity(
+        exerciseId = exerciseId,
+        dateEpochDay = day,
+        dateStartMillis = day * 86_400_000L,
+        completedSets = 0,
+        completedSetsMask = 0,
+        completedReps = 10,
+    )
 }

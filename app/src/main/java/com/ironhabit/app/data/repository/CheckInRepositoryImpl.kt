@@ -76,33 +76,38 @@ class CheckInRepositoryImpl @Inject constructor(
             .map { entities -> entities.map(CheckInMapper::toDomain) }
             .flowOn(ioDispatcher)
 
+    /**
+     * 逐组勾选（幂等切换第 [setIndex] 组）。
+     *
+     * 越界（含负数）**静默忽略** —— 绝不用 `require()` 抛异常（真机抛异常即崩）。
+     *
+     * 整个「读 → `xor` → 写」**下沉到 DAO 的单个事务**（`CheckInDao.toggleSetBit`）：
+     * 修复前这里自己分三条 DAO 调用做读改写，两次快速连点会读到同一个旧 mask 而**静默丢更新**，
+     * 种子插入还会撞 `UNIQUE(exercise_id, date_epoch_day)` 的 `ABORT` 冲突而抛异常。
+     * 仓库层只负责「构造种子行模板」（`dateStartMillis` 需要 [clock] / [timeZone]，DAO 拿不到），
+     * 以及越界早退。
+     */
     override suspend fun toggleSet(exerciseId: Long, epochDay: Long, setIndex: Int) {
         // 越界（含负数）静默忽略 —— 绝不用 require() 抛异常（真机抛异常即崩）。
         if (setIndex !in 0 until MAX_SETS) return
 
-        // 行不存在时先落一条空记录，保证后续 UPDATE 命中。
-        if (checkInDao.getForExerciseOnDate(exerciseId, epochDay) == null) {
-            val nowMillis = clock.now().toEpochMilliseconds()
-            val seed = CheckIn(
-                exerciseId = exerciseId,
-                dateEpochDay = epochDay,
-                dateStartMillis = startOfDayMillis(epochDay),
-                completedSetsMask = 0,
-                isQuick = false,
-                loggedAtMillis = nowMillis,
-                createdAt = nowMillis,
-            )
-            checkInDao.upsert(CheckInMapper.toEntity(seed))
-        }
-
-        val currentMask: Int = checkInDao.getForExerciseOnDate(exerciseId, epochDay)?.completedSetsMask ?: 0
-        val newMask: Int = currentMask xor (1 shl setIndex)
-        // mask 与派生列同写（同一条 UPDATE），维护不变量。
-        checkInDao.updateSetMask(
+        val nowMillis = clock.now().toEpochMilliseconds()
+        // 行不存在时由 DAO 插入的空记录模板：mask = 0，保证不变量从零开始。
+        val seed = CheckIn(
+            exerciseId = exerciseId,
+            dateEpochDay = epochDay,
+            dateStartMillis = startOfDayMillis(epochDay),
+            completedSetsMask = 0,
+            isQuick = false,
+            loggedAtMillis = nowMillis,
+            createdAt = nowMillis,
+        )
+        // 读改写 + 种子插入在同一事务内完成；mask 与派生列由 DAO 同写。
+        checkInDao.toggleSetBit(
             exerciseId = exerciseId,
             epochDay = epochDay,
-            mask = newMask,
-            completedSets = newMask.countOneBits(),
+            setIndex = setIndex,
+            seed = CheckInMapper.toEntity(seed),
         )
     }
 

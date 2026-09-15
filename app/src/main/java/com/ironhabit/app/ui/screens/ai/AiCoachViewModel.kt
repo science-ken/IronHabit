@@ -114,6 +114,14 @@ class AiCoachViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(AiCoachUiState())
     val uiState: StateFlow<AiCoachUiState> = _uiState.asStateFlow()
 
+    /**
+     * 最近一次失败的动作（供 [onRetry] 决定重跑哪一个）。
+     *
+     * 私有字段：只影响「重试跑什么」，不进 [AiCoachUiState]，界面文案一律走资源 id。
+     * 初值取「加载建议」——页面首帧本来就会拉一次建议。
+     */
+    private var lastFailedAction: FailedAction = FailedAction.LOAD_SUGGESTIONS
+
     /** 最新体重（`body_metrics` 为体重唯一真源，档案不存体重）。 */
     private val latestWeightKg = bodyMetricRepository
         .observeByType(BodyMetricType.WEIGHT)
@@ -184,6 +192,7 @@ class AiCoachViewModel @Inject constructor(
                     }
                 }
                 .onFailure {
+                    lastFailedAction = FailedAction.GENERATE_PLAN
                     _uiState.update {
                         it.copy(
                             isGenerating = false,
@@ -207,7 +216,10 @@ class AiCoachViewModel @Inject constructor(
                         )
                     }
                 }
-                .onFailure { _uiState.update { it.copy(errorRes = R.string.error_save_failed) } }
+                .onFailure {
+                    lastFailedAction = FailedAction.LOAD_SUGGESTIONS
+                    _uiState.update { it.copy(errorRes = R.string.error_save_failed) }
+                }
         }
     }
 
@@ -233,7 +245,27 @@ class AiCoachViewModel @Inject constructor(
                     }
                     loadSuggestions()
                 }
-                .onFailure { _uiState.update { it.copy(errorRes = R.string.error_save_failed) } }
+                .onFailure {
+                    // 收入失败也按「重跑建议加载」处理：重试后列表回到与库一致的状态。
+                    lastFailedAction = FailedAction.LOAD_SUGGESTIONS
+                    _uiState.update { it.copy(errorRes = R.string.error_save_failed) }
+                }
+        }
+    }
+
+    /**
+     * 重试上一次失败的动作。
+     *
+     * 失败不再静默（页面上有内联错误卡），用户点「重试」时回到这里：
+     * 先清掉 [AiCoachUiState.errorRes]，再**重跑那个失败的动作** ——
+     * 生成计划失败就重跑 [generatePlan]，其余（建议加载 / 收入失败）重跑 [loadSuggestions]。
+     */
+    fun onRetry() {
+        val failed: FailedAction = lastFailedAction
+        _uiState.update { it.copy(errorRes = null) }
+        when (failed) {
+            FailedAction.GENERATE_PLAN -> generatePlan()
+            FailedAction.LOAD_SUGGESTIONS -> loadSuggestions()
         }
     }
 
@@ -257,4 +289,17 @@ class AiCoachViewModel @Inject constructor(
         val base = 10.0 * weight + 6.25 * height - 5.0 * age
         return (base + if (profile.gender == Gender.MALE) 5.0 else -161.0).toInt()
     }
+}
+
+/**
+ * 「上一次失败的是哪个动作」——只用于 [AiCoachViewModel.onRetry] 决定重跑谁。
+ *
+ * 放私有枚举而不是 UiState 字段：它是重试的路由信息，不是界面状态，也不含任何文案。
+ */
+private enum class FailedAction {
+    /** 生成计划失败 → 重试重跑生成。 */
+    GENERATE_PLAN,
+
+    /** 建议加载 / 收入失败 → 重试重新加载建议。 */
+    LOAD_SUGGESTIONS,
 }

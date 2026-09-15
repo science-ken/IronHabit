@@ -82,4 +82,22 @@ class CalculateStreakUseCaseTest {
         assertEquals(4, actual.best)
         assertEquals(baseEpochDay - 5L, actual.lastActiveEpochDay)
     }
+
+    @Test
+    fun forwardsExpectedWeekdaysToCalculator() {
+        // 2026-02-21 是周六：应做日「周一 / 周三 / 周五」= baseEpochDay-5 / -3 / -1，三天都完成。
+        // 休息日（周二/周四/周六）不打断 → 当前段 = 20500..20504 共 5 天。
+        val days = listOf(baseEpochDay - 1L, baseEpochDay - 3L, baseEpochDay - 5L)
+
+        val actual: StreakInfo = useCase(days, expectedWeekdays = setOf(1, 3, 5))
+        val expected: StreakInfo = StreakCalculator.calculate(
+            sortedDescEpochDays = days,
+            todayEpochDay = DateUtils.todayEpochDay(clock, utc),
+            expectedWeekdays = setOf(1, 3, 5),
+        )
+
+        assertEquals(expected, actual)
+        assertEquals(5, actual.current)
+        assertEquals(5, actual.best)
+    }
 }

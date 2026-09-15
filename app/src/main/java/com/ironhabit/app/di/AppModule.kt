@@ -1,5 +1,6 @@
 package com.ironhabit.app.di
 
+import com.ironhabit.app.BuildConfig
 import com.ironhabit.app.data.preferences.AiCredentialsStore
 import com.ironhabit.app.domain.ai.DelegatingPlanAdvisor
 import com.ironhabit.app.domain.ai.LocalRuleAdvisor
@@ -57,6 +58,16 @@ object AppModule {
     @Provides
     @Singleton
     fun provideTimeZone(): TimeZone = TimeZone.currentSystemDefault()
+
+    /**
+     * 应用版本名（写入备份 JSON 的 `appVersion`，如 `"1.9"`）。
+     *
+     * 只在此处引用 [BuildConfig]，data 层通过 [AppVersion] 注入取值，保持 JVM 可测。
+     */
+    @Provides
+    @Singleton
+    @AppVersion
+    fun provideAppVersion(): String = BuildConfig.VERSION_NAME
 
     /** DeepSeek HTTP 客户端（`HttpURLConnection`，零第三方 HTTP 依赖）。接口化便于单测注入 fake。 */
     @Provides

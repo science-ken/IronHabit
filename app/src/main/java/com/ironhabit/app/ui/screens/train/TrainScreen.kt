@@ -127,7 +127,7 @@ fun TrainScreen(
                 EmptyState(
                     text = stringResource(errorRes),
                     actionText = stringResource(R.string.action_retry),
-                    onAction = { /* 数据流为 Room 响应式，重进页面即刷新 */ },
+                    onAction = viewModel::onRetry,
                 )
             }
 

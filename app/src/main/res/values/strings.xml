@@ -37,6 +37,7 @@
     <string name="action_share">分享</string>
     <string name="action_create">去创建</string>
     <string name="action_start">开始</string>
+    <string name="action_clear_key">清除 Key</string>
 
     <!-- ===== 今日页 ===== -->
     <string name="title_today">今日</string>

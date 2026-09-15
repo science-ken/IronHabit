@@ -42,6 +42,8 @@ class GetTodayOverviewUseCase @Inject constructor(
         val activeDaysFlow = checkInRepository.observeActiveDaysSince(SINCE_EPOCH_DAY)
         val habitsFlow = habitRepository.observeActiveHabits()
         val habitLogsFlow = habitRepository.observeLogsBetween(SINCE_EPOCH_DAY, epochDay)
+        // 「应做日」来源：已排计划里的星期（休息日不打断连续训练记录）。
+        val plannedWeekdaysFlow = planRepository.observePlannedWeekdays()
 
         val coreFlow: Flow<OverviewCore> = combine(
             plansFlow,
@@ -60,7 +62,12 @@ class GetTodayOverviewUseCase @Inject constructor(
             )
         }
 
-        return combine(coreFlow, habitLogsFlow) { core, habitLogs ->
+        val withWeekdaysFlow: Flow<OverviewCore> =
+            combine(coreFlow, plannedWeekdaysFlow) { core, weekdays ->
+                core.copy(plannedWeekdays = weekdays)
+            }
+
+        return combine(withWeekdaysFlow, habitLogsFlow) { core, habitLogs ->
             buildOverview(core, habitLogs)
         }
     }
@@ -90,7 +97,8 @@ class GetTodayOverviewUseCase @Inject constructor(
             HabitItem(
                 habit = habit,
                 isCompletedToday = completedToday,
-                streak = calculateStreakUseCase(doneDays),
+                // 「每周几」习惯按自己的排期计连续；每日习惯传 null（每天都应做）。
+                streak = calculateStreakUseCase(doneDays, habit.expectedWeekdays),
             )
         }
 
@@ -103,7 +111,12 @@ class GetTodayOverviewUseCase @Inject constructor(
             habits = habitItems,
             completedCount = completedCount,
             totalCount = totalCount,
-            trainingStreak = calculateStreakUseCase(core.activeDays),
+            // 训练连续天数按「已排计划的星期」计应做日：周一三五的计划不再因休息日断档。
+            // 没有任何计划时传 null → 退回「每天都算」的旧口径，避免把无计划用户清零。
+            trainingStreak = calculateStreakUseCase(
+                epochDays = core.activeDays,
+                expectedWeekdays = core.plannedWeekdays.toExpectedWeekdaysOrNull(),
+            ),
         )
     }
 
@@ -115,6 +128,8 @@ class GetTodayOverviewUseCase @Inject constructor(
         val exercises: List<Exercise>,
         val activeDays: List<Long>,
         val habits: List<Habit>,
+        /** 已排计划的星期（`1..7`，升序）；空 = 无计划。 */
+        val plannedWeekdays: List<Int> = emptyList(),
     )
 
     private companion object {
@@ -122,3 +137,14 @@ class GetTodayOverviewUseCase @Inject constructor(
         const val SINCE_EPOCH_DAY: Long = 0L
     }
 }
+
+/**
+ * 已排计划星期 → 应做星期集合；无计划（空）返回 `null`（= 每天都算，保持旧口径）。
+ *
+ * 无计划时返回 `null` 是刻意的：否则「只打卡、没排计划」的用户连续天数会被清零。
+ */
+private fun List<Int>.toExpectedWeekdaysOrNull(): Set<Int>? =
+    filter { it in 1..WEEK_DAYS_OF_WEEK }.toSet().takeIf { it.isNotEmpty() }
+
+/** 一周 7 天。 */
+private const val WEEK_DAYS_OF_WEEK: Int = 7

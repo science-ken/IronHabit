@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.Exercise
+import com.ironhabit.app.domain.model.InputLimits
 import com.ironhabit.app.domain.model.WeekPlan
 import com.ironhabit.app.domain.repository.ExerciseRepository
 import com.ironhabit.app.domain.repository.PlanRepository
@@ -167,7 +168,13 @@ class AddEditPlanViewModel @Inject constructor(
         loadExistingPlan()
     }
 
-    /** 校验并保存计划条目。 */
+    /**
+     * 校验并保存计划条目。
+     *
+     * 数值范围以 [InputLimits] 为唯一真源：`targetSets` `1..31`（= 打卡位图位宽）、
+     * `targetReps` `1..100`、`targetWeightKg` `0..500`、`targetDurationMin` `1..600`。
+     * 「不是数字」与「越界」共用同一条提示（[R.string.error_invalid_number]，不新增资源）。
+     */
     fun onSave() {
         val state = _form.value
         if (state.selectedExerciseId == 0L) {
@@ -181,9 +188,14 @@ class AddEditPlanViewModel @Inject constructor(
         val durationInput = state.targetDurationMin.trim()
         val duration = durationInput.toIntOrNull()
 
-        val weightValid = weightInput.isEmpty() || weight != null
-        val durationValid = durationInput.isEmpty() || duration != null
-        if (sets == null || reps == null || !weightValid || !durationValid) {
+        // 留空 = 不设该目标（合法，落 null）；填了就必须落在范围内，越界一律拒绝写入。
+        val weightValid = weightInput.isEmpty() || (weight != null && InputLimits.isValidWeightKg(weight))
+        val durationValid =
+            durationInput.isEmpty() || (duration != null && InputLimits.isValidDurationMin(duration))
+        if (sets == null || !InputLimits.isValidSets(sets) ||
+            reps == null || !InputLimits.isValidReps(reps) ||
+            !weightValid || !durationValid
+        ) {
             _form.update { it.copy(numberErrorRes = R.string.error_invalid_number) }
             return
         }

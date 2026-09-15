@@ -146,7 +146,9 @@ class RemoteLlmAdvisorTest {
 
         assertEquals("组数下界 coerce 到 1", 1, items[0].targetSets)
         assertEquals("次数下界 coerce 到 1", 1, items[0].targetReps)
-        assertEquals("组数上界 coerce 到 50", 50, items[1].targetSets)
+        // 上界 31 = CheckIn.MAX_SETS（逐组打卡位图是 Int，第 32 组无法表示）；
+        // 与 InputLimits.MAX_SETS / 提示词里的 1..31 保持同一口径。
+        assertEquals("组数上界 coerce 到 31", 31, items[1].targetSets)
         assertEquals("次数上界 coerce 到 100", 100, items[1].targetReps)
         assertNull("非正重量视为自重（null）", items[1].targetWeightKg)
     }

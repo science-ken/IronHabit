@@ -57,6 +57,9 @@ class DisciplineViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(DisciplineUiState())
     val uiState: StateFlow<DisciplineUiState> = _uiState.asStateFlow()
 
+    /** 数据流重订阅触发器（加载失败重试；与 `TodayViewModel` 同构）。 */
+    private val retryTrigger = MutableStateFlow(0L)
+
     /** 习惯列表 + 每条 streak（`observeActiveDays(id)` → [CalculateStreakUseCase]）。 */
     private val habitItemsFlow: Flow<List<HabitItem>> =
         habitRepository.observeActiveHabits().flatMapLatest { habits ->
@@ -69,7 +72,8 @@ class DisciplineViewModel @Inject constructor(
                         HabitItem(
                             habit = habit,
                             isCompletedToday = activeDays.firstOrNull() == today,
-                            streak = calculateStreak(activeDays),
+                            // 「每周几」习惯按自身排期计连续；每日习惯传 null（每天都应做）。
+                            streak = calculateStreak(activeDays, habit.expectedWeekdays),
                         )
                     }
                 }
@@ -87,20 +91,23 @@ class DisciplineViewModel @Inject constructor(
         checkInRepository.observeActiveDaysSince(TRIGGER_SINCE_EPOCH_DAY)
             .map { statsRepository.completionRate(monthStartEpochDay(), todayEpochDay()) }
 
-    private val dataState: StateFlow<DisciplineUiState> = combine(
-        habitItemsFlow,
-        heatmapFlow,
-        monthRateFlow,
-    ) { habits, heatmap, monthRate ->
-        DisciplineUiState(
-            isLoading = false,
-            habits = habits,
-            heatmap = heatmap,
-            monthCompletionRate = monthRate,
-        )
-    }
-        .catch {
-            emit(DisciplineUiState(isLoading = false, errorRes = R.string.error_load_failed))
+    private val dataState: StateFlow<DisciplineUiState> = retryTrigger
+        .flatMapLatest {
+            combine(
+                habitItemsFlow,
+                heatmapFlow,
+                monthRateFlow,
+            ) { habits, heatmap, monthRate ->
+                DisciplineUiState(
+                    isLoading = false,
+                    habits = habits,
+                    heatmap = heatmap,
+                    monthCompletionRate = monthRate,
+                )
+            }
+                .catch {
+                    emit(DisciplineUiState(isLoading = false, errorRes = R.string.error_load_failed))
+                }
         }
         .stateIn(
             scope = viewModelScope,
@@ -144,6 +151,18 @@ class DisciplineViewModel @Inject constructor(
     /** 消费一次 Snackbar。 */
     fun onConsumeSnackbar() {
         _uiState.update { state -> state.copy(snackbarRes = null) }
+    }
+
+    /**
+     * 加载失败重试（错误态里的「重试」按钮）。
+     *
+     * `habitItemsFlow` / `heatmapFlow` / `monthRateFlow` 都是 Room 冷流，
+     * 递增 [retryTrigger] 会让 [dataState] 重新订阅并重跑查询；同时先清掉本地错误态，
+     * 否则 [merge] 的 `errorRes = data.errorRes ?: local.errorRes` 会把旧错误一直挂在页面上。
+     */
+    fun onRetry() {
+        _uiState.update { state -> state.copy(errorRes = null) }
+        retryTrigger.update { trigger -> trigger + 1L }
     }
 
     // ---------------- 内部 ----------------
