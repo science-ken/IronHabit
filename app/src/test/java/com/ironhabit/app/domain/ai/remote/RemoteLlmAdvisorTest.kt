@@ -262,6 +262,25 @@ class RemoteLlmAdvisorTest {
         assertEquals(listOf(PlanReason.PRIMARY_LIFT, PlanReason.SUPPLEMENT), reasons)
     }
 
+    @Test
+    fun parseProposal_withAnalysisField_mapsAnalysisAndEmptyBasis() {
+        val json = """
+            {"analysis":"结合你的增肌目标，本周安排周一全身、周三下肢、周五上肢推。","days":[{"dayOfWeek":1,"focus":"FULL_BODY","items":[
+                {"exerciseId":2,"targetSets":3,"targetReps":12,"targetWeightKg":null}
+            ]}]}
+        """.trimIndent()
+
+        val proposal = parseProposalJson(json, library, existing = emptyList())
+
+        assertEquals(
+            "远端返回的 analysis 应透传到 PlanProposal",
+            "结合你的增肌目标，本周安排周一全身、周三下肢、周五上肢推。",
+            proposal.analysis,
+        )
+        assertTrue("远端解析的 basis 恒为空列表", proposal.basis.isEmpty())
+        assertEquals(AdviceSource.REMOTE_LLM, proposal.source)
+    }
+
     private companion object {
         const val FAKE_KEY: String = "sk-test-000000000000"
     }

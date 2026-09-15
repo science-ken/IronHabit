@@ -3,6 +3,7 @@ package com.ironhabit.app.domain.usecase
 import com.ironhabit.app.di.IoDispatcher
 import com.ironhabit.app.domain.ai.PlanAdvisor
 import com.ironhabit.app.domain.model.AdviceSource
+import com.ironhabit.app.domain.model.PlanBasisItem
 import com.ironhabit.app.domain.model.PlanNote
 import com.ironhabit.app.domain.model.RemoteFallbackReason
 import com.ironhabit.app.domain.model.WeekPlan
@@ -36,6 +37,10 @@ data class GeneratedPlanSummary(
     val fallbackReason: RemoteFallbackReason? = null,
     /** 本次实际写入的计划条目（**含 星期/组数/次数/重量**），供 UI 以卡片形式摊开看。 */
     val plans: List<WeekPlan> = emptyList(),
+    /** 远端 AI 返回的自由文本分析（仅 REMOTE_LLM 有值；本地规则恒为 null）。 */
+    val analysis: String? = null,
+    /** 本地规则的「生成依据」要点（仅 LOCAL_RULES 有内容）。 */
+    val basis: List<PlanBasisItem> = emptyList(),
 )
 
 /**
@@ -120,6 +125,8 @@ class GenerateTrainingPlanUseCase @Inject constructor(
             source = proposal.source,
             fallbackReason = advisor.lastFallbackReason,
             plans = drafts,
+            analysis = proposal.analysis,
+            basis = proposal.basis,
         )
     }
 }

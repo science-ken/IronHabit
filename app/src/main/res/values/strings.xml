@@ -28,6 +28,7 @@
     <string name="action_delete">删除</string>
     <string name="action_edit">编辑</string>
     <string name="action_add">新增</string>
+    <string name="action_add_exercise">新增动作</string>
     <string name="action_confirm">确定</string>
     <string name="action_retry">重试</string>
     <string name="action_close">关闭</string>
@@ -422,5 +423,17 @@
     <string name="ai_badge_remote_on">AI 增强已开启（DeepSeek）· 断网自动回落本地规则</string>
     <string name="ai_badge_remote_no_key">AI 增强未启用（缺 API Key）· 当前使用本地规则</string>
     <string name="ai_action_go_settings">去开启</string>
+
+    <!-- ===== AI 分析 / 本地生成依据（v1.9）===== -->
+    <string name="ai_analysis_title">AI 文字分析</string>
+    <string name="ai_basis_title">本地规则 · 生成依据</string>
+    <string name="ai_basis_subtitle">这份计划根据你的档案自动推算，并非 AI 联网生成</string>
+    <string name="basis_frequency">每周安排 3 个训练日（周一/周三/周五优先），并轮换不同训练重点</string>
+    <string name="basis_goal">按你的健身目标安排动作侧重与训练量</string>
+    <string name="basis_profile">训练量依据你的性别、年龄、身高计算</string>
+    <string name="basis_injury">已按你的伤病部位自动避开相关肌群动作</string>
+    <string name="basis_equipment">已按你拥有的器械适配动作，无需额外器材</string>
+    <string name="basis_overload">检测到你上次 %1$d 个动作做满且强度有余量，已自动小幅加重</string>
+    <string name="basis_history_none">暂无打卡记录，先用基础目标值，练几次后会自动进阶</string>
 
 </resources>

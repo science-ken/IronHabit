@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Edit
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.AdviceSource
 import com.ironhabit.app.domain.model.ExerciseSuggestion
+import com.ironhabit.app.domain.model.PlanBasisItem
 import com.ironhabit.app.domain.model.PlanNote
 import com.ironhabit.app.domain.model.PlanNoteDetail
 import com.ironhabit.app.domain.model.PlanReason
@@ -231,6 +232,19 @@ private fun GeneratePlanBlock(
                 source = result.source,
             )
         }
+
+        when (result.source) {
+            AdviceSource.REMOTE_LLM -> {
+                if (!result.analysis.isNullOrBlank()) {
+                    AiAnalysisCard(analysis = result.analysis)
+                }
+            }
+            else -> {
+                if (result.basis.isNotEmpty()) {
+                    LocalBasisCard(basis = result.basis)
+                }
+            }
+        }
     }
 }
 
@@ -389,6 +403,88 @@ private fun AiOutputCard(
             }
         }
     }
+}
+
+/** 远端 AI（DeepSeek）返回的自由文本分析，仅当 source==REMOTE_LLM 且有内容时显示。 */
+@Composable
+private fun AiAnalysisCard(analysis: String) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.ai_analysis_title),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = analysis,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+    }
+}
+
+/** 本地规则的「生成依据」：把规则真正用到的档案输入逐条摊开，明确标注非 AI 联网生成（诚实原则）。 */
+@Composable
+private fun LocalBasisCard(basis: List<PlanBasisItem>) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.ai_basis_title),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = stringResource(R.string.ai_basis_subtitle),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            basis.forEach { item ->
+                val res = basisKeyRes(item.key)
+                Text(
+                    text = if (item.args.isEmpty()) {
+                        stringResource(res)
+                    } else {
+                        stringResource(res, *item.args.toTypedArray())
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+        }
+    }
+}
+
+/** [PlanBasisItem.key]（strings.xml 资源名）→ 资源 id。 */
+private fun basisKeyRes(key: String): Int = when (key) {
+    "basis_frequency" -> R.string.basis_frequency
+    "basis_goal" -> R.string.basis_goal
+    "basis_profile" -> R.string.basis_profile
+    "basis_injury" -> R.string.basis_injury
+    "basis_equipment" -> R.string.basis_equipment
+    "basis_overload" -> R.string.basis_overload
+    "basis_history_none" -> R.string.basis_history_none
+    else -> R.string.basis_frequency
 }
 
 /** [PlanNote] → 理由文案。按明细类型选句子：重量变化说 kg、组数变化说组、无参数说"维持原目标"。 */

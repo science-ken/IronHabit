@@ -515,4 +515,40 @@ class LocalRuleAdvisorTest {
             suggestion.noteKey.matches(Regex("[a-z0-9_]+")),
         )
     }
+
+    // ---------------- 生成依据 basis（v1.9）----------------
+
+    @Test
+    fun planWeek_localBasis_includesExpectedKeys_andAnalysisIsNull() {
+        val proposal = LocalRuleAdvisor.planWeek(
+            profile = UserProfile(
+                gender = com.ironhabit.app.domain.model.Gender.MALE,
+                age = 30,
+                heightCm = 175,
+                goal = com.ironhabit.app.domain.model.Goal.BULK,
+                injuryAreas = setOf(InjuryArea.SHOULDER),
+                equipment = setOf(Equipment.DUMBBELL),
+            ),
+            library = overloadLibrary(),
+            existing = emptyList(),
+            history = listOf(
+                ExerciseProgress(
+                    exerciseId = 2L,
+                    lastSetsCompleted = 3,
+                    lastTargetSets = 3,
+                    lastRpe = 5,
+                    lastWeightKg = 40f,
+                ),
+            ),
+            today = today,
+        )
+
+        val keys = proposal.basis.map { it.key }
+        assertTrue("应包含 basis_frequency", "basis_frequency" in keys)
+        assertTrue("应包含 basis_goal", "basis_goal" in keys)
+        assertTrue("应包含 basis_injury（有伤病）", "basis_injury" in keys)
+        assertTrue("应包含 basis_equipment（有器械）", "basis_equipment" in keys)
+        assertTrue("应包含 basis_overload（PROGRESSIVE_OVERLOAD 触发）", "basis_overload" in keys)
+        assertTrue("本地规则不产出自由文本 analysis", proposal.analysis == null)
+    }
 }

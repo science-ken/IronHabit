@@ -141,6 +141,8 @@ data class PlanProposal(
     val days: List<PlannedDay> = emptyList(),
     val preservedUserEditedIds: List<Long> = emptyList(),
     val notes: List<PlanNote> = emptyList(),
+    val analysis: String? = null,
+    val basis: List<PlanBasisItem> = emptyList(),
     val source: AdviceSource = AdviceSource.LOCAL_RULES,
 )
 
@@ -184,6 +186,17 @@ sealed interface PlanNoteDetail {
     /** 无附加参数（如"维持"）。 */
     data object None : PlanNoteDetail
 }
+
+/**
+ * 本地规则的「生成依据」要点（结构化，不含文案）。
+ *
+ * `key` 对应 `strings.xml` 的资源**名称**（UI 层经 `basisKeyRes` 映射成资源 id），
+ * `args` 为格式化参数（类型须与对应资源占位符一致，避免 `IllegalFormatConversionException`）。
+ */
+data class PlanBasisItem(
+    val key: String,
+    val args: List<Any> = emptyList(),
+)
 
 /**
  * 补充动作建议（纯数据）。

@@ -3,6 +3,7 @@ package com.ironhabit.app.domain.ai
 import com.ironhabit.app.domain.model.AdviceSource
 import com.ironhabit.app.domain.model.Equipment
 import com.ironhabit.app.domain.model.Exercise
+import com.ironhabit.app.domain.model.PlanBasisItem
 import com.ironhabit.app.domain.model.ExerciseCategory
 import com.ironhabit.app.domain.model.ExerciseProgress
 import com.ironhabit.app.domain.model.ExerciseSuggestion
@@ -205,10 +206,33 @@ object LocalRuleAdvisor : PlanAdvisor {
             }
             .filter { draft -> draft.day.items.isNotEmpty() }
 
+        val notes: List<PlanNote> = drafts.flatMap { draft -> draft.notesOf() }
+        val overloadCount: Int = notes.count { it.kind == PlanReason.PROGRESSIVE_OVERLOAD }
+        val basisItems: List<PlanBasisItem> = buildList {
+            add(PlanBasisItem(key = "basis_frequency"))
+            add(PlanBasisItem(key = "basis_goal"))
+            if (profile.gender != null && profile.age != null && profile.heightCm != null) {
+                add(PlanBasisItem(key = "basis_profile"))
+            }
+            if (profile.injuryAreas.isNotEmpty()) {
+                add(PlanBasisItem(key = "basis_injury"))
+            }
+            if (profile.equipment.isNotEmpty()) {
+                add(PlanBasisItem(key = "basis_equipment"))
+            }
+            if (overloadCount > 0) {
+                add(PlanBasisItem(key = "basis_overload", args = listOf(overloadCount)))
+            } else if (history.isEmpty()) {
+                add(PlanBasisItem(key = "basis_history_none"))
+            }
+        }
+
         return PlanProposal(
             days = drafts.map { draft -> draft.day },
             preservedUserEditedIds = preserved.map { it.id },
-            notes = drafts.flatMap { draft -> draft.notesOf() },
+            notes = notes,
+            analysis = null,
+            basis = basisItems,
         )
     }
 

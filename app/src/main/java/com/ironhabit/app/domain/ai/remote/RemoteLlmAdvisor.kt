@@ -94,6 +94,8 @@ fun parseProposalJson(
                 PlanNote(kind = item.reason, exerciseId = item.exerciseId, detail = PlanNoteDetail.None)
             }
         },
+        analysis = remote.analysis,
+        basis = emptyList(),
         source = AdviceSource.REMOTE_LLM,
     )
 }
@@ -237,6 +239,7 @@ private fun noteKeyFor(reason: SuggestionReason): String = when (reason) {
 @Serializable
 private data class RemoteProposal(
     val days: List<RemotePlanDay>,
+    val analysis: String? = null,
 )
 
 @Serializable
