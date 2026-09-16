@@ -40,7 +40,7 @@ private val Context.settingsDataStore: DataStore<Preferences> by preferencesData
 /**
  * 设置持久化（DataStore Preferences）。
  *
- * 键：主题 / 单位 / 提醒开关 / 提醒时间 / 首启标记，以及用户档案 `profile_*`（10 键）。
+ * 键：主题 / 单位 / 提醒开关 / 提醒时间 / 首启标记，以及用户档案 `profile_*`（11 键）。
  *
  * **用户档案**（单人单份）与主题/单位同处一个 DataStore 文件，**不落 Room、不需 schema 迁移**。
  * 多选集合（器械 / 伤病部位 / 忌口）用 [`stringSetPreferencesKey`] 存枚举 `name`（**不存 ordinal**）。
@@ -89,6 +89,12 @@ class SettingsDataStore @Inject constructor(
                 injuryAreas = decodeEnumSet(preferences[Keys.PROFILE_INJURY_AREA].orEmpty()),
                 injuryNote = preferences[Keys.PROFILE_INJURY_NOTE],
                 dietaryAvoid = decodeEnumSet(preferences[Keys.PROFILE_DIET_AVOID].orEmpty()),
+                // P1：每周训练天数。缺键 = 从未设置过 → 用默认 3 天（与旧版钉死 3 天一致）；
+                // 已写入的值越界（理论上不该发生）也在读侧再钳一次，绝不把荒谬天数喂给规则引擎。
+                trainingDaysPerWeek = ProfileLimits.coerceTrainingDaysPerWeek(
+                    preferences[Keys.PROFILE_TRAINING_DAYS_PER_WEEK]
+                        ?: ProfileLimits.DEFAULT_TRAINING_DAYS_PER_WEEK,
+                ),
             )
         }
 
@@ -210,6 +216,13 @@ class SettingsDataStore @Inject constructor(
         context.settingsDataStore.edit { it[Keys.PROFILE_DIET_AVOID] = encodeEnumSet(avoid) }
     }
 
+    /** 写入每周训练天数；越界钳制到 `3–6`。 */
+    suspend fun setProfileTrainingDaysPerWeek(days: Int) {
+        context.settingsDataStore.edit {
+            it[Keys.PROFILE_TRAINING_DAYS_PER_WEEK] = ProfileLimits.coerceTrainingDaysPerWeek(days)
+        }
+    }
+
     /**
      * 是否启用「AI 联网生成」（联网一期，默认 **false** = 纯本地规则）。
      *
@@ -262,6 +275,7 @@ class SettingsDataStore @Inject constructor(
         val PROFILE_INJURY_AREA = stringSetPreferencesKey("profile_injury_area")
         val PROFILE_INJURY_NOTE = stringPreferencesKey("profile_injury_note")
         val PROFILE_DIET_AVOID = stringSetPreferencesKey("profile_diet_avoid")
+        val PROFILE_TRAINING_DAYS_PER_WEEK = intPreferencesKey("profile_training_days_per_week")
 
         // ---- AI 联网（联网一期）：仅开关，Key 走 AiCredentialsStore（加密、不进 DataStore）----
         val AI_REMOTE_ENABLED = booleanPreferencesKey("ai_remote_enabled")

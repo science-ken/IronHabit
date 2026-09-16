@@ -247,6 +247,11 @@ class SettingsViewModel @Inject constructor(
         persist { settingsRepository.setProfileInjuryNote(note) }
     }
 
+    /** 选择每周训练天数（P1：`3–6`，越界由仓库钳制）。 */
+    fun onProfileTrainingDaysChange(days: Int) {
+        persist { settingsRepository.setProfileTrainingDaysPerWeek(days) }
+    }
+
     /** 勾选/取消某项饮食忌口。 */
     fun onProfileDietAvoidToggle(item: DietRestriction) {
         persist {

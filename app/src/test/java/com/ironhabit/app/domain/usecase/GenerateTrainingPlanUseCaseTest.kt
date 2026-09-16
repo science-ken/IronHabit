@@ -6,6 +6,7 @@ import com.ironhabit.app.domain.model.ExerciseCategory
 import com.ironhabit.app.domain.model.ExerciseProgress
 import com.ironhabit.app.domain.model.UserProfile
 import com.ironhabit.app.domain.model.WeekPlan
+import com.ironhabit.app.domain.repository.BodyMetricRepository
 import com.ironhabit.app.domain.repository.CheckInRepository
 import com.ironhabit.app.domain.repository.ExerciseRepository
 import com.ironhabit.app.domain.repository.PlanRepository
@@ -40,6 +41,7 @@ class GenerateTrainingPlanUseCaseTest {
     private val exerciseRepository: ExerciseRepository = mockk(relaxed = true)
     private val planRepository: PlanRepository = mockk(relaxed = true)
     private val checkInRepository: CheckInRepository = mockk(relaxed = true)
+    private val bodyMetricRepository: BodyMetricRepository = mockk(relaxed = true)
     private val settingsRepository: SettingsRepository = mockk(relaxed = true)
 
     private val fixedClock = object : Clock {
@@ -50,6 +52,7 @@ class GenerateTrainingPlanUseCaseTest {
         planRepository = planRepository,
         exerciseRepository = exerciseRepository,
         checkInRepository = checkInRepository,
+        bodyMetricRepository = bodyMetricRepository,
         settingsRepository = settingsRepository,
         advisor = LocalRuleAdvisor,
         clock = fixedClock,

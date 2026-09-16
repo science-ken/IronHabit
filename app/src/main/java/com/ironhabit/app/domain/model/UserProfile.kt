@@ -138,6 +138,8 @@ enum class DietRestriction {
  * @property injuryAreas 伤病部位集合，空集 = 不排除任何动作
  * @property injuryNote 伤病备注（自由文本），`null` = 不显示；仅展示，规则不解析
  * @property dietaryAvoid 饮食忌口集合，空集 = 不排除任何食物
+ * @property trainingDaysPerWeek 每周训练天数，合法域 `3–6`（写入已钳制）；
+ *   P1 起**规则引擎读它**（此前是钉死的 3 天常量）
  */
 data class UserProfile(
     val gender: Gender? = null,
@@ -150,6 +152,14 @@ data class UserProfile(
     val injuryAreas: Set<InjuryArea> = emptySet(),
     val injuryNote: String? = null,
     val dietaryAvoid: Set<DietRestriction> = emptySet(),
+    /**
+     * 每周训练天数（`3–6`，越界写入即钳制）。
+     *
+     * 规则引擎是**纯函数**（不读 DataStore），所以"想让它多考虑一件事"就必须多一个字段。
+     * 默认 [ProfileLimits.DEFAULT_TRAINING_DAYS_PER_WEEK] = 3，与 P1 之前"钉死 3 天"的行为**完全一致**
+     * （老用户升级上来不会突然变成别的天数）。
+     */
+    val trainingDaysPerWeek: Int = ProfileLimits.DEFAULT_TRAINING_DAYS_PER_WEEK,
 ) {
 
     /** 体征三件套是否填全（BMR 计算的前提；缺失走默认值兜底）。 */
@@ -184,6 +194,17 @@ object ProfileLimits {
     /** 目标体重合法域（kg）。 */
     val GOAL_WEIGHT_KG: ClosedFloatingPointRange<Float> = 30f..300f
 
+    /** 每周训练天数合法域（天）。 */
+    val TRAINING_DAYS_PER_WEEK: IntRange = 3..6
+
+    /**
+     * 每周训练天数**默认值**（天）。
+     *
+     * 与 P1 之前 `LocalRuleAdvisor.DEFAULT_TRAINING_DAYS` 钉死的 3 天一致 —— 保证"没设过的用户
+     * 升级前后排出来的计划一模一样"。
+     */
+    const val DEFAULT_TRAINING_DAYS_PER_WEEK: Int = 3
+
     /** 伤病备注最大字数。 */
     const val INJURY_NOTE_MAX_LENGTH: Int = 200
 
@@ -201,6 +222,10 @@ object ProfileLimits {
     fun coerceGoalWeightKg(value: Float): Float =
         value.coerceIn(GOAL_WEIGHT_KG.start, GOAL_WEIGHT_KG.endInclusive)
 
+    /** 每周训练天数钳制到 `3–6`。 */
+    fun coerceTrainingDaysPerWeek(value: Int): Int =
+        value.coerceIn(TRAINING_DAYS_PER_WEEK.first, TRAINING_DAYS_PER_WEEK.last)
+
     /** 伤病备注截断到 [INJURY_NOTE_MAX_LENGTH] 字。 */
     fun coerceInjuryNote(note: String): String = note.take(INJURY_NOTE_MAX_LENGTH)
 
@@ -215,6 +240,9 @@ object ProfileLimits {
 
     /** 目标体重是否在合法域内。 */
     fun isGoalWeightInRange(value: Float): Boolean = value in GOAL_WEIGHT_KG
+
+    /** 每周训练天数是否在合法域内。 */
+    fun isTrainingDaysInRange(value: Int): Boolean = value in TRAINING_DAYS_PER_WEEK
 }
 
 /**

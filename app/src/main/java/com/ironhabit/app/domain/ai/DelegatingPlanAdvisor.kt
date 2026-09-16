@@ -64,9 +64,10 @@ class DelegatingPlanAdvisor(
         existing: List<WeekPlan>,
         history: List<ExerciseProgress>,
         today: LocalDate,
+        bodyWeightKg: Float?,
     ): PlanProposal = route(
-        remoteCall = { remote.planWeek(profile, library, existing, history, today) },
-        localCall = { local.planWeek(profile, library, existing, history, today) },
+        remoteCall = { remote.planWeek(profile, library, existing, history, today, bodyWeightKg) },
+        localCall = { local.planWeek(profile, library, existing, history, today, bodyWeightKg) },
     )
 
     override fun suggestExercises(

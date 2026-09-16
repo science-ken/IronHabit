@@ -183,12 +183,21 @@ class RemoteLlmAdvisor(
 
     override val source: AdviceSource = AdviceSource.REMOTE_LLM
 
+    /**
+     * 远端生成一周计划。
+     *
+     * ⚠️ P1 起接口多了 [bodyWeightKg]（本地规则用它判断"体重 vs 目标体重"）。
+     * 远端这条路**暂时不进提示词** —— 远端返回的计划无论如何都要过本地校验，
+     * 而"把体重/目标体重写进提示词"属于 P3（下周计划生成）的范围；在此之前不要让
+     * 远端和本地对同一个字段有两套说法。
+     */
     override fun planWeek(
         profile: UserProfile,
         library: List<Exercise>,
         existing: List<WeekPlan>,
         history: List<ExerciseProgress>,
         today: LocalDate,
+        bodyWeightKg: Float?,
     ): PlanProposal {
         val apiKey: String = credentials.apiKey()
             ?: throw RemoteAdvisorException("API Key 未配置")

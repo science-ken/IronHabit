@@ -60,6 +60,9 @@ interface SettingsRepository {
     /** 写入饮食忌口集合。 */
     suspend fun setProfileDietaryAvoid(avoid: Set<DietRestriction>)
 
+    /** 写入每周训练天数（`3–6`，越界由实现钳制）。P1 起规则引擎读它。 */
+    suspend fun setProfileTrainingDaysPerWeek(days: Int)
+
     /** 设置主题模式。 */
     suspend fun setTheme(mode: ThemeMode)
 

@@ -535,6 +535,25 @@ private fun ProfileSection(
         onClick = viewModel::onProfileEquipmentToggle,
     )
 
+    // P1：每周训练天数（3–6）—— 规则引擎真的会按它排课。
+    Text(
+        text = stringResource(R.string.label_profile_training_days),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurface,
+    )
+    ChipGroup(
+        options = ProfileLimits.TRAINING_DAYS_PER_WEEK.toList(),
+        isSelected = { it == profile.trainingDaysPerWeek },
+        labelOf = { stringResource(R.string.label_profile_training_days_option, it) },
+        onClick = viewModel::onProfileTrainingDaysChange,
+    )
+    Text(
+        text = stringResource(R.string.hint_profile_training_days),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.fillMaxWidth(),
+    )
+
     // ---- 约束（可留空）----
     Text(
         text = stringResource(R.string.section_profile_constraints),

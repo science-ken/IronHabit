@@ -3,10 +3,12 @@ package com.ironhabit.app.domain.usecase
 import com.ironhabit.app.di.IoDispatcher
 import com.ironhabit.app.domain.ai.PlanAdvisor
 import com.ironhabit.app.domain.model.AdviceSource
+import com.ironhabit.app.domain.model.BodyMetricType
 import com.ironhabit.app.domain.model.PlanBasisItem
 import com.ironhabit.app.domain.model.PlanNote
 import com.ironhabit.app.domain.model.RemoteFallbackReason
 import com.ironhabit.app.domain.model.WeekPlan
+import com.ironhabit.app.domain.repository.BodyMetricRepository
 import com.ironhabit.app.domain.repository.CheckInRepository
 import com.ironhabit.app.domain.repository.ExerciseRepository
 import com.ironhabit.app.domain.repository.PlanRepository
@@ -72,6 +74,7 @@ class GenerateTrainingPlanUseCase @Inject constructor(
     private val planRepository: PlanRepository,
     private val exerciseRepository: ExerciseRepository,
     private val checkInRepository: CheckInRepository,
+    private val bodyMetricRepository: BodyMetricRepository,
     private val settingsRepository: SettingsRepository,
     private val advisor: PlanAdvisor,
     private val clock: Clock,
@@ -86,6 +89,9 @@ class GenerateTrainingPlanUseCase @Inject constructor(
         val existing = planRepository.observeAllIncludingInactive().first()
         val history = checkInRepository.latestProgressPerExercise().first()
         val today: LocalDate = clock.now().toLocalDateTime(timeZone).date
+        // P1：当前体重（体重唯一真源是 body_metrics，不是档案）→ 供"体重 vs 目标体重"规则使用。
+        // 取不到就是 null（用户没记过体重）→ 规则层会**跳过**体重相关判断，而不是拿 0 去算。
+        val bodyWeightKg: Float? = bodyMetricRepository.latest(BodyMetricType.WEIGHT)?.value
 
         // 本地实现 = 纯计算；远端实现 = 阻塞 HTTP（DeepSeekClient 30s 超时）→ 必须在 IO 上跑。
         val proposal = withContext(ioDispatcher) {
@@ -95,6 +101,7 @@ class GenerateTrainingPlanUseCase @Inject constructor(
                 existing = existing,
                 history = history,
                 today = today,
+                bodyWeightKg = bodyWeightKg,
             )
         }
 

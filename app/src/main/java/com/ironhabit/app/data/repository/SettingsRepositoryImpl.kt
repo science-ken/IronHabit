@@ -73,6 +73,10 @@ class SettingsRepositoryImpl @Inject constructor(
         dataStore.setProfileDietaryAvoid(avoid)
     }
 
+    override suspend fun setProfileTrainingDaysPerWeek(days: Int) {
+        dataStore.setProfileTrainingDaysPerWeek(days)
+    }
+
     override suspend fun setTheme(mode: ThemeMode) {
         dataStore.setTheme(mode)
     }

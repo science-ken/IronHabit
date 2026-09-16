@@ -5,6 +5,7 @@ import com.ironhabit.app.domain.model.Equipment
 import com.ironhabit.app.domain.model.Exercise
 import com.ironhabit.app.domain.model.ExerciseCategory
 import com.ironhabit.app.domain.model.ExerciseProgress
+import com.ironhabit.app.domain.model.Goal
 import com.ironhabit.app.domain.model.InjuryArea
 import com.ironhabit.app.domain.model.PlanItemDraft
 import com.ironhabit.app.domain.model.PlanNoteDetail
@@ -757,5 +758,420 @@ class LocalRuleAdvisorTest {
         // 真实内置库主肌群种类足够（12–15 种）→ 跨重点补足后每日 4 条必为 4 个不同主肌群。
         assertTrue("回归样本应覆盖到多天（否则断言无意义）", scheduledDays >= 8 * 7 * 2 * 3)
         assertEquals("任一天内同一主肌群每天至多出现一次 → 0 处重复", 0, duplicateExcess)
+    }
+
+    // ================= P1：档案真正参与排课 =================
+    //
+    // 下面这组用例锁死"档案字段 → 排课结果"的端到端行为。
+    // 单看 `ProfileLoadPolicyTest` 只能证明"参数算对了"，这里证明**参数真的被用了**。
+
+    /** 训练日集合（周一为 1）。 */
+    private fun PlanProposal.daySet(): Set<Int> = days.map { it.dayOfWeek }.toSet()
+
+    private fun PlanProposal.itemCountOf(exerciseId: Long): Int =
+        days.sumOf { day -> day.items.count { it.exerciseId == exerciseId } }
+
+    private fun PlanProposal.usedExerciseIds(): Set<Long> =
+        days.flatMap { it.items }.map { it.exerciseId }.toSet()
+
+    /** 带"安全替代肌群"的库：腿部（膝伤会挡掉）+ 臀部 / 核心（安全）。 */
+    private val kneeSwapLibrary: List<Exercise> = listOf(
+        exercise(1L, ExerciseCategory.BODYWEIGHT, "腿部"),
+        exercise(2L, ExerciseCategory.BODYWEIGHT, "臀部"),
+        exercise(3L, ExerciseCategory.BODYWEIGHT, "核心"),
+        exercise(4L, ExerciseCategory.BODYWEIGHT, "胸部"),
+    )
+
+    @Test
+    fun planWeek_trainingDaysPerWeek3to6_usesConfiguredDaySets() {
+        for (days in 3..6) {
+            val proposal = LocalRuleAdvisor.planWeek(
+                profile = UserProfile(trainingDaysPerWeek = days),
+                library = library,
+                existing = emptyList(),
+                today = today,
+            )
+            assertEquals("档案设 $days 天 → 就排 $days 天", days, proposal.days.size)
+            assertEquals(
+                "训练日集合由天数决定（周日恒为休息日）",
+                LocalRuleAdvisor.TRAINING_DAY_SETS.getValue(days).toSet(),
+                proposal.daySet(),
+            )
+            assertTrue(
+                "每周仍必须含一个「上肢拉（背）」日",
+                proposal.days.any { it.focus == TrainingFocus.UPPER_PULL },
+            )
+            assertEquals(
+                "basis_frequency 要报出实际天数",
+                listOf(days),
+                proposal.basis.first { it.key == "basis_frequency" }.args,
+            )
+        }
+    }
+
+    @Test
+    fun planWeek_dirtyTrainingDays_isClampedIntoRange() {
+        val tooMany = LocalRuleAdvisor.planWeek(
+            profile = UserProfile(trainingDaysPerWeek = 99),
+            library = library,
+            existing = emptyList(),
+            today = today,
+        )
+        assertEquals("越界天数钳制到 6", 6, tooMany.days.size)
+
+        val tooFew = LocalRuleAdvisor.planWeek(
+            profile = UserProfile(trainingDaysPerWeek = 0),
+            library = library,
+            existing = emptyList(),
+            today = today,
+        )
+        assertEquals("越界天数钳制到 3", 3, tooFew.days.size)
+    }
+
+    @Test
+    fun planWeek_moreDays_neverSchedulesSameMuscleOnConsecutiveDays() {
+        // 4/5/6 天时必然出现"连着两天"，此时两天的肌群标签必须不相交
+        // —— **有氧除外**：有氧配额（每周至少 N 个）优先于"不连排"，而且有氧不需要 48 小时恢复。
+        val cardio = "有氧"
+        val profile = UserProfile(trainingDaysPerWeek = 6)
+        val library = realLibrary()
+        var checkedPairs = 0
+
+        for (offset in 0 until 14) {
+            val cursor = LocalDate.fromEpochDays(LocalDate(2026, 9, 14).toEpochDays() + offset)
+            val proposal = LocalRuleAdvisor.planWeek(
+                profile = profile,
+                library = library,
+                existing = emptyList(),
+                today = cursor,
+            )
+            val byDay = proposal.days.associateBy { it.dayOfWeek }
+            for (day in 1..5) {
+                val current = byDay[day] ?: continue
+                val next = byDay[day + 1] ?: continue
+                checkedPairs++
+                fun groupsOf(planned: com.ironhabit.app.domain.model.PlannedDay): Set<String> =
+                    planned.items
+                        .flatMap { item -> library.first { ex -> ex.id == item.exerciseId }.muscleGroups }
+                        .filter { tag -> tag != cardio }
+                        .toSet()
+
+                val currentGroups = groupsOf(current)
+                val nextGroups = groupsOf(next)
+                assertTrue(
+                    "连着两天（周$day/周${day + 1}）不得练到同一块肌群：" +
+                        "$currentGroups ∩ $nextGroups（focus=${current.focus}/${next.focus}）",
+                    currentGroups.intersect(nextGroups).isEmpty(),
+                )
+            }
+        }
+        assertTrue("样本应覆盖到连续训练日（否则断言无意义）", checkedPairs > 0)
+    }
+
+    @Test
+    fun planWeek_consecutiveDays_haveDisjointTrainingFocuses() {
+        // 规则层的硬保证（也是上面那条的"设计依据"）：相邻两天的**训练重点**肌群标签不相交。
+        for (days in 3..6) {
+            for (offset in 0 until 14) {
+                val cursor = LocalDate.fromEpochDays(LocalDate(2026, 9, 14).toEpochDays() + offset)
+                val schedule = LocalRuleAdvisor.planWeek(
+                    profile = UserProfile(trainingDaysPerWeek = days),
+                    library = realLibrary(),
+                    existing = emptyList(),
+                    today = cursor,
+                ).days
+
+                for (index in 0 until schedule.size - 1) {
+                    val current = schedule[index]
+                    val next = schedule[index + 1]
+                    val currentTags = LocalRuleAdvisor.FOCUS_TAGS.getValue(current.focus)
+                    val nextTags = LocalRuleAdvisor.FOCUS_TAGS.getValue(next.focus)
+                    assertTrue(
+                        "训练重点不得连排同一肌群：周${current.dayOfWeek}(${current.focus}) → " +
+                            "周${next.dayOfWeek}(${next.focus})",
+                        currentTags.intersect(nextTags).isEmpty(),
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun planWeek_goalDrivesRepsRange() {
+        val bulk = LocalRuleAdvisor.planWeek(
+            profile = UserProfile(goal = Goal.BULK),
+            library = library,
+            existing = emptyList(),
+            today = today,
+        )
+        val cut = LocalRuleAdvisor.planWeek(
+            profile = UserProfile(goal = Goal.CUT),
+            library = library,
+            existing = emptyList(),
+            today = today,
+        )
+
+        for (item in bulk.days.flatMap { it.items }) {
+            assertTrue("增肌：每组次数必须落在 8–12（实际 ${item.targetReps}）", item.targetReps in 8..12)
+        }
+        for (item in cut.days.flatMap { it.items }) {
+            assertTrue("减脂：每组次数必须落在 12–15（实际 ${item.targetReps}）", item.targetReps in 12..15)
+        }
+        assertEquals(
+            "basis_volume 要报出「次数区间 + 组数区间」4 个参数",
+            listOf(8, 12, 3, 4),
+            bulk.basis.first { it.key == "basis_volume" }.args,
+        )
+    }
+
+    @Test
+    fun planWeek_outOfRangeDefaultReps_isClampedIntoGoalRange() {
+        val highReps = listOf(exercise(1L, ExerciseCategory.BODYWEIGHT, "胸部", reps = 30))
+        val cut = LocalRuleAdvisor.planWeek(
+            profile = UserProfile(goal = Goal.CUT),
+            library = highReps,
+            existing = emptyList(),
+            today = today,
+        )
+        assertEquals(
+            "动作自带的 30 次被夹进减脂区间 12–15",
+            15,
+            cut.itemFor(1L)!!.targetReps,
+        )
+    }
+
+    @Test
+    fun planWeek_goalDrivesWeightStep() {
+        // 同样的历史（做满 + RPE 5 + 上次 40kg），增肌 +2.5kg、减脂 +1.25kg。
+        val history = listOf(
+            ExerciseProgress(
+                exerciseId = 2L,
+                lastSetsCompleted = 3,
+                lastTargetSets = 3,
+                lastRpe = 5,
+                lastWeightKg = 40f,
+            ),
+        )
+        val bulk = LocalRuleAdvisor.planWeek(
+            profile = UserProfile(goal = Goal.BULK),
+            library = overloadLibrary(),
+            existing = emptyList(),
+            history = history,
+            today = today,
+        )
+        val cut = LocalRuleAdvisor.planWeek(
+            profile = UserProfile(goal = Goal.CUT),
+            library = overloadLibrary(),
+            existing = emptyList(),
+            history = history,
+            today = today,
+        )
+
+        assertEquals(42.5f, bulk.itemFor(2L)!!.targetWeightKg!!, 0.0001f)
+        assertEquals("减脂期加重更保守：只 +1.25kg", 41.25f, cut.itemFor(2L)!!.targetWeightKg!!, 0.0001f)
+    }
+
+    @Test
+    fun planWeek_bodyFatHigh_reportsBasisAndRaisesCardio() {
+        val proposal = LocalRuleAdvisor.planWeek(
+            profile = UserProfile(
+                gender = com.ironhabit.app.domain.model.Gender.MALE,
+                bodyFatPct = 30f,
+                goal = Goal.MAINTAIN,
+            ),
+            library = library,
+            existing = emptyList(),
+            today = today,
+        )
+        val keys = proposal.basis.map { it.key }
+
+        assertTrue("体脂偏高必须写进生成依据", "basis_bodyfat_high" in keys)
+        assertEquals(
+            "依据里的有氧数 = 参数里的有氧数（2）",
+            listOf(2),
+            proposal.basis.first { it.key == "basis_bodyfat_high" }.args,
+        )
+        assertTrue(
+            "每天 1 个有氧 → 一周 3 个 ≥ 目标 2 个",
+            proposal.itemCountOf(6L) >= 2,
+        )
+    }
+
+    @Test
+    fun planWeek_weightAboveTarget_reportsCutRule() {
+        val proposal = LocalRuleAdvisor.planWeek(
+            profile = UserProfile(goal = Goal.MAINTAIN, goalWeightKg = 70f),
+            library = library,
+            existing = emptyList(),
+            today = today,
+            bodyWeightKg = 82f,
+        )
+        val keys = proposal.basis.map { it.key }
+
+        assertTrue("体重高于目标体重要写进依据", "basis_weight_cut" in keys)
+        assertFalse("方向相反的那条不得出现", "basis_weight_gain" in keys)
+        assertTrue("有氧按上调后的 2 个安排", proposal.itemCountOf(6L) >= 2)
+    }
+
+    @Test
+    fun planWeek_weightBelowTarget_reportsGainRuleAndRaisesSets() {
+        val proposal = LocalRuleAdvisor.planWeek(
+            profile = UserProfile(goal = Goal.MAINTAIN, goalWeightKg = 80f),
+            library = library,
+            existing = emptyList(),
+            today = today,
+            bodyWeightKg = 70f,
+        )
+        val keys = proposal.basis.map { it.key }
+
+        assertTrue("离目标体重还有差距要写进依据", "basis_weight_gain" in keys)
+        assertEquals(
+            "依据里的组数上限 = 上调后的 4",
+            listOf(4),
+            proposal.basis.first { it.key == "basis_weight_gain" }.args,
+        )
+    }
+
+    @Test
+    fun planWeek_age50Plus_reducesItemsPerDay_andReportsBasis() {
+        val young = LocalRuleAdvisor.planWeek(
+            profile = UserProfile(age = 30),
+            library = realLibrary(),
+            existing = emptyList(),
+            today = today,
+        )
+        val senior = LocalRuleAdvisor.planWeek(
+            profile = UserProfile(age = 55),
+            library = realLibrary(),
+            existing = emptyList(),
+            today = today,
+        )
+        val keys = senior.basis.map { it.key }
+
+        assertTrue("年龄 ≥50 必须写进依据", "basis_age_volume" in keys)
+        assertTrue("年龄 ≥40 必须写进恢复建议", "basis_recovery_age" in keys)
+        assertEquals(listOf(55, 3), senior.basis.first { it.key == "basis_age_volume" }.args)
+        for (day in senior.days) {
+            assertTrue(
+                "55 岁：每天动作数下调到 3（实际 ${day.items.size}）",
+                day.items.size <= 3,
+            )
+        }
+        assertTrue(
+            "同一档案下年轻人每天仍是 4 个动作（对照组）",
+            young.days.all { it.items.size == 4 },
+        )
+    }
+
+    @Test
+    fun planWeek_injury_substitutesSafeNeighbouringMuscle_andMarksInjurySafe() {
+        val profile = UserProfile(
+            injuryAreas = setOf(InjuryArea.KNEE),
+            equipment = setOf(Equipment.DUMBBELL),
+        )
+        var plansWithSubstitution = 0
+        var markedItems = 0
+
+        // 换 7 个不同的 today：训练重点按周轮换，一周样本覆盖不到所有重点组合。
+        for (offset in 0 until 7) {
+            val cursor = LocalDate.fromEpochDays(LocalDate(2026, 9, 14).toEpochDays() + offset)
+            val proposal = LocalRuleAdvisor.planWeek(
+                profile = profile,
+                library = kneeSwapLibrary,
+                existing = emptyList(),
+                today = cursor,
+            )
+
+            assertFalse(
+                "会刺激膝的「腿部」动作仍必须被排除（排除这一层没有放松）",
+                1L in proposal.usedExerciseIds(),
+            )
+
+            val marked = proposal.notes.filter { it.kind == PlanReason.INJURY_SAFE }
+            if (marked.isNotEmpty()) {
+                plansWithSubstitution++
+                markedItems += marked.size
+                assertTrue(
+                    "被标成「安全替代」的动作必须真的来自安全邻近肌群（臀部 2 / 核心 3）",
+                    marked.all { it.exerciseId == 2L || it.exerciseId == 3L },
+                )
+                assertTrue(
+                    "有替代就要写进生成依据，且数量与标注一致",
+                    proposal.basis.any {
+                        it.key == "basis_injury_swap" && it.args.single() == marked.size
+                    },
+                )
+            }
+        }
+
+        assertTrue("7 个样本里至少要有一次「重点被伤病挡掉 → 换成安全肌群」", plansWithSubstitution > 0)
+        assertTrue("替代标注不能是空跑", markedItems > 0)
+    }
+
+    @Test
+    fun planWeek_noInjury_producesNoSubstitutionAndNoSwapBasis() {
+        val proposal = LocalRuleAdvisor.planWeek(
+            profile = UserProfile(equipment = setOf(Equipment.DUMBBELL)),
+            library = kneeSwapLibrary,
+            existing = emptyList(),
+            today = today,
+        )
+
+        assertFalse(
+            "没伤病就不该出现「安全替代」理由（否则是假的理由）",
+            proposal.notes.any { it.kind == PlanReason.INJURY_SAFE },
+        )
+        assertFalse(
+            "没伤病就不该出现 basis_injury_swap",
+            proposal.basis.any { it.key == "basis_injury_swap" },
+        )
+        assertFalse("没伤病就不该出现 basis_injury", proposal.basis.any { it.key == "basis_injury" })
+    }
+
+    @Test
+    fun planWeek_handEditedSlot_stillWinsOverSubstitution() {
+        // P1 新增的"替代补位"绝不能写进用户手改过的槽位。
+        val edited = WeekPlan(id = 900L, exerciseId = 2L, dayOfWeek = 1, isUserEdited = true)
+        val proposal = LocalRuleAdvisor.planWeek(
+            profile = UserProfile(
+                injuryAreas = setOf(InjuryArea.KNEE),
+                equipment = setOf(Equipment.DUMBBELL),
+            ),
+            library = kneeSwapLibrary,
+            existing = listOf(edited),
+            today = today,
+        )
+        assertFalse(
+            "周一 × 臀部（动作2）是手改槽位 → 替代补位也不得写它",
+            proposal.days.firstOrNull { it.dayOfWeek == 1 }
+                ?.items
+                ?.any { it.exerciseId == 2L } == true,
+        )
+    }
+
+    @Test
+    fun planWeek_bodyWeightChange_isTheOnlyDifferenceInResult() {
+        // 同一档案、同一库，只差"当前体重" → 结果必须不同（证明体重真的进了规则）。
+        val profile = UserProfile(goal = Goal.MAINTAIN, goalWeightKg = 70f)
+        val heavy = LocalRuleAdvisor.planWeek(
+            profile = profile,
+            library = realLibrary(),
+            existing = emptyList(),
+            today = today,
+            bodyWeightKg = 82f,
+        )
+        val atTarget = LocalRuleAdvisor.planWeek(
+            profile = profile,
+            library = realLibrary(),
+            existing = emptyList(),
+            today = today,
+            bodyWeightKg = 70f,
+        )
+
+        assertTrue(
+            "体重 82kg（要减 12kg）必须写进依据，70kg（已到位）不写",
+            heavy.basis.any { it.key == "basis_weight_cut" } &&
+                atTarget.basis.none { it.key == "basis_weight_cut" },
+        )
     }
 }

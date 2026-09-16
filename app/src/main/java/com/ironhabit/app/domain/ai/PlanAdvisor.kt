@@ -41,15 +41,21 @@ interface PlanAdvisor {
      *  1. **[existing] 中 `isUserEdited == true` 的行（**含软删除行**）→ 完整保留**：
      *     既不生成会覆盖它的条目，也不"复活"它（对应 `schema-v2.md` §6.3 坑 3/4/6）。
      *  2. 只用 [profile].equipment 里**实际拥有**的器械（空集视为 `{NONE}` = 仅自重）；
-     *     含 [profile].injuryAreas 会刺激到的动作 → **机械排除**。
+     *     含 [profile].injuryAreas 会刺激到的动作 → **机械排除**，并用**未受该伤病影响的邻近肌群**
+     *     低冲击动作替代（`PlanReason.INJURY_SAFE`）—— 见 P1 的"伤病从排除改替代"。
      *  3. 输出**只包含"可写槽位"**的草案；是否落库由 UseCase 决定（本函数不碰仓库）。
-     *  4. 每周安排 **默认 3 天**（[LocalRuleAdvisor.DEFAULT_TRAINING_DAYS] 常量）；本版**不做**"用户自选天数"。
+     *  4. 每周训练天数读 [profile] 的 `trainingDaysPerWeek`（P1 起 `3–6` 可选；
+     *     默认 3 天 = 旧版钉死的行为，老用户升级前后排出来的计划一致）。
+     *  5. 训练量参数（组次区间 / 每日动作数 / 每周有氧数 / 加重步长）由
+     *     [ProfileLoadPolicy.of] 从档案推导（P1）—— 规则层不自己硬编码这些数字。
      *
      * @param profile  用户档案（见 `schema-v3-meals.md` §7.5.2 的 `UserProfile`）
      * @param library  可选动作全集（内置 + 自建 + 已收编的推荐动作）
      * @param existing 当前周计划**全部**行（**含 `isActive == false` 的软删除行**）
      * @param history  每个动作"最近一次完成情况"，用于渐进超负荷（缺省为空 = 不做超负荷调整）
-     * @param today    今天（决定 3 个训练日在周内的排布起点）
+     * @param today    今天（决定训练日在周内的排布起点 + 训练重点轮换相位）
+     * @param bodyWeightKg 当前体重（来自 `body_metrics` 最新一条）；`null` = 用户没记过体重
+     *   → 跳过"体重 vs 目标体重"的规则（**不猜**，不用 0 冒充）
      * @return 计划草案（**纯数据**，不落库、不改状态）
      */
     fun planWeek(
@@ -58,6 +64,7 @@ interface PlanAdvisor {
         existing: List<WeekPlan>,
         history: List<ExerciseProgress> = emptyList(),
         today: LocalDate,
+        bodyWeightKg: Float? = null,
     ): PlanProposal
 
     /**

@@ -43,6 +43,7 @@ class DelegatingPlanAdvisorTest {
             existing: List<WeekPlan>,
             history: List<com.ironhabit.app.domain.model.ExerciseProgress>,
             today: LocalDate,
+            bodyWeightKg: Float?,
         ): PlanProposal {
             planWeekCalls++
             @Suppress("UNCHECKED_CAST")

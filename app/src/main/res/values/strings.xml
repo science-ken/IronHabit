@@ -277,9 +277,12 @@
     <string name="hint_profile_goal_weight">如 72</string>
     <string name="suffix_profile_goal_weight">kg</string>
 
-    <!-- 分区：训练条件（8 项）-->
+    <!-- 分区：训练条件（9 项）-->
     <string name="section_profile_training">训练条件</string>
     <string name="label_profile_equipment">可用器械（可多选）</string>
+    <string name="label_profile_training_days">每周训练天数</string>
+    <string name="label_profile_training_days_option">%1$d 天</string>
+    <string name="hint_profile_training_days">生成计划时会按这个天数排课：天数越多越密，连续两天不会练同一块肌群。默认 3 天。</string>
     <string name="equipment_none">无器械</string>
     <string name="equipment_dumbbell">哑铃</string>
     <string name="equipment_barbell">杠铃</string>
@@ -466,10 +469,19 @@
     <string name="ai_analysis_title">AI 文字分析</string>
     <string name="ai_basis_title">本地规则 · 生成依据</string>
     <string name="ai_basis_subtitle">这份计划根据你的档案自动推算，并非 AI 联网生成</string>
-    <string name="basis_frequency">每周安排 3 个训练日（周一/周三/周五优先），并轮换不同训练重点</string>
+    <string name="basis_frequency">每周安排 %1$d 个训练日（按你在档案里设的天数），并轮换不同训练重点</string>
     <string name="basis_goal">按你的健身目标安排动作侧重与训练量</string>
+    <string name="basis_volume">按你的目标：每组 %1$d–%2$d 次、每个动作 %3$d–%4$d 组</string>
+    <string name="basis_cardio">每周安排 %1$d 个有氧动作（按目标与体脂/体重推算）</string>
     <string name="basis_profile">训练量依据你的性别、年龄、身高计算</string>
+    <string name="basis_recovery_age">年龄 %1$d 岁：每天 %2$d 个动作，组间休息建议 90–120 秒、同一部位间隔 48 小时</string>
+    <string name="basis_age_volume">年龄 %1$d 岁 → 单日动作数下调到 %2$d 个，优先保证恢复</string>
+    <string name="basis_bodyfat_high">体脂偏高 → 有氧比例上调到每周 %1$d 个</string>
+    <string name="basis_bodyfat_low">体脂偏低 + 目标是增肌 → 有氧降到每周 %1$d 个</string>
+    <string name="basis_weight_cut">当前体重高于目标体重 → 有氧上调到每周 %1$d 个</string>
+    <string name="basis_weight_gain">离目标体重还有差距 → 每个动作容量上调到最多 %1$d 组</string>
     <string name="basis_injury">已按你的伤病部位自动避开相关肌群动作</string>
+    <string name="basis_injury_swap">为避让伤病，%1$d 个动作换成了低冲击替代（同部位、更安全的邻近肌群）</string>
     <string name="basis_equipment">已按你拥有的器械适配动作，无需额外器材</string>
     <string name="basis_overload">检测到你上次 %1$d 个动作做满且强度有余量，已自动小幅加重</string>
     <string name="basis_history_none">暂无打卡记录，先用基础目标值，练几次后会自动进阶</string>

@@ -506,8 +506,17 @@ private fun LocalBasisCard(basis: List<PlanBasisItem>) {
 private fun basisKeyRes(key: String): Int = when (key) {
     "basis_frequency" -> R.string.basis_frequency
     "basis_goal" -> R.string.basis_goal
+    "basis_volume" -> R.string.basis_volume
+    "basis_cardio" -> R.string.basis_cardio
     "basis_profile" -> R.string.basis_profile
+    "basis_recovery_age" -> R.string.basis_recovery_age
+    "basis_age_volume" -> R.string.basis_age_volume
+    "basis_bodyfat_high" -> R.string.basis_bodyfat_high
+    "basis_bodyfat_low" -> R.string.basis_bodyfat_low
+    "basis_weight_cut" -> R.string.basis_weight_cut
+    "basis_weight_gain" -> R.string.basis_weight_gain
     "basis_injury" -> R.string.basis_injury
+    "basis_injury_swap" -> R.string.basis_injury_swap
     "basis_equipment" -> R.string.basis_equipment
     "basis_overload" -> R.string.basis_overload
     "basis_history_none" -> R.string.basis_history_none
