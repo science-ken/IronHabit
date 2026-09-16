@@ -42,7 +42,7 @@ PY="/c/Users/science/.workbuddy/binaries/python/versions/3.13.12/python.exe"
 PKG="com.ironhabit.app"
 DBNAME="ironhabit.db"          # 真实库名（不是包名！）
 VM="${VM:-2}"
-SHOTS="/d/Workbuddy data/2026-09-14-09-31-06/shots"
+SHOTS="D:/Workbuddy data/2026-09-14-09-31-06/shots"   # 用 D:/ 形式：Git Bash 与 Windows Python 都能读
 DBDIR="$SHOTS/db/wal"
 
 # MuMu 实例 → adb 端口（每次重启可能变，必须动态取）
@@ -65,7 +65,6 @@ ensure_device() {
 }
 
 boot() {
-  local started
   started="$("$MUMU" info -v "$VM" 2>/dev/null | grep -o '"is_android_started": [a-z]*')"
   if [ "$started" = '"is_android_started": true' ]; then echo "实例 $VM 已在运行"; else
     echo "启动实例 $VM …"
@@ -82,6 +81,13 @@ boot() {
     echo "  等待中…（$i）"
   done
   echo "❌ 启动超时"; return 1
+}
+
+# 把当前界面层级拉到 $SHOTS/ui.xml（ui / taptext 共用）
+pull_ui() {
+  "$ADB" -s "$(device)" shell uiautomator dump /data/local/tmp/ui.xml >/dev/null 2>&1
+  "$ADB" -s "$(device)" exec-out cat /data/local/tmp/ui.xml > "$SHOTS/ui.xml" 2>/dev/null
+  [ -s "$SHOTS/ui.xml" ] || { echo "❌ 界面层级拉取失败（App 未在前台？）"; return 1; }
 }
 
 case "${1:-help}" in
@@ -126,15 +132,46 @@ case "${1:-help}" in
     if [ -z "$out" ]; then echo "✅ 崩溃缓冲为空"; else echo "$out"; fi ;;
 
   ui)
+    ensure_device || exit 1
+    pull_ui
+    "$PY" -c "
+import re
+s=open(r'$SHOTS/ui.xml',encoding='utf-8',errors='replace').read()
+rows=[]
+for m in re.finditer(r'text=\"([^\"]+)\"[^>]*bounds=\"\[(\d+),(\d+)\]\[(\d+),(\d+)\]\"', s):
+    t=m.group(1); x1,y1,x2,y2=map(int,m.groups()[1:])
+    rows.append(((y1+y2)//2,(x1+x2)//2,f'{t}\t{(x1+x2)//2}\t{(y1+y2)//2}'))
+rows.sort()
+for _,_,line in rows: print(line)
+" ;;
+
+  # 按文本点击：bash scripts/dev.sh taptext 早餐   （子串匹配，取最靠上的那个）
+  taptext)
     ensure_device || exit 1; D="$(device)"
-    "$ADB" -s "$D" shell uiautomator dump /data/local/tmp/ui.xml >/dev/null 2>&1
-    "$ADB" -s "$D" shell cat /data/local/tmp/ui.xml 2>/dev/null \
-      | grep -oE 'text="[^"]+"[^>]*bounds="\[[0-9]+,[0-9]+\]\[[0-9]+,[0-9]+\]"' \
-      | sed -E 's/.*text="([^"]+)".*bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\]"/\1  →  中心点 (\2+\4)\/2,(\3+\5)\/2  bounds=[\2,\3][\4,\5]/' ;;
+    pull_ui
+    xy=$("$PY" -c "
+import re
+s=open(r'$SHOTS/ui.xml',encoding='utf-8',errors='replace').read()
+pat='''$2'''
+hits=[]
+for m in re.finditer(r'text=\"([^\"]+)\"[^>]*bounds=\"\[(\d+),(\d+)\]\[(\d+),(\d+)\]\"', s):
+    if pat in m.group(1):
+        x1,y1,x2,y2=map(int,m.groups()[1:]); hits.append(((y1+y2)//2,(x1+x2)//2))
+if hits:
+    hits.sort(); print(hits[0][1], hits[0][0])
+")
+    if [ -z "$xy" ]; then echo "❌ 未找到文本: $2"; exit 1; fi
+    "$ADB" -s "$D" shell input tap $xy
+    echo "taptext '$2' → $xy" ;;
 
   tap)
     ensure_device || exit 1; D="$(device)"
     "$ADB" -s "$D" shell input tap "$2" "$3"; echo "tap $2 $3" ;;
+
+  # 返回：bash scripts/dev.sh back   （二级页没有底部导航，必须先返回）
+  back)
+    ensure_device || exit 1; D="$(device)"
+    "$ADB" -s "$D" shell input keyevent 4; echo "back" ;;
 
   swipe)
     ensure_device || exit 1; D="$(device)"
