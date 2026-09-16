@@ -396,6 +396,14 @@
     <!-- 区块②：饮食计划入口（复用既有的 GenerateDietPlanUseCase） -->
     <string name="ai_generate_diet">生成饮食计划</string>
     <string name="ai_regenerate_diet">重新生成饮食计划</string>
+    <!-- 区块② 收尾（子项 B）：标题 / 说明 / 诚实提示 / 本地依据 -->
+    <string name="ai_section_diet">饮食计划</string>
+    <string name="ai_diet_hint">按你的档案与忌口生成今日饮食；热量与蛋白质由本地规则计算，联网时另附 AI 的「为什么这样吃」分析</string>
+    <string name="ai_diet_used_defaults">档案或体重未填全，本次用了默认目标值；补全后更准确</string>
+    <string name="ai_diet_preserved_hint">已保留你手动改过的 %1$d 餐，不会被覆盖</string>
+    <string name="ai_diet_basis_title">本地规则 · 生成依据</string>
+    <string name="ai_diet_basis_body">依据体重、性别、年龄、身高估算基础代谢，再按目标与「今天是否训练日」调整；忌口已在候选食物上过滤</string>
+    <string name="ai_diet_analysis_title">AI 分析 · 为什么这样吃</string>
 
     <!-- 区块③：教练解读（剩余条目） -->
     <string name="ai_explain_intake">建议每日摄入约 %1$d kcal，蛋白质约 %2$d g</string>

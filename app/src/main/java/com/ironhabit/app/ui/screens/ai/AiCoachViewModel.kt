@@ -8,6 +8,7 @@ import com.ironhabit.app.data.preferences.AiCredentialsStore
 import com.ironhabit.app.domain.model.AdoptResult
 import com.ironhabit.app.domain.model.AdviceSource
 import com.ironhabit.app.domain.model.BodyMetricType
+import com.ironhabit.app.domain.model.DietTarget
 import com.ironhabit.app.domain.model.ExerciseSuggestion
 import com.ironhabit.app.domain.model.Gender
 import com.ironhabit.app.domain.model.PlanBasisItem
@@ -20,8 +21,11 @@ import com.ironhabit.app.domain.repository.ExerciseRepository
 import com.ironhabit.app.domain.repository.SettingsRepository
 import com.ironhabit.app.domain.usecase.AskCoachUseCase
 import com.ironhabit.app.domain.usecase.CoachAnswer
+import com.ironhabit.app.domain.usecase.ExplainDietUseCase
+import com.ironhabit.app.domain.usecase.GenerateDietPlanUseCase
 import com.ironhabit.app.domain.usecase.GenerateTrainingPlanUseCase
 import com.ironhabit.app.domain.usecase.SuggestExercisesUseCase
+import com.ironhabit.app.domain.util.DateUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
@@ -34,6 +38,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
+import kotlinx.datetime.TimeZone
 
 /** 一次「生成计划」的结果（面向 UI 的纯展示数据）。 */
 data class PlanResultUi(
@@ -58,6 +64,28 @@ data class PlanResultUi(
 )
 
 /**
+ * 一次「生成饮食计划」的结果（面向 UI 的纯展示数据，子项 B）。
+ *
+ * ⚠️ **数值全部来自本地纯函数**（[com.ironhabit.app.domain.diet.DietPlanGenerator]），
+ * 远端 AI 只提供文字分析，不参与任何数值计算。
+ *
+ * @property writtenCount 本次实际写入的餐数
+ * @property preservedCount 被完整保留的用户手改餐数（含软删行）
+ * @property targetKcal 本地目标热量
+ * @property targetProtein 本地目标蛋白质
+ * @property usedDefaults 是否用了默认目标值（档案/体重未填全）
+ * @property filteredCount 因忌口被过滤掉的食物条目数
+ */
+data class DietSummaryUi(
+    val writtenCount: Int = 0,
+    val preservedCount: Int = 0,
+    val targetKcal: Int = 0,
+    val targetProtein: Int = 0,
+    val usedDefaults: Boolean = false,
+    val filteredCount: Int = 0,
+)
+
+/**
  * 「AI 教练」UI 状态（不可变）。
  *
  * @property isLoading 首帧加载中
@@ -71,6 +99,9 @@ data class PlanResultUi(
  * @property chatMessages 「问教练」最近若干轮消息（**只在内存里，问答不落库**）
  * @property chatInput 「问教练」输入框当前内容
  * @property isAsking 正在等 AI 回答（发送中：输入框与按钮都禁用）
+ * @property dietSummary 最近一次「生成饮食」的本地结果（`null` = 本次会话尚未生成过）
+ * @property isGeneratingDiet 生成饮食进行中
+ * @property dietAnalysis 远端 AI 的「为什么这样吃」分析；`null` = 未联网 / 失败（此时 UI 显示本地依据卡）
  * @property errorRes 页面级错误资源 id
  * @property snackbarRes 一次性提示资源 id
  * @property snackbarArgs 提示的格式化参数（**类型必须与资源占位符一致**：`%1$d` 传 Int、`%1$s` 传 String；
@@ -99,6 +130,12 @@ data class AiCoachUiState(
     val chatInput: String = "",
     /** 正在等 AI 回答：发送中禁用输入框与按钮，避免并发发问。 */
     val isAsking: Boolean = false,
+    /** 最近一次「生成饮食」的**本地**结果（`null` = 本次会话尚未生成过）。 */
+    val dietSummary: DietSummaryUi? = null,
+    /** 生成饮食进行中（本地生成本身很快，联网分析会稍慢，二者用同一标志）。 */
+    val isGeneratingDiet: Boolean = false,
+    /** 远端 AI 的「为什么这样吃」分析；`null` = 未联网 / 失败 → UI 显示本地依据卡。 */
+    val dietAnalysis: String? = null,
     @StringRes val errorRes: Int? = null,
     @StringRes val snackbarRes: Int? = null,
     val snackbarArgs: List<Any> = emptyList(),
@@ -134,6 +171,10 @@ class AiCoachViewModel @Inject constructor(
     private val generateTrainingPlan: GenerateTrainingPlanUseCase,
     private val suggestExercises: SuggestExercisesUseCase,
     private val askCoach: AskCoachUseCase,
+    private val generateDietPlan: GenerateDietPlanUseCase,
+    private val explainDiet: ExplainDietUseCase,
+    private val clock: Clock,
+    private val timeZone: TimeZone,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AiCoachUiState())
@@ -229,6 +270,94 @@ class AiCoachViewModel @Inject constructor(
         }
     }
 
+    /**
+     * 生成 / 重新生成**今日饮食计划**（子项 B）。
+     *
+     * 分工（**数值一律以本地为准**）：
+     * 1. 先跑本地 [GenerateDietPlanUseCase]（写入今日餐次；用户手改餐不被覆盖，红线）；
+     * 2. 本地写入成功后再尝试远端「为什么这样吃」分析 —— 未联网 / 失败都不影响第 1 步结果，
+     *    UI 自动退回本地「生成依据」卡（不弹错、不阻断）。
+     *
+     * 提示优先级（与 `TodayViewModel.onGenerateDiet` 同口径）：忌口过滤 > 用了默认目标值 > 生成成功。
+     */
+    fun generateDiet() {
+        if (_uiState.value.isGeneratingDiet) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isGeneratingDiet = true, errorRes = null) }
+            runCatching { generateDietPlan(todayEpochDay()) }
+                .onSuccess { summary ->
+                    val hintRes: Int
+                    // ⚠️ `msg_diet_filtered` 的占位符是 %1$s（String 通道）→ 必须传 toString()。
+                    //    历史上这里写成 %1$d 却收到 String，一勾忌口就 IllegalFormatConversionException 崩溃。
+                    val hintArgs: List<Any>
+                    when {
+                        summary.filteredCount > 0 -> {
+                            hintRes = R.string.msg_diet_filtered
+                            hintArgs = listOf(summary.filteredCount.toString())
+                        }
+
+                        summary.target.usedDefaults -> {
+                            hintRes = R.string.profile_incomplete_hint
+                            hintArgs = emptyList()
+                        }
+
+                        else -> {
+                            hintRes = R.string.msg_diet_generated
+                            hintArgs = emptyList()
+                        }
+                    }
+                    _uiState.update {
+                        it.copy(
+                            isGeneratingDiet = false,
+                            dietSummary = DietSummaryUi(
+                                writtenCount = summary.writtenCount,
+                                preservedCount = summary.preservedCount,
+                                targetKcal = summary.target.targetKcal,
+                                targetProtein = summary.target.targetProtein,
+                                usedDefaults = summary.target.usedDefaults,
+                                filteredCount = summary.filteredCount,
+                            ),
+                            // 每次重新生成都先清掉旧分析，避免「数值已变、解释还是上一版」。
+                            dietAnalysis = null,
+                            snackbarRes = hintRes,
+                            snackbarArgs = hintArgs,
+                        )
+                    }
+                    requestDietAnalysis(summary.target)
+                }
+                .onFailure {
+                    lastFailedAction = FailedAction.GENERATE_DIET
+                    _uiState.update {
+                        it.copy(isGeneratingDiet = false, errorRes = R.string.error_save_failed)
+                    }
+                }
+        }
+    }
+
+    /**
+     * 远端「为什么这样吃」分析：**失败只让 [AiCoachUiState.dietAnalysis] 保持 `null`**，
+     * 页面照常用本地的热量 / 蛋白质结果，不弹错、不阻断。
+     */
+    private suspend fun requestDietAnalysis(target: DietTarget) {
+        val answer: CoachAnswer = try {
+            explainDiet(target)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (unexpected: Exception) {
+            CoachAnswer.Failed(RemoteFallbackReason.REMOTE_ERROR)
+        }
+        _uiState.update {
+            when (answer) {
+                is CoachAnswer.Ok -> it.copy(dietAnalysis = answer.text)
+                is CoachAnswer.NeedsNetwork -> it.copy(dietAnalysis = null)
+                is CoachAnswer.Failed -> it.copy(dietAnalysis = null)
+            }
+        }
+    }
+
+    /** 今天（本地时区）：饮食计划按「今天」生成。 */
+    private fun todayEpochDay(): Long = DateUtils.todayEpochDay(clock, timeZone)
+
     /** 刷新补充动作建议（已在动作库中的不会出现在结果里）。 */
     fun loadSuggestions() {
         viewModelScope.launch {
@@ -292,6 +421,7 @@ class AiCoachViewModel @Inject constructor(
         when (failed) {
             FailedAction.GENERATE_PLAN -> generatePlan()
             FailedAction.LOAD_SUGGESTIONS -> loadSuggestions()
+            FailedAction.GENERATE_DIET -> generateDiet()
         }
     }
 
@@ -380,6 +510,9 @@ private enum class FailedAction {
 
     /** 建议加载 / 收入失败 → 重试重新加载建议。 */
     LOAD_SUGGESTIONS,
+
+    /** 生成饮食计划失败 → 重试重新生成饮食。 */
+    GENERATE_DIET,
 }
 
 /** 「问教练」内存里保留的消息条数上限（6 条 = 3 轮问答）。 */

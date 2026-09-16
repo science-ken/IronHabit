@@ -1,5 +1,6 @@
 package com.ironhabit.app.domain.ai.remote
 
+import com.ironhabit.app.domain.model.DietTarget
 import com.ironhabit.app.domain.usecase.CoachContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -58,6 +59,46 @@ internal object RemoteChatPromptBuilder {
             question = question,
         )
         return chatJson.encodeToString(ChatPayload.serializer(), payload)
+    }
+
+    /**
+     * 「为什么这样吃」的 system 段（子项 B）：只出**文字分析**，数值一律以本地为准。
+     */
+    fun buildDietSystemPrompt(): String = DIET_SYSTEM_PROMPT
+
+    /**
+     * 「为什么这样吃」的 user 段：用户档案 + 近期打卡 + 今日饮食现状 + **本地算出的目标**。
+     *
+     * 🔒 目标数值由本地纯函数给出（[DietTarget]），提示词里明确要求模型**不要改数字**，
+     * 因此离线数值永远可信，远端只负责"讲清楚为什么"。
+     */
+    fun buildDietUserPrompt(context: CoachContext, target: DietTarget): String {
+        val payload = DietAnalysisPayload(
+            profile = ChatProfilePayload(
+                gender = context.profile.gender?.name,
+                age = context.profile.age,
+                heightCm = context.profile.heightCm,
+                goal = context.profile.goal.name,
+                equipment = context.profile.equipment.map { it.name },
+                injuryAreas = context.profile.injuryAreas.map { it.name },
+                dietaryAvoid = context.profile.dietaryAvoid.map { it.name },
+                injuryNote = context.profile.injuryNote,
+            ),
+            recentCheckIn = ChatCheckInPayload(
+                windowDays = context.windowDays,
+                count = context.checkInCount,
+                averageRpe = context.averageRpe,
+                currentStreak = context.currentStreak,
+            ),
+            todayDiet = ChatDietPayload(
+                intakeKcal = context.todayIntakeKcal,
+                planKcal = context.todayPlanKcal,
+            ),
+            targetKcal = target.targetKcal,
+            targetProtein = target.targetProtein,
+            usedDefaults = target.usedDefaults,
+        )
+        return chatJson.encodeToString(DietAnalysisPayload.serializer(), payload)
     }
 
     /**
@@ -141,6 +182,17 @@ internal object RemoteChatPromptBuilder {
         val planKcal: Int,
     )
 
+    /** 「为什么这样吃」的载荷（子项 B）：档案 + 近期打卡 + 今日饮食 + **本地目标（不可改）**。 */
+    @Serializable
+    private data class DietAnalysisPayload(
+        val profile: ChatProfilePayload,
+        val recentCheckIn: ChatCheckInPayload,
+        val todayDiet: ChatDietPayload,
+        val targetKcal: Int,
+        val targetProtein: Int,
+        val usedDefaults: Boolean,
+    )
+
     @Serializable
     private data class ChatAnswer(
         val answer: String? = null,
@@ -161,5 +213,21 @@ internal object RemoteChatPromptBuilder {
 
 输出格式：
 {"answer":"结合你上周的训练与今日饮食，建议……"}
+"""
+
+    /** 「为什么这样吃」的 system 段：只解释、不改数值、不做医疗诊断。 */
+    private const val DIET_SYSTEM_PROMPT: String = """
+你是一名用户的私人健身教练，本次只做一件事：用简体中文解释「这份今日饮食计划为什么这样安排」。
+
+硬性规则：
+1. 营养数值（热量 / 蛋白质）**以下面给出的目标为准**：不要重新计算、不要改写数字、不要给出精确到克的食谱配方。
+2. 必须结合用户档案（性别 / 年龄 / 身高 / 目标 / 忌口）与近期训练情况来说明：为什么是这些量、训练日与休息日的差别、怎样吃更容易达标。
+3. 不做医疗诊断：涉及疾病、用药、孕期等问题，只给一般性建议并明确提示"请咨询医生"。
+4. 用简体中文回答。
+5. 回答控制在 200 字以内，直接给可执行的吃法建议（几餐、优先吃什么、注意什么）。
+6. 只输出一个 JSON 对象（不要使用 Markdown 代码块围栏），形如 {"answer":"你的分析"}，把简体中文分析正文放进 answer 字段。
+
+输出格式：
+{"answer":"你今天的目标是……"}
 """
 }

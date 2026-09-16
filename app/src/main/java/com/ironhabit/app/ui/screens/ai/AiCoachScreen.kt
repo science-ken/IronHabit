@@ -133,6 +133,11 @@ fun AiCoachScreen(
                         onAddPlan = onAddPlan,
                         onEditPlan = onEditPlan,
                     )
+                    // ②B 饮食计划（子项 B）：本地算数值 + 联网时附 AI 的「为什么这样吃」。
+                    DietBlock(
+                        uiState = uiState,
+                        onGenerateDiet = viewModel::generateDiet,
+                    )
                     ExplainBlock(bmr = viewModel.estimateBmr(), canAsk = uiState.canAskCoach)
                     // ⑤ 问教练（AI 自由问答）：离线显示诚实禁用说明，在线可用，发送中禁用。
                     CoachChatCard(
@@ -533,6 +538,134 @@ private fun formatWeight(detail: PlanNoteDetail): String = when (detail) {
 private fun formatKg(kg: Float): String {
     val rounded = kotlin.math.round(kg * 10) / 10f
     return if (rounded % 1f == 0f) rounded.toInt().toString() else rounded.toString()
+}
+
+/**
+ * ②B 饮食计划（子项 B）。
+ *
+ * **数值一律来自本地纯函数**（热量 / 蛋白质 / 各餐内容），远端 AI 只提供一段
+ * 「为什么这样吃」的文字分析 —— 因此离线、未配 Key、调用失败时这里依然有完整可信的结果，
+ * 只是把分析卡换成**明确标注本地规则**的「生成依据」卡。
+ */
+@Composable
+private fun DietBlock(
+    uiState: AiCoachUiState,
+    onGenerateDiet: () -> Unit,
+) {
+    SectionTitle(text = stringResource(R.string.ai_section_diet))
+    Text(
+        text = stringResource(R.string.ai_diet_hint),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Button(
+        onClick = onGenerateDiet,
+        enabled = !uiState.isGeneratingDiet,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        val label = if (uiState.dietSummary == null) {
+            stringResource(R.string.ai_generate_diet)
+        } else {
+            stringResource(R.string.ai_regenerate_diet)
+        }
+        Text(text = label)
+    }
+
+    val summary = uiState.dietSummary
+    if (summary != null) {
+        if (summary.preservedCount > 0) {
+            Text(
+                text = stringResource(R.string.ai_diet_preserved_hint, summary.preservedCount),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Text(
+            text = stringResource(
+                R.string.ai_explain_intake,
+                summary.targetKcal,
+                summary.targetProtein,
+            ),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        if (summary.usedDefaults) {
+            Text(
+                text = stringResource(R.string.ai_diet_used_defaults),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (summary.filteredCount > 0) {
+            Text(
+                // ⚠️ msg_diet_filtered 的占位符是 %1$s（String 通道）→ 传 toString()，别传 Int。
+                text = stringResource(R.string.msg_diet_filtered, summary.filteredCount.toString()),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        val analysis = uiState.dietAnalysis
+        if (!analysis.isNullOrBlank()) {
+            DietAnalysisCard(analysis = analysis)
+        } else {
+            DietLocalBasisCard()
+        }
+    }
+}
+
+/** 远端 AI 的「为什么这样吃」（仅联网成功时出现；数值仍以本地为准）。 */
+@Composable
+private fun DietAnalysisCard(analysis: String) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.ai_diet_analysis_title),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(
+                text = analysis,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+    }
+}
+
+/** 离线 / 未联网时的本地「生成依据」卡（**明确标注本地规则**，不冒充 AI）。 */
+@Composable
+private fun DietLocalBasisCard() {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.ai_diet_basis_title),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(
+                text = stringResource(R.string.ai_diet_basis_body),
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
 }
 
 /**

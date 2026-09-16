@@ -10,6 +10,8 @@ import com.ironhabit.app.domain.repository.ExerciseRepository
 import com.ironhabit.app.domain.repository.SettingsRepository
 import com.ironhabit.app.domain.usecase.AskCoachUseCase
 import com.ironhabit.app.domain.usecase.CoachAnswer
+import com.ironhabit.app.domain.usecase.ExplainDietUseCase
+import com.ironhabit.app.domain.usecase.GenerateDietPlanUseCase
 import com.ironhabit.app.domain.usecase.GenerateTrainingPlanUseCase
 import com.ironhabit.app.domain.usecase.SuggestExercisesUseCase
 import com.ironhabit.app.test.MainDispatcherRule
@@ -21,6 +23,9 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -46,6 +51,14 @@ class AiCoachViewModelChatTest {
     private val generateTrainingPlan = mockk<GenerateTrainingPlanUseCase>(relaxed = true)
     private val suggestExercises = mockk<SuggestExercisesUseCase>()
     private val askCoach = mockk<AskCoachUseCase>()
+    private val generateDietPlan = mockk<GenerateDietPlanUseCase>(relaxed = true)
+    private val explainDiet = mockk<ExplainDietUseCase>(relaxed = true)
+
+    /** 固定时钟：让 `todayEpochDay()` 可复现（本类只关心问答，故取任意确定时刻）。 */
+    private val utc = TimeZone.UTC
+    private val clock = object : Clock {
+        override fun now(): Instant = Instant.fromEpochMilliseconds(1_772_000_000_000L)
+    }
 
     private fun newViewModel(aiRemote: Boolean = true, hasKey: Boolean = true): AiCoachViewModel {
         every { settingsRepository.profile() } returns flowOf(UserProfile())
@@ -65,6 +78,10 @@ class AiCoachViewModelChatTest {
             generateTrainingPlan = generateTrainingPlan,
             suggestExercises = suggestExercises,
             askCoach = askCoach,
+            generateDietPlan = generateDietPlan,
+            explainDiet = explainDiet,
+            clock = clock,
+            timeZone = utc,
         )
     }
 

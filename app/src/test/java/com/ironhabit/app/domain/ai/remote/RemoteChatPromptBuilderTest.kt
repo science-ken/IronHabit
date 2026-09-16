@@ -1,5 +1,6 @@
 package com.ironhabit.app.domain.ai.remote
 
+import com.ironhabit.app.domain.model.DietTarget
 import com.ironhabit.app.domain.model.Gender
 import com.ironhabit.app.domain.model.Goal
 import com.ironhabit.app.domain.model.UserProfile
@@ -136,5 +137,43 @@ class RemoteChatPromptBuilderTest {
             "答案是",
             RemoteChatPromptBuilder.parseChatAnswer("""{"answer":"  答案是  "}"""),
         )
+    }
+
+    // ---------------- 子项 B：饮食「为什么这样吃」 ----------------
+
+    @Test
+    fun dietSystemPrompt_forbidsRenumberingAndMedicalAdvice() {
+        val prompt = RemoteChatPromptBuilder.buildDietSystemPrompt()
+
+        assertTrue("必须禁止模型自己重算数值", prompt.contains("不要重新计算"))
+        assertTrue("应禁止医疗诊断并要求就医", prompt.contains("咨询医生"))
+        assertTrue("应限制在 200 字以内", prompt.contains("200 字"))
+        assertTrue("应要求 JSON 且字段名为 answer", prompt.contains("{\"answer\""))
+    }
+
+    @Test
+    fun dietUserPrompt_carriesLocalTargetAndDietNumbers() {
+        val json = RemoteChatPromptBuilder.buildDietUserPrompt(
+            context = context(),
+            target = DietTarget(targetKcal = 2300, targetProtein = 150),
+        )
+
+        assertTrue("本地目标热量（模型不得改）", json.contains("\"targetKcal\":2300"))
+        assertTrue("本地目标蛋白质（模型不得改）", json.contains("\"targetProtein\":150"))
+        assertTrue("是否用了默认值", json.contains("\"usedDefaults\":false"))
+        assertTrue("今日已摄入", json.contains("\"intakeKcal\":1500"))
+        assertTrue("今日计划摄入", json.contains("\"planKcal\":2300"))
+        assertTrue("档案目标", json.contains("\"goal\":\"BULK\""))
+        assertTrue("近期打卡条数", json.contains("\"count\":5"))
+    }
+
+    @Test
+    fun dietUserPrompt_marksUsedDefaultsWhenProfileIncomplete() {
+        val json = RemoteChatPromptBuilder.buildDietUserPrompt(
+            context = CoachContext(),
+            target = DietTarget(targetKcal = 2000, targetProtein = 100, usedDefaults = true),
+        )
+
+        assertTrue(json.contains("\"usedDefaults\":true"))
     }
 }
