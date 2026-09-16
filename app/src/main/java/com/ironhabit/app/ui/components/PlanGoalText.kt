@@ -5,7 +5,7 @@ import androidx.compose.ui.res.stringResource
 import com.ironhabit.app.R
 
 /**
- * 计划目标文案（今日页训练卡片 + 训练页计划行 + **AI 教练计划卡片**共用，保证各处口径一致）。
+ * 计划目标文案（今日页训练卡片 + 训练页计划行共用）。
  *
  * 判定逻辑抽到纯函数 [planGoalSpec]（JVM 可测），本组合函数只负责把规格渲染成文案：
  * - [PlanGoalSpec.SetsReps]     → `3 × 12`
@@ -16,8 +16,7 @@ import com.ironhabit.app.R
  * - 自重类动作（无重量、无时长）→ 仅 `3 × 12`，**不**显示 `0kg` / 空白。
  * - 重量优先于时长显示（一条计划通常二者不并存）。
  * - 重量整数去掉小数点尾巴（`20.0f → "20"`），小数原样保留（`22.5f → "22.5"`）。
- * - 单位文案取自 `strings.xml`（`label_weight_kg` / `label_duration_min` / `plan_goal_duration_only`），
- *   **不在 Kotlin 里硬编码**。
+ * - 单位文案取自 `strings.xml`（`label_weight_kg` / `label_duration_min`），**不在 Kotlin 里硬编码**。
  *
  * @param sets 目标组数
  * @param reps 目标每组次数
@@ -42,7 +41,36 @@ fun planGoalText(sets: Int, reps: Int, weightKg: Float?, durationMin: Int? = nul
         }
 
         is PlanGoalSpec.DurationOnly ->
-            stringResource(R.string.plan_goal_duration_only, spec.durationMin)
+            stringResource(R.string.label_duration_min, spec.durationMin)
+    }
+
+/**
+ * **AI 教练计划卡片专用**渲染（沿用 v1.8 起的「N组 × M次」措辞）。
+ *
+ * 与 [planGoalText] **共用同一个纯判定函数** [planGoalSpec]，只有"组次"的措辞不同
+ * （AI 卡片用 `3组 × 12次` 更明确）；因此「有氧只显示时长」这条规则在两侧天然一致，
+ * 不会出现两套判定各自漂移。改动其一必须同步另一处。
+ */
+@Composable
+fun aiPlanGoalText(sets: Int, reps: Int, weightKg: Float?, durationMin: Int? = null): String =
+    when (val spec = planGoalSpec(sets, reps, weightKg, durationMin)) {
+        is PlanGoalSpec.SetsReps ->
+            stringResource(R.string.plan_goal_format, spec.sets, spec.reps)
+
+        is PlanGoalSpec.WithWeight -> {
+            val setsReps = stringResource(R.string.plan_goal_format, spec.sets, spec.reps)
+            val weightText = stringResource(R.string.plan_goal_weight, formatWeight(spec.weightKg))
+            "$setsReps$weightText"
+        }
+
+        is PlanGoalSpec.WithDuration -> {
+            val setsReps = stringResource(R.string.plan_goal_format, spec.sets, spec.reps)
+            val durationText = stringResource(R.string.plan_goal_duration, spec.durationMin)
+            "$setsReps$durationText"
+        }
+
+        is PlanGoalSpec.DurationOnly ->
+            stringResource(R.string.label_duration_min, spec.durationMin)
     }
 
 /**

@@ -47,7 +47,7 @@ import com.ironhabit.app.ui.components.AppSnackbarHost
 import com.ironhabit.app.ui.components.EmptyState
 import com.ironhabit.app.ui.components.LoadingSkeleton
 import com.ironhabit.app.ui.components.ProfileSummaryCard
-import com.ironhabit.app.ui.components.planGoalText
+import com.ironhabit.app.ui.components.aiPlanGoalText
 
 /**
  * Tab「AI 教练」页面（**本地规则版 · 完全离线**）。
@@ -324,7 +324,7 @@ private fun GeneratedPlanCard(
                 }
             }
             Text(
-                text = planGoalText(plan.targetSets, plan.targetReps, plan.targetWeightKg, plan.targetDurationMin),
+                text = aiPlanGoalText(plan.targetSets, plan.targetReps, plan.targetWeightKg, plan.targetDurationMin),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface,
             )
