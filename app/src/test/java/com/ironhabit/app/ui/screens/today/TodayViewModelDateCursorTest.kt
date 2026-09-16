@@ -21,6 +21,7 @@ import com.ironhabit.app.domain.usecase.ToggleHabitUseCase
 import com.ironhabit.app.domain.usecase.ToggleMealUseCase
 import com.ironhabit.app.domain.usecase.ToggleSetUseCase
 import com.ironhabit.app.domain.usecase.UndoCheckInUseCase
+import com.ironhabit.app.domain.usecase.UpsertMealUseCase
 import com.ironhabit.app.domain.util.DateUtils
 import com.ironhabit.app.test.MainDispatcherRule
 import io.mockk.coVerify
@@ -59,6 +60,7 @@ class TodayViewModelDateCursorTest {
     private val toggleMeal = mockk<ToggleMealUseCase>(relaxed = true)
     private val generateDietPlan = mockk<GenerateDietPlanUseCase>(relaxed = true)
     private val deleteMeal = mockk<DeleteMealUseCase>(relaxed = true)
+    private val upsertMeal = mockk<UpsertMealUseCase>(relaxed = true)
     private val checkInRepository = mockk<CheckInRepository>(relaxed = true)
     private val planRepository = mockk<PlanRepository>(relaxed = true)
 
@@ -93,6 +95,7 @@ class TodayViewModelDateCursorTest {
             toggleMeal = toggleMeal,
             generateDietPlan = generateDietPlan,
             deleteMeal = deleteMeal,
+            upsertMeal = upsertMeal,
             checkInRepository = checkInRepository,
             planRepository = planRepository,
             clock = clock,

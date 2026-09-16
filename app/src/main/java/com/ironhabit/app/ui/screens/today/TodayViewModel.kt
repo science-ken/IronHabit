@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.HabitItem
 import com.ironhabit.app.domain.model.Meal
+import com.ironhabit.app.domain.model.MealType
 import com.ironhabit.app.domain.model.TodayOverview
 import com.ironhabit.app.domain.model.TodayPlanItem
 import com.ironhabit.app.domain.repository.CheckInRepository
@@ -18,6 +19,7 @@ import com.ironhabit.app.domain.usecase.QuickCheckInUseCase
 import com.ironhabit.app.domain.usecase.SetRpeUseCase
 import com.ironhabit.app.domain.usecase.ToggleHabitUseCase
 import com.ironhabit.app.domain.usecase.ToggleMealUseCase
+import com.ironhabit.app.domain.usecase.UpsertMealUseCase
 import com.ironhabit.app.domain.usecase.ToggleSetUseCase
 import com.ironhabit.app.domain.usecase.UndoCheckInUseCase
 import com.ironhabit.app.domain.util.DateUtils
@@ -63,6 +65,7 @@ class TodayViewModel @Inject constructor(
     private val toggleMeal: ToggleMealUseCase,
     private val generateDietPlan: GenerateDietPlanUseCase,
     private val deleteMeal: DeleteMealUseCase,
+    private val upsertMeal: UpsertMealUseCase,
     private val checkInRepository: CheckInRepository,
     private val planRepository: PlanRepository,
     private val clock: Clock,
@@ -227,6 +230,59 @@ class TodayViewModel @Inject constructor(
             baseSnackbarRes = R.string.msg_meal_removed,
             block = { deleteMeal(meal.id) },
         )
+    }
+
+    /**
+     * 打开「编辑这一餐」弹层（把该餐快照放进 UiState，**不写库**）。
+     *
+     * 保存走 [onSaveMealEdit]：写库成功后才关闭弹层。
+     */
+    fun onOpenMealEditor(meal: Meal) {
+        _uiState.update { state -> state.copy(editingMeal = meal) }
+    }
+
+    /** 关闭编辑弹层（取消编辑，不改任何数据）。 */
+    fun onDismissMealEditor() {
+        _uiState.update { state -> state.copy(editingMeal = null) }
+    }
+
+    /**
+     * 保存某一餐的编辑结果（条目 / 热量 / 蛋白质）。
+     *
+     * - 只对**当前打开的那一餐**（[TodayUiState.editingMeal]）生效，避免 UI 传错 id；
+     * - 写入口径 = **所选日**（与逐组 / RPE / 习惯 / 补录一致）；
+     * - 走 [UpsertMealUseCase] → 置 `isUserEdited = true`：**重新生成饮食时整行跳过**，
+     *   用户改过的分量不会被规则覆盖（红线）；
+     * - **成功后才关闭弹层**：失败时弹层留在原地、输入不丢，可直接重试。
+     */
+    fun onSaveMealEdit(
+        mealType: MealType,
+        items: List<String>,
+        kcal: Int,
+        proteinG: Double,
+    ) {
+        val target: Meal = _uiState.value.editingMeal ?: return
+        viewModelScope.launch {
+            try {
+                upsertMeal(
+                    id = target.id,
+                    epochDay = currentEpochDay(),
+                    mealType = mealType,
+                    items = items,
+                    kcal = kcal,
+                    proteinG = proteinG,
+                )
+                _uiState.update { state ->
+                    state.copy(
+                        editingMeal = null,
+                        snackbarRes = R.string.msg_meal_saved,
+                        snackbarArgs = emptyList(),
+                    )
+                }
+            } catch (throwable: Throwable) {
+                _uiState.update { state -> state.copy(errorRes = R.string.error_generic) }
+            }
+        }
     }
 
     /**

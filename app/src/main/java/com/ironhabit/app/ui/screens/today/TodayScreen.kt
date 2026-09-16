@@ -37,6 +37,7 @@ import com.ironhabit.app.ui.components.PlanDateStrip
 import com.ironhabit.app.ui.components.ProgressRing
 import com.ironhabit.app.ui.components.SkeletonCard
 import com.ironhabit.app.ui.screens.checkin.CheckInSheet
+import com.ironhabit.app.ui.screens.meals.MealEditSheet
 
 /**
  * Tab1「今日」页面：进度环 + 日期栏 + 训练打卡卡片 + 习惯勾选行。
@@ -197,6 +198,7 @@ fun TodayScreen(
                         MealBlock(
                             meal = meal,
                             onToggle = { done -> viewModel.onToggleMeal(meal, done) },
+                            onEdit = { viewModel.onOpenMealEditor(meal) },
                             onDelete = { viewModel.onDeleteMeal(meal) },
                             enabled = !isFutureDay,
                         )
@@ -254,6 +256,23 @@ fun TodayScreen(
                     notes = notes,
                 )
                 sheetItem = null
+            },
+        )
+    }
+
+    // 编辑一餐弹层：未来日只读，不弹（双保险：卡片的编辑入口已禁用）。
+    val editingMeal = uiState.editingMeal
+    if (editingMeal != null && !isFutureDay) {
+        MealEditSheet(
+            meal = editingMeal,
+            onDismissRequest = viewModel::onDismissMealEditor,
+            onSubmit = { mealType, items, kcal, proteinG ->
+                viewModel.onSaveMealEdit(
+                    mealType = mealType,
+                    items = items,
+                    kcal = kcal,
+                    proteinG = proteinG,
+                )
             },
         )
     }

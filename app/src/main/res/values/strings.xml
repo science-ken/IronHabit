@@ -498,6 +498,15 @@
     <string name="label_meal_kcal">%1$d kcal · 蛋白 %2$dg</string>
     <string name="action_delete_meal">移除这餐</string>
     <string name="msg_meal_removed">已移除这餐</string>
+    <!-- 编辑一餐（产品基线的「编辑一餐内容」入口） -->
+    <string name="action_edit_meal">编辑这餐</string>
+    <string name="title_edit_meal">编辑这一餐</string>
+    <string name="label_meal_type">餐次</string>
+    <string name="hint_meal_items">食物条目（每行一条）</string>
+    <string name="hint_meal_kcal">整餐热量（kcal）</string>
+    <string name="hint_meal_protein">整餐蛋白质（g，可留空）</string>
+    <string name="error_meal_items_empty">至少保留一条食物</string>
+    <string name="msg_meal_saved">这餐已保存，重新生成饮食时不会被覆盖</string>
     <!-- 汇总条：已摄入 / 目标 -->
     <string name="label_diet_intake_kcal">%1$d / %2$d kcal</string>
     <string name="label_diet_intake_protein">%1$d / %2$d g 蛋白</string>

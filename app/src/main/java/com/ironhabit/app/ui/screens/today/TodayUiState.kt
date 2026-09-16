@@ -20,6 +20,7 @@ import com.ironhabit.app.domain.model.TodayPlanItem
  * @property meals 今日饮食餐列表（v3）
  * @property mealTotals 今日饮食合计（已摄入 / 计划，v3）
  * @property dietTarget 今日营养目标（规则现算，不落库，v3）
+ * @property editingMeal 正在编辑的那一餐（`null` = 未打开编辑弹层）
  * @property completedCount 已完成项数（训练 + 习惯）
  * @property totalCount 总项数
  * @property trainingStreak 训练连续打卡信息（进度环大字）
@@ -41,6 +42,8 @@ data class TodayUiState(
     val meals: List<Meal> = emptyList(),
     val mealTotals: MealTotals = MealTotals(),
     val dietTarget: DietTarget = DietTarget(),
+    /** 正在编辑的那一餐；非 `null` 时页面渲染编辑弹层（未来日只读态不渲染）。 */
+    val editingMeal: Meal? = null,
     val completedCount: Int = 0,
     val totalCount: Int = 0,
     val trainingStreak: StreakInfo = StreakInfo(0, 0, null),

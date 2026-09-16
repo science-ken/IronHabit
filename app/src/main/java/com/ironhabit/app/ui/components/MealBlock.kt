@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -25,12 +26,13 @@ import com.ironhabit.app.domain.model.MealType
 import kotlin.math.roundToInt
 
 /**
- * 餐次卡片（对应预览 `mealBlock()`）：餐次名 + 多条食物条目 + 整餐热量/蛋白 + 完成勾选 + 删除。
+ * 餐次卡片（对应预览 `mealBlock()`）：餐次名 + 多条食物条目 + 整餐热量/蛋白 + 完成勾选 + 编辑 + 删除。
  *
- * **只读态**（[enabled] = `false`，用于「所选日 > 今天」）：禁用勾选与删除写入口。
+ * **只读态**（[enabled] = `false`，用于「所选日 > 今天」）：禁用勾选 / 编辑 / 删除三个写入口。
  *
  * @param meal 一餐（含条目列表 / kcal / 蛋白 / 完成态）
  * @param onToggle 勾选 / 取消（参数 = 勾选后的状态）
+ * @param onEdit 编辑这一餐的内容（条目 / 热量 / 蛋白；改动会置 `isUserEdited`，重新生成时跳过）
  * @param onDelete 删除这餐（软删除，UI 侧入口）
  * @param enabled 是否可写（`false` = 未来日只读态）
  */
@@ -38,6 +40,7 @@ import kotlin.math.roundToInt
 fun MealBlock(
     meal: Meal,
     onToggle: (Boolean) -> Unit,
+    onEdit: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
@@ -92,6 +95,12 @@ fun MealBlock(
                     onCheckedChange = onToggle,
                     enabled = enabled,
                 )
+                IconButton(onClick = onEdit, enabled = enabled) {
+                    Icon(
+                        imageVector = Icons.Filled.Edit,
+                        contentDescription = stringResource(R.string.action_edit_meal),
+                    )
+                }
                 IconButton(onClick = onDelete, enabled = enabled) {
                     Icon(
                         imageVector = Icons.Filled.Delete,

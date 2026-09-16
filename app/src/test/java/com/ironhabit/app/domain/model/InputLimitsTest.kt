@@ -167,4 +167,26 @@ class InputLimitsTest {
             )
         }
     }
+
+    // ================= 饮食（一餐） =================
+
+    @Test
+    fun mealKcalBoundaries() {
+        assertTrue("0 kcal（只喝水）合法", InputLimits.isValidMealKcal(InputLimits.MIN_MEAL_KCAL))
+        assertTrue("上界合法", InputLimits.isValidMealKcal(InputLimits.MAX_MEAL_KCAL))
+        assertFalse("上界 +1 非法", InputLimits.isValidMealKcal(InputLimits.MAX_MEAL_KCAL + 1))
+        assertFalse("负数非法", InputLimits.isValidMealKcal(-1))
+        assertTrue("常见单餐值合法", InputLimits.isValidMealKcal(650))
+    }
+
+    @Test
+    fun mealProteinBoundaries() {
+        assertTrue("0 g 合法", InputLimits.isValidMealProteinG(InputLimits.MIN_MEAL_PROTEIN_G))
+        assertTrue("上界合法", InputLimits.isValidMealProteinG(InputLimits.MAX_MEAL_PROTEIN_G))
+        assertFalse("上界 +1 非法", InputLimits.isValidMealProteinG(InputLimits.MAX_MEAL_PROTEIN_G + 1))
+        assertFalse("负数非法", InputLimits.isValidMealProteinG(-0.1))
+        assertFalse("NaN 非法", InputLimits.isValidMealProteinG(Double.NaN))
+        assertFalse("+Infinity 非法", InputLimits.isValidMealProteinG(Double.POSITIVE_INFINITY))
+        assertTrue("常见单餐值合法", InputLimits.isValidMealProteinG(42.5))
+    }
 }

@@ -107,6 +107,29 @@ object InputLimits {
     const val MIN_GIRTH_CM: Float = 20f
     const val MAX_GIRTH_CM: Float = 300f
 
+    // ================= 饮食（一餐） =================
+
+    /**
+     * 一餐热量 `0..5000 kcal`：下限 `0` 是合法值（例如只喝了水/黑咖啡），
+     * 上限 `5000` 已远超单餐合理范围（一份炸鸡约 1200 kcal），超出多为漏打小数点。
+     */
+    const val MIN_MEAL_KCAL: Int = 0
+    const val MAX_MEAL_KCAL: Int = 5_000
+
+    /**
+     * 一餐蛋白质 `0..500 g`：单餐 500 g 蛋白在任何真实食物组合下都不成立，
+     * 超出多为单位误输（把 mg 当 g）。
+     */
+    const val MIN_MEAL_PROTEIN_G: Double = 0.0
+    const val MAX_MEAL_PROTEIN_G: Double = 500.0
+
+    /** 一餐热量是否在合法区间内。 */
+    fun isValidMealKcal(value: Int): Boolean = value in MIN_MEAL_KCAL..MAX_MEAL_KCAL
+
+    /** 一餐蛋白质是否在合法区间内（`NaN` / `±Infinity` 一律非法）。 */
+    fun isValidMealProteinG(value: Double): Boolean =
+        value.isFinite() && value >= MIN_MEAL_PROTEIN_G && value <= MAX_MEAL_PROTEIN_G
+
     // ================= 组数 =================
 
     /** 组数是否在合法区间内。 */
