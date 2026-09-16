@@ -60,7 +60,7 @@ object AppModule {
     fun provideTimeZone(): TimeZone = TimeZone.currentSystemDefault()
 
     /**
-     * 应用版本名（写入备份 JSON 的 `appVersion`，如 `"2.0"`）。
+     * 应用版本名（写入备份 JSON 的 `appVersion`，如 `"2.0.1"`）。
      *
      * 只在此处引用 [BuildConfig]，data 层通过 [AppVersion] 注入取值，保持 JVM 可测。
      */

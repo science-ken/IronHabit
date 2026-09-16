@@ -25,7 +25,7 @@ annotation class DefaultDispatcher
 annotation class ApplicationScope
 
 /**
- * 标注应用版本名（`BuildConfig.VERSION_NAME`，如 `"2.0"`）。
+ * 标注应用版本名（`BuildConfig.VERSION_NAME`，如 `"2.0.1"`）。
  *
  * 目的：data 层（备份文件的 `appVersion`）不直接引用 `BuildConfig`，从而保持纯 JVM 可测。
  */
