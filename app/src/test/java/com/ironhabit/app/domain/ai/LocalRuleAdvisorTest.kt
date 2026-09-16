@@ -1,5 +1,6 @@
 package com.ironhabit.app.domain.ai
 
+import com.ironhabit.app.data.preset.BuiltInExercises
 import com.ironhabit.app.domain.model.Equipment
 import com.ironhabit.app.domain.model.Exercise
 import com.ironhabit.app.domain.model.ExerciseCategory
@@ -160,16 +161,24 @@ class LocalRuleAdvisorTest {
 
     @Test
     fun planWeek_includesStrengthExercises_whenGearOwned() {
+        // 修复 D2 后：「一天内主肌群至多一次」会让与自重动作**同主肌群**的力量动作让位
+        //（如「腿部力量」vs「腿部自重」，后者 id 更小而先入）。故本用例改用**独占肌群**的
+        // 力量动作，精确验证「有器械 → 力量动作可进入计划」这一不变量本身（与主肌群去重正交）。
+        val gearLibrary = listOf(
+            exercise(1L, ExerciseCategory.BODYWEIGHT, "腿部"),
+            exercise(8L, ExerciseCategory.STRENGTH, "臀腿"),
+            exercise(9L, ExerciseCategory.STRENGTH, "腿后链"),
+        )
         val proposal = LocalRuleAdvisor.planWeek(
             profile = UserProfile(equipment = setOf(Equipment.DUMBBELL)),
-            library = library,
+            library = gearLibrary,
             existing = emptyList(),
             today = today,
         )
 
         assertTrue(
-            "拥有哑铃后力量动作应进入计划（id=8 腿部力量）",
-            8L in proposal.allExerciseIds(),
+            "拥有哑铃后力量动作应进入计划（id=8 腿后链力量 / id=9 臀腿力量）",
+            8L in proposal.allExerciseIds() || 9L in proposal.allExerciseIds(),
         )
     }
 
@@ -648,5 +657,105 @@ class LocalRuleAdvisorTest {
         val item = proposal.itemFor(2L)!!
         assertEquals("无目标组数 → 不得假定做满 → 维持重量（不加重）", 40f, item.targetWeightKg!!, 0.0001f)
         assertEquals(PlanReason.MAINTAIN, item.reason)
+    }
+
+    // ---------------- D1：内置库必须含「无需器械」的背 / 后肩动作 ----------------
+
+    /**
+     * 真实内置库。
+     *
+     * ⚠️ [BuiltInExercises.all] 的每条 `id` 均为 `0`（交给 Room 自增），而 `planWeek` 会
+     * 过滤掉 `id == 0` 的行，故这里按序补上 1..N 的自增 id，模拟"已播种进库"的真实数据。
+     */
+    private fun realLibrary(): List<Exercise> =
+        BuiltInExercises.all.mapIndexed { index, exercise -> exercise.copy(id = index + 1L) }
+
+    @Test
+    fun builtInLibrary_pinsDocumentedCounts() {
+        // 修复 D1 的 KDoc 同步：文件头明写「共 51 个 / 自重 19」——本断言锁死 KDoc 与实盘不漂移。
+        assertEquals("内置动作总数（KDoc：共 51 个）", 51, BuiltInExercises.all.size)
+        assertEquals(
+            "自重组条目数（KDoc：自重 19）",
+            19,
+            BuiltInExercises.all.count { it.category == ExerciseCategory.BODYWEIGHT },
+        )
+    }
+
+    @Test
+    fun builtInLibrary_containsBodyweightBackAndRearDeltExercises() {
+        // 修复 D1：无器械用户也必须有「不需要任何器械」的背 / 后肩动作可练。
+        val bodyweightBack = BuiltInExercises.all.filter { exercise ->
+            exercise.category == ExerciseCategory.BODYWEIGHT &&
+                exercise.muscleGroups.any { group -> group == "背部" || group == "后肩" }
+        }
+        assertTrue(
+            "内置库必须含 ≥3 个自重（无需器械）的背 / 后肩动作，否则无器械用户永远排不到背",
+            bodyweightBack.size >= 3,
+        )
+    }
+
+    @Test
+    fun planWeek_noEquipment_stillSchedulesBackOrRearDeltWork() {
+        // 修复 D1 的端到端回归：无器械 + 真实内置库 → 一周内必须能练到背 / 后肩。
+        val library = realLibrary()
+        val proposal = LocalRuleAdvisor.planWeek(
+            profile = UserProfile(equipment = emptySet()),   // 空集 → {NONE}，仅自重
+            library = library,
+            existing = emptyList(),
+            history = emptyList(),
+            today = today,
+        )
+        val scheduledGroups = proposal.days
+            .flatMap { day -> day.items }
+            .mapNotNull { item -> library.first { it.id == item.exerciseId }.primaryMuscleGroup }
+        assertTrue(
+            "无器械用户的本周计划必须包含背 / 后肩动作（补自重背动作前此处必然为空）",
+            scheduledGroups.any { group -> group == "背部" || group == "后肩" },
+        )
+    }
+
+    // ---------------- D2：跨重点补足（任一天内主肌群不重复）----------------
+
+    @Test
+    fun planWeek_overManyWeeks_neverDuplicatesPrimaryMuscleWithinADay() {
+        // 修复 D2：≥8 周 × 7 个不同 today × {无器械, 有哑铃}，逐日断言
+        //「同一主肌群不得出现两次」。旧实现（第二轮从**重点命中池**补足）在"只有 3 个可匹配
+        // 主肌群"时会重复该肌群（背日排两次背）→ 原为 112 处违规；现要求 **0**。
+        val library = realLibrary()
+        val baseEpochDay: Int = LocalDate(2026, 1, 1).toEpochDays()
+        val profiles = listOf(
+            UserProfile(equipment = emptySet()),
+            UserProfile(equipment = setOf(Equipment.DUMBBELL)),
+        )
+
+        var duplicateExcess = 0
+        var scheduledDays = 0
+        for (week in 0 until 8) {
+            for (offset in 0 until 7) {
+                val cursor: LocalDate = LocalDate.fromEpochDays(baseEpochDay + week * 7 + offset)
+                for (profile in profiles) {
+                    val proposal = LocalRuleAdvisor.planWeek(
+                        profile = profile,
+                        library = library,
+                        existing = emptyList(),
+                        history = emptyList(),
+                        today = cursor,
+                    )
+                    for (day in proposal.days) {
+                        scheduledDays++
+                        assertTrue("每天动作数不得为 0", day.items.isNotEmpty())
+                        assertTrue("每天动作数不得超过上限 4", day.items.size <= 4)
+                        val groups = day.items.map { item ->
+                            library.first { it.id == item.exerciseId }.primaryMuscleGroup
+                        }
+                        duplicateExcess += groups.size - groups.distinct().size
+                    }
+                }
+            }
+        }
+
+        // 真实内置库主肌群种类足够（12–15 种）→ 跨重点补足后每日 4 条必为 4 个不同主肌群。
+        assertTrue("回归样本应覆盖到多天（否则断言无意义）", scheduledDays >= 8 * 7 * 2 * 3)
+        assertEquals("任一天内同一主肌群每天至多出现一次 → 0 处重复", 0, duplicateExcess)
     }
 }

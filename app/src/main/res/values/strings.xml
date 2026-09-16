@@ -350,6 +350,8 @@
     <string name="plan_goal_format">%1$d组 × %2$d次</string>
     <string name="plan_goal_weight"> · %1$skg</string>
     <string name="plan_goal_duration"> · 约%1$d分钟</string>
+    <!-- 修复 D3：有氧动作（组次均为 1）只显示时长，不再拼「1 × 1 · …」；今日页/训练页/AI 教练共用 -->
+    <string name="plan_goal_duration_only">约%1$d分钟</string>
     <string name="ai_generate_plan">生成训练计划</string>
     <string name="ai_regenerate_plan">重新生成训练计划</string>
     <string name="ai_generate_hint">基于你的档案生成，写入后出现在「今日」页</string>

@@ -16,7 +16,7 @@ object BuiltInExercises {
 
     /** 原始定义（`sortOrder` 统一为 0，由 [all] 重排）。 */
     private val raw: List<Exercise> = listOf(
-        // ================= 自重（16） =================
+        // ================= 自重（19） =================
         ex("俯卧撑", ExerciseCategory.BODYWEIGHT, "胸部", sets = 3, reps = 15),
         ex("宽距俯卧撑", ExerciseCategory.BODYWEIGHT, "胸部", sets = 3, reps = 12),
         ex("钻石俯卧撑", ExerciseCategory.BODYWEIGHT, "肱三头肌", sets = 3, reps = 10),
@@ -33,6 +33,12 @@ object BuiltInExercises {
         ex("悬垂举腿", ExerciseCategory.BODYWEIGHT, "腹部", sets = 3, reps = 12),
         ex("登山跑", ExerciseCategory.BODYWEIGHT, "核心", sets = 3, reps = 1, durationSec = 45),
         ex("波比跳", ExerciseCategory.BODYWEIGHT, "全身", sets = 4, reps = 12),
+        // 修复 D1：补 3 个**不需要任何器械**的背 / 后肩动作。
+        // 原内置库的背部动作（硬拉 / 划船 / 下拉…）全在「力量」段，无器械用户会被器械过滤一并排除，
+        // 于是「无器械 + 背日」永远排不到背。这 3 条让无器械用户也能练到背 / 后肩。
+        ex("超人式", ExerciseCategory.BODYWEIGHT, "背部", sets = 3, reps = 12),
+        ex("俯卧挺身", ExerciseCategory.BODYWEIGHT, "背部", sets = 3, reps = 15),
+        ex("俯卧Y字伸展", ExerciseCategory.BODYWEIGHT, "后肩", sets = 3, reps = 15),
 
         // ================= 力量（20） =================
         ex("杠铃卧推", ExerciseCategory.STRENGTH, "胸部", sets = 4, reps = 8),

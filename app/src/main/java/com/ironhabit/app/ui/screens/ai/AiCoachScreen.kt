@@ -47,6 +47,7 @@ import com.ironhabit.app.ui.components.AppSnackbarHost
 import com.ironhabit.app.ui.components.EmptyState
 import com.ironhabit.app.ui.components.LoadingSkeleton
 import com.ironhabit.app.ui.components.ProfileSummaryCard
+import com.ironhabit.app.ui.components.planGoalText
 
 /**
  * Tab「AI 教练」页面（**本地规则版 · 完全离线**）。
@@ -350,21 +351,6 @@ private fun weekdayLabel(day: Int): String = stringResource(
         else -> R.string.weekday_sun
     },
 )
-
-/** 目标文案：N组 × M次 · 重量kg（有氧则为约D分钟）。需在组合内调用（用 stringResource）。 */
-@Composable
-private fun planGoalText(
-    sets: Int,
-    reps: Int,
-    weightKg: Float?,
-    durationMin: Int?,
-): String = buildString {
-    append(stringResource(R.string.plan_goal_format, sets, reps))
-    when {
-        weightKg != null -> append(stringResource(R.string.plan_goal_weight, formatKg(weightKg)))
-        durationMin != null -> append(stringResource(R.string.plan_goal_duration, durationMin))
-    }
-}
 
 /**
  * 「本次挑了这些动作」——把规则/AI 给出的每一条选择**连同理由**摊开给用户看。

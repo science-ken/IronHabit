@@ -263,13 +263,17 @@ object LocalRuleAdvisor : PlanAdvisor {
         val focusTags: Set<String> = FOCUS_TAGS[focus].orEmpty()
         val usable: List<Exercise> = eligible.filter { it.id !in blockedIds }
 
-        // 优先命中该训练重点的肌群；一个都没有时退回全部可用动作（全天不至于空）。
+        // 优先命中该训练重点的肌群（[matching]）；若一个都没命中，则整批交由 [usable] 兜底补足。
         val matching: List<Exercise> = usable.filter { it.muscleGroups.any { tag -> tag in focusTags } }
-        val pool: List<Exercise> = matching.ifEmpty { usable }
 
-        // 修复 C1：不再简单 `take(4)`（会把同一主肌群的动作排满一整天）——
-        // 改为「优先一主肌群一个」挑满 ITEMS_PER_DAY，不足时才按序补足（允许重复肌群）。
-        val selected: List<Exercise> = selectForDay(pool, ITEMS_PER_DAY)
+        // 修复 C1（单日去同质化）+ 修复 D2（跨重点补足）：
+        // 先在 [matching] 里「一主肌群一个」，不足时在**当日全部可用动作** [usable] 里跨重点补足，
+        // 且同一主肌群每天至多出现一次 —— 详见 [selectForDay]。
+        val selected: List<Exercise> = selectForDay(
+            primary = matching,
+            fallback = usable,
+            limit = ITEMS_PER_DAY,
+        )
 
         val items: List<Pair<PlanItemDraft, PlanNoteDetail>> =
             selected.mapIndexed { itemIndex, exercise ->
@@ -432,36 +436,62 @@ object LocalRuleAdvisor : PlanAdvisor {
         Math.floorDiv(today.toEpochDays() + MONDAY_ALIGN_OFFSET, WEEK_DAYS)
 
     /**
-     * 从 [pool] 中挑至多 [limit] 个动作，**优先保证主肌群多样化**（修复 C1 的单日同质化）。
+     * 从 [primary]（当日训练重点**命中**的动作）优先挑选，不足时**跨重点**从 [fallback]
+     * （当日**全部可用**动作）补足，且**同一主肌群每天至多出现一次**。
      *
-     * 规则（确定性、零随机）：
-     * 1. 第一轮：按 [pool] 顺序，每个**尚未出现过的主肌群**取一个，直到凑满 [limit] 或遍历完；
-     * 2. 第二轮：若第一轮不足 [limit]（可用动作的肌群种类本就少于上限），按 [pool] 顺序
-     *    补足剩余名额（允许重复肌群）—— 保证"动作够就排满"，不会因去重把一天排空。
+     * 规则（确定性、零随机；输出顺序 = 入参顺序）：
+     * 1. 先遍历 [primary]，每个**尚未出现过的主肌群**取一个（训练重点优先）；
+     * 2. 不足 [limit] 时遍历 [fallback]，仍按「一主肌群一个」补足 —— 这一步即 **D2 的跨重点补足**：
+     *    例如背日只有「背 / 后肩 / 肱二头肌」3 个可匹配肌群时，第 4 个名额改由跨重点池里的
+     *    （如「胸」）动作补上，而**不是**把「背」重复排第二次（旧实现正是在此同质化）；
+     * 3. **退化兜底**：仅当 [fallback] 里的主肌群种类本就少于 [limit]（例如整个动作库只有一种肌群）时，
+     *    才按序补齐剩余名额（**允许重复肌群**）—— 否则会把一天排空。
+     *    真实内置库有 12–15 种主肌群，第 3 步**永不触发**
+     *    （见 `LocalRuleAdvisorTest.planWeek_overManyWeeks_neverDuplicatesPrimaryMuscleWithinADay`）。
      *
-     * 主肌群为空的动作视为"各自独立"（不参与去重），避免误合并无标签动作。
+     * 主肌群为空的动作按**动作名**各自独立（不参与「同肌群去重」），避免误合并无标签动作。
      */
-    private fun selectForDay(pool: List<Exercise>, limit: Int): List<Exercise> {
-        if (pool.size <= limit) return pool
+    private fun selectForDay(
+        primary: List<Exercise>,
+        fallback: List<Exercise>,
+        limit: Int,
+    ): List<Exercise> {
+        if (limit <= 0) return emptyList()
         val chosen: MutableList<Exercise> = ArrayList(limit)
         val seenGroups: MutableSet<String> = HashSet()
-        // 第一轮：一主肌群一个。
-        for (exercise in pool) {
-            if (chosen.size >= limit) break
-            val group: String? = exercise.primaryMuscleGroup?.takeIf { it.isNotBlank() }
-            if (group != null && group in seenGroups) continue
+        val seenIds: MutableSet<Long> = HashSet()
+
+        // 取一个「主肌群未出现过且该动作未选过」的动作；命中才计入。
+        fun takeDistinct(exercise: Exercise) {
+            if (chosen.size >= limit) return
+            if (exercise.id in seenIds) return
+            val group: String = groupKey(exercise)
+            if (group in seenGroups) return
             chosen.add(exercise)
-            if (group != null) seenGroups.add(group)
+            seenIds.add(exercise.id)
+            seenGroups.add(group)
         }
-        // 第二轮：补足剩余名额（允许重复肌群）。
+
+        // 1) 训练重点命中优先。
+        for (exercise in primary) takeDistinct(exercise)
+        // 2) 跨重点补足（仍是「一主肌群一个」）。
         if (chosen.size < limit) {
-            val chosenIds: Set<Long> = chosen.map { it.id }.toSet()
-            for (exercise in pool) {
+            for (exercise in fallback) takeDistinct(exercise)
+        }
+        // 3) 退化兜底：只有当可用动作的主肌群种类 < limit 时才允许重复肌群，避免把一天排空。
+        if (chosen.size < limit) {
+            for (exercise in fallback) {
                 if (chosen.size >= limit) break
-                if (exercise.id !in chosenIds) chosen.add(exercise)
+                if (seenIds.add(exercise.id)) chosen.add(exercise)
             }
         }
         return chosen
+    }
+
+    /** 主肌群去重键：有标签用标签，无标签用动作名（各自独立，互不合并）。 */
+    private fun groupKey(exercise: Exercise): String {
+        val group: String? = exercise.primaryMuscleGroup?.takeIf { it.isNotBlank() }
+        return group ?: "#${exercise.name.trim()}"
     }
 
     // ------------------------------------------------------------------
