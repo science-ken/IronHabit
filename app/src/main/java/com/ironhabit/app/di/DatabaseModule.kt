@@ -24,7 +24,9 @@ import javax.inject.Singleton
  * Room 数据库与各 DAO 的 Hilt 装配。
  *
  * 数据库名称固定为 [DATABASE_NAME]，落盘于应用私有目录，杀进程不丢数据。
- * 仅在**降级**时允许破坏性迁移（架构 §7.6）；正式升级走显式 Migration。
+ * 升级走显式 Migration（`1→2`、`2→3`）；**不注册任何破坏性回退** —— 依据项目红线「禁破坏性迁移」，
+ * 一旦遇到未注册的（降级）schema 变化，Room 会**抛异常暴露**而非静默清空用户数据，
+ * 对本地个人应用更安全、更诚实（历史遗留的 `fallbackToDestructiveMigrationOnDowngrade()` 已移除）。
  *
  * ⚠️ **复数 API `.addMigrations(...)`**：Room 2.6.1 只有 `addMigrations`（复数），没有
  * `addMigration`（单数）。v1 设备升级需要 `1→2` 路径、v2 设备需要 `2→3` 路径，
@@ -47,7 +49,6 @@ object DatabaseModule {
         DATABASE_NAME,
     )
         .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
-        .fallbackToDestructiveMigrationOnDowngrade()
         .build()
 
     @Provides

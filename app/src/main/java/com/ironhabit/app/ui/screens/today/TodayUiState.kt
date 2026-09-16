@@ -28,7 +28,10 @@ import com.ironhabit.app.domain.model.TodayPlanItem
  * @property todayEpochDay 真正的「今天」（用于日期栏高亮，与 [dateEpochDay] 游标区分）
  * @property errorRes 页面级错误文案资源 id，`null` 表示无错误
  * @property snackbarRes 一次性 Snackbar 文案资源 id，用后置 `null`
- * @property snackbarArgs Snackbar 文案的格式化参数（如连续天数）
+ * @property snackbarArgs Snackbar 文案的格式化参数。
+ *   ⚠️ **本通道实参恒为 `String`** → 配套资源占位符必须用 `%1$s`，**不可用 `%1$d`**
+ *   （否则 `stringResource` 内部 `String.format` 抛 `IllegalFormatConversionException`，见
+ *   `StringResourcePlaceholderContractTest`）。
  */
 data class TodayUiState(
     val isLoading: Boolean = true,

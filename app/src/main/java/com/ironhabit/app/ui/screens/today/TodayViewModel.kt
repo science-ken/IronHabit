@@ -246,6 +246,7 @@ class TodayViewModel @Inject constructor(
                 when {
                     summary.filteredCount > 0 -> {
                         hintRes = R.string.msg_diet_filtered
+                        // 本通道实参是 String（List<String>）→ 资源占位符是 %1$s，与 toString() 一致。
                         hintArgs = listOf(summary.filteredCount.toString())
                     }
 

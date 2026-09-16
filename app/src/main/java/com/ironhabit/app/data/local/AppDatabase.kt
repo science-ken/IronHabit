@@ -28,8 +28,8 @@ import com.ironhabit.app.data.local.entity.WeekPlanEntity
  * - 版本 2：由 [MIGRATION_1_2] 从 v1 升级（逐组打卡 bitmask / RPE / 动作三态来源 / 多肌群 /
  *   习惯目标值 / 计划用户改动标记）。
  * - 版本 3：由 [MIGRATION_2_3] 从 v2 升级（新增 `meals` 表，饮食模块；**纯建表**）。
- *   破坏性迁移仅在**降级**时启用（由 `DatabaseModule` 构建时的
- *   `fallbackToDestructiveMigrationOnDowngrade()` 提供）。
+ *   **不启用破坏性迁移**（项目红线「禁破坏性迁移」）：`DatabaseModule` 未注册任何
+ *   `fallbackToDestructiveMigration*`；遇到未注册的降级 schema 变化会**抛异常暴露**而非静默清库。
  */
 @Database(
     entities = [
