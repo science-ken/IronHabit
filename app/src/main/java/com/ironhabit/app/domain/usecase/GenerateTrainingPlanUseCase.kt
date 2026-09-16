@@ -1,4 +1,4 @@
-package com.ironhabit.app.domain.usecase
+﻿package com.ironhabit.app.domain.usecase
 
 import com.ironhabit.app.di.IoDispatcher
 import com.ironhabit.app.domain.ai.PlanAdvisor
@@ -13,6 +13,7 @@ import com.ironhabit.app.domain.repository.CheckInRepository
 import com.ironhabit.app.domain.repository.ExerciseRepository
 import com.ironhabit.app.domain.repository.PlanRepository
 import com.ironhabit.app.domain.repository.SettingsRepository
+import com.ironhabit.app.domain.util.DateUtils
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.first
@@ -82,13 +83,28 @@ class GenerateTrainingPlanUseCase @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
 
-    suspend operator fun invoke(): GeneratedPlanSummary {
+    /**
+     * 生成**某一周**的训练计划。
+     *
+     * ## 🔒 P3：必须指定"哪一周"
+     * 计划按周存放（`week_start_epoch_day`）。生成时：
+     * - `existing` = **该周的行**（含软删行）—— 不能拿全表，否则会把别的周 / 「每周相同」那份
+     *   误当成"这一周的现有内容"；
+     * - 写入的草案**带上该周的周一** —— 不带的话会落到 `0`（=「每周相同」那份），
+     *   于是"给下周生成"会**偷偷改掉每周循环的那份计划**；
+     * - 陈旧行回收也只在该周范围内。
+     *
+     * @param weekStartEpochDay 目标周的周一；`null` = 今天所在的那一周
+     */
+    suspend operator fun invoke(weekStartEpochDay: Long? = null): GeneratedPlanSummary {
         val profile = settingsRepository.profile().first()
         val library = exerciseRepository.observeActive().first()
-        // 🔒 必须拿**全量**（含软删除行），否则会误写手改/软删槽位把它"复活"。
-        val existing = planRepository.observeAllIncludingInactive().first()
-        val history = checkInRepository.latestProgressPerExercise().first()
         val today: LocalDate = clock.now().toLocalDateTime(timeZone).date
+        val targetWeek: Long = weekStartEpochDay
+            ?: DateUtils.weekStartMon1(today.toEpochDays().toLong())
+        // 🔒 必须拿**该周全量**（含软删除行），否则会误写手改/软删槽位把它"复活"。
+        val existing = planRepository.getRowsForWeek(targetWeek)
+        val history = checkInRepository.latestProgressPerExercise().first()
         // P1：当前体重（体重唯一真源是 body_metrics，不是档案）→ 供"体重 vs 目标体重"规则使用。
         // 取不到就是 null（用户没记过体重）→ 规则层会**跳过**体重相关判断，而不是拿 0 去算。
         val bodyWeightKg: Float? = bodyMetricRepository.latest(BodyMetricType.WEIGHT)?.value
@@ -120,6 +136,8 @@ class GenerateTrainingPlanUseCase @Inject constructor(
                     WeekPlan(
                         exerciseId = item.exerciseId,
                         dayOfWeek = day.dayOfWeek,
+                        // P3：落到**目标周**（不带这一维就会写进「每周相同」那份）。
+                        weekStartEpochDay = targetWeek,
                         targetSets = item.targetSets,
                         targetReps = item.targetReps,
                         targetWeightKg = item.targetWeightKg,

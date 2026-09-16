@@ -1,4 +1,4 @@
-package com.ironhabit.app.ui.screens.today
+﻿package com.ironhabit.app.ui.screens.today
 
 import com.ironhabit.app.domain.model.Exercise
 import com.ironhabit.app.domain.model.ExerciseCategory
@@ -13,6 +13,7 @@ import com.ironhabit.app.domain.repository.PlanRepository
 import com.ironhabit.app.domain.usecase.DeleteMealUseCase
 import com.ironhabit.app.domain.usecase.DetailedCheckInUseCase
 import com.ironhabit.app.domain.usecase.GenerateDietPlanUseCase
+import com.ironhabit.app.domain.usecase.GenerateTrainingPlanUseCase
 import com.ironhabit.app.domain.usecase.GetTodayMealsUseCase
 import com.ironhabit.app.domain.usecase.GetTodayOverviewUseCase
 import com.ironhabit.app.domain.usecase.QuickCheckInUseCase
@@ -94,6 +95,7 @@ class TodayViewModelDateCursorTest {
             getTodayMeals = getTodayMeals,
             toggleMeal = toggleMeal,
             generateDietPlan = generateDietPlan,
+            generateTrainingPlan = mockk<GenerateTrainingPlanUseCase>(relaxed = true),
             deleteMeal = deleteMeal,
             upsertMeal = upsertMeal,
             checkInRepository = checkInRepository,

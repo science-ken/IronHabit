@@ -28,6 +28,15 @@ interface PlanRepository {
     fun observeRepeatPlan(): Flow<List<WeekPlan>>
 
     /**
+     * **某一周的全部行**（一次性快照，含软删除行）—— 生成计划前取"现有的那一周"。
+     *
+     * 与 [observeAllIncludingInactive] 的区别：这里**只取目标周**。P3 起计划按周存放，
+     * 生成"下周的计划"时绝不能把"这周/每周相同那份"的行当成 existing，否则要么误判
+     * 手改槽位、要么把陈旧行扫错周。
+     */
+    suspend fun getRowsForWeek(weekStartEpochDay: Long): List<WeekPlan>
+
+    /**
      * 勾选 / 取消「每周相同」（把某一周的计划变成"以后每周都用这份"/取消它）。
      *
      * @return 复制 / 停用的行数（`0` = 该周本来没有自己的计划，勾选无意义）

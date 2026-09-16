@@ -60,6 +60,32 @@ class GenerateTrainingPlanUseCaseTest {
         ioDispatcher = UnconfinedTestDispatcher(),
     )
 
+    /**
+     * P3：生成**必须落到目标周**，而不是落到"每周相同"那份（`weekStartEpochDay = 0`）。
+     *
+     * 这是回归防线：如果哪天有人把 `WeekPlan(weekStartEpochDay = targetWeek)` 那一行删掉，
+     * "给下周生成计划"就会**偷偷改掉每周循环的那份计划** —— 用户下周看着没问题，
+     * 但他"每周相同"的那份已经被换掉了。
+     */
+    @Test
+    fun generateTrainingPlan_writesIntoTheTargetWeek_notIntoTheRepeatPlan() = runTest {
+        stubDefaults(existing = emptyList())
+        val targetWeek: Long = 20_710L   // 任意一个真实的周一 epochDay
+
+        val written = slot<List<WeekPlan>>()
+        coVerify(exactly = 0) { planRepository.upsertGenerated(any()) }
+
+        useCase(targetWeek)
+
+        coVerify(exactly = 1) { planRepository.upsertGenerated(capture(written)) }
+        assertTrue("至少要写出几条计划", written.captured.isNotEmpty())
+        assertTrue(
+            "每一条都必须带目标周（否则会写进「每周相同」那份）",
+            written.captured.all { plan -> plan.weekStartEpochDay == targetWeek },
+        )
+        coVerify(exactly = 1) { planRepository.getRowsForWeek(targetWeek) }
+    }
+
     private val library: List<Exercise> = listOf(
         exercise(1L, ExerciseCategory.BODYWEIGHT, "腿部"),
         exercise(2L, ExerciseCategory.BODYWEIGHT, "胸部"),
@@ -89,7 +115,7 @@ class GenerateTrainingPlanUseCaseTest {
     private fun stubDefaults(existing: List<WeekPlan>) {
         every { settingsRepository.profile() } returns flowOf(UserProfile())
         every { exerciseRepository.observeActive() } returns flowOf(library)
-        every { planRepository.observeAllIncludingInactive() } returns flowOf(existing)
+        coEvery { planRepository.getRowsForWeek(any()) } returns existing
         every { checkInRepository.latestProgressPerExercise() } returns flowOf(emptyList<ExerciseProgress>())
     }
 
@@ -216,7 +242,7 @@ class GenerateTrainingPlanUseCaseTest {
         )
         every { settingsRepository.profile() } returns flowOf(UserProfile())
         every { exerciseRepository.observeActive() } returns flowOf(cardioLibrary)
-        every { planRepository.observeAllIncludingInactive() } returns flowOf(emptyList())
+        coEvery { planRepository.getRowsForWeek(any()) } returns emptyList()
         every { checkInRepository.latestProgressPerExercise() } returns flowOf(emptyList<ExerciseProgress>())
 
         val summary = useCase()

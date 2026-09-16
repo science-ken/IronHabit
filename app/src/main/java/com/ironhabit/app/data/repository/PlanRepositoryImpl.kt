@@ -64,6 +64,9 @@ class PlanRepositoryImpl @Inject constructor(
     override fun observeRepeatPlan(): Flow<List<WeekPlan>> =
         observeEffectivePlanForWeek(WeekPlan.TEMPLATE_WEEK_START)
 
+    override suspend fun getRowsForWeek(weekStartEpochDay: Long): List<WeekPlan> =
+        weekPlanDao.getRowsForWeek(weekStartEpochDay).map(PlanMapper::toDomain)
+
     /**
      * 勾选 / 取消「每周相同」。
      *

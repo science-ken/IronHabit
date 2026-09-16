@@ -1,4 +1,4 @@
-package com.ironhabit.app.ui.screens.plan
+﻿package com.ironhabit.app.ui.screens.plan
 
 import androidx.annotation.StringRes
 import android.database.sqlite.SQLiteConstraintException
@@ -11,6 +11,7 @@ import com.ironhabit.app.domain.model.InputLimits
 import com.ironhabit.app.domain.model.WeekPlan
 import com.ironhabit.app.domain.repository.ExerciseRepository
 import com.ironhabit.app.domain.repository.PlanRepository
+import com.ironhabit.app.domain.util.DateUtils
 import com.ironhabit.app.ui.navigation.Destinations
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -24,6 +25,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
+import kotlinx.datetime.TimeZone
 
 /**
  * 「新增 / 编辑计划条目」UI 状态（不可变）。
@@ -75,6 +77,7 @@ class AddEditPlanViewModel @Inject constructor(
     exerciseRepository: ExerciseRepository,
     private val planRepository: PlanRepository,
     private val clock: Clock,
+    private val timeZone: TimeZone,
 ) : ViewModel() {
 
     /** 路由参数：`0` 表示新增。 */
@@ -218,6 +221,12 @@ class AddEditPlanViewModel @Inject constructor(
                     targetDurationMin = duration,
                     sortOrder = existing?.sortOrder ?: 0,
                     isActive = existing?.isActive ?: true,
+                    // 🔒 P3：计划按周存放 —— 手动新增/编辑落到**当前这一周**。
+                    // 不带这一维就会落到 `0`（=「每周相同」那份），于是"我在下周加一个动作"
+                    // 会变成"以后每周都多这个动作"，而且用户在"这一周"里根本看不到它。
+                    // 编辑已有行时沿用该行自己的周，避免把行"搬"到别的周。
+                    weekStartEpochDay = existing?.weekStartEpochDay
+                        ?: DateUtils.weekStartMon1(DateUtils.todayEpochDay(clock, timeZone)),
                     createdAt = existing?.createdAt?.takeIf { it > 0L } ?: nowMillis,
                 )
                 planRepository.upsert(plan)

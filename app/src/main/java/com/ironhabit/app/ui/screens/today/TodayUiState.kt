@@ -49,6 +49,22 @@ data class TodayUiState(
     val trainingStreak: StreakInfo = StreakInfo(0, 0, null),
     val isRestDay: Boolean = false,
     val plannedWeekdays: List<Int> = emptyList(),
+    /**
+     * 选中那一天**所在周的周一**（P3：计划按周存放）。
+     *
+     * 页面用它显示"你正在看哪一周"，也是「让 AI 生成」的目标周。
+     */
+    val selectedWeekStartEpochDay: Long = 0L,
+    /**
+     * **这一周**到底有没有计划（不是"今天有没有"）。
+     *
+     * 用来区分两种"今天没动作"：
+     * - `false` → 这一周还没排课 → 显示「创建训练计划」（自己创建 / 让 AI 生成）；
+     * - `true`  → 只是今天是休息日 → 显示"今天是休息日，好好放松"。
+     */
+    val hasPlanThisWeek: Boolean = false,
+    /** 正在为这一周生成训练计划（按钮禁用 + 文案更换）。 */
+    val isCreatingPlan: Boolean = false,
     val todayEpochDay: Long = 0L,
     val errorRes: Int? = null,
     val snackbarRes: Int? = null,

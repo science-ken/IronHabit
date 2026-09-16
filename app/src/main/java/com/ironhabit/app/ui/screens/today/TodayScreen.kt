@@ -7,7 +7,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -159,25 +162,39 @@ fun TodayScreen(
 
                 // ---- 今日训练 ----
                 SectionTitle(text = stringResource(R.string.title_today_train))
-                if (uiState.plans.isEmpty()) {
-                    EmptyState(
-                        text = stringResource(R.string.empty_today_plan),
-                        actionText = stringResource(R.string.action_create),
-                        onAction = onCreatePlan,
-                    )
-                } else {
-                    uiState.plans.forEach { item ->
-                        ExerciseCheckCard(
-                            item = item,
-                            onQuickCheckIn = { viewModel.onQuickCheckIn(item) },
-                            onUndo = { viewModel.onUndoCheckIn(item) },
-                            onOpenDetail = { onOpenExerciseDetail(item.exercise.id) },
-                            onOpenSheet = { sheetItem = item },
-                            onToggleSet = { setIndex -> viewModel.onToggleSet(item, setIndex) },
-                            onSetRpe = { rpe -> viewModel.onSetRpe(item, rpe) },
-                            onEditPlan = { onEditPlan(item.plan.id, item.plan.dayOfWeek) },
-                            enabled = !isFutureDay,
+                when {
+                    // 这一周还没有任何计划（P3：计划按周存放）→ 只给一个「创建训练计划」入口。
+                    // 与下面的"今天是休息日"是两种不同状态，不能混为一谈。
+                    uiState.plans.isEmpty() && !uiState.hasPlanThisWeek -> {
+                        WeekPlanEmptyCard(
+                            isCreating = uiState.isCreatingPlan,
+                            onCreateByAi = viewModel::onCreatePlanByAi,
+                            onCreateManually = onCreatePlan,
                         )
+                    }
+
+                    uiState.plans.isEmpty() -> {
+                        EmptyState(
+                            text = stringResource(R.string.empty_today_plan),
+                            actionText = stringResource(R.string.action_create),
+                            onAction = onCreatePlan,
+                        )
+                    }
+
+                    else -> {
+                        uiState.plans.forEach { item ->
+                            ExerciseCheckCard(
+                                item = item,
+                                onQuickCheckIn = { viewModel.onQuickCheckIn(item) },
+                                onUndo = { viewModel.onUndoCheckIn(item) },
+                                onOpenDetail = { onOpenExerciseDetail(item.exercise.id) },
+                                onOpenSheet = { sheetItem = item },
+                                onToggleSet = { setIndex -> viewModel.onToggleSet(item, setIndex) },
+                                onSetRpe = { rpe -> viewModel.onSetRpe(item, rpe) },
+                                onEditPlan = { onEditPlan(item.plan.id, item.plan.dayOfWeek) },
+                                enabled = !isFutureDay,
+                            )
+                        }
                     }
                 }
 
@@ -291,3 +308,60 @@ private fun SectionTitle(text: String) {
 
 /** 一周 7 天（日期栏 `‹ ›` 跨周步长）。 */
 private const val DAYS_PER_WEEK: Long = 7L
+
+/**
+ * 「这一周还没有训练计划」空状态卡（P3）。
+ *
+ * 计划从 v5 起**按周存放**：翻到某一周而那一周没排课时，只给一个创建入口，不显示任何动作 ——
+ * 这就是"看得到下一周、但看不到训练计划"。
+ *
+ * 两个入口（都不需要用户先理解"模板 / 专属"这些概念）：
+ * - [onCreateByAi]：让 AI 按档案给**这一周**排一份（本地规则兜底，见 `GenerateTrainingPlanUseCase`）；
+ * - [onCreateManually]：跳到「训练」页自己挑动作（既有入口，未改）。
+ *
+ * @param isCreating 正在生成 → 两个按钮都禁用，主按钮文案换成「正在生成这一周的计划…」
+ */
+@Composable
+private fun WeekPlanEmptyCard(
+    isCreating: Boolean,
+    onCreateByAi: () -> Unit,
+    onCreateManually: () -> Unit,
+) {
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.empty_week_plan_title),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = stringResource(R.string.empty_week_plan_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Button(
+                onClick = onCreateByAi,
+                enabled = !isCreating,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text = stringResource(
+                        if (isCreating) R.string.msg_plan_creating else R.string.action_create_plan_ai,
+                    ),
+                )
+            }
+            OutlinedButton(
+                onClick = onCreateManually,
+                enabled = !isCreating,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(text = stringResource(R.string.action_create_plan_manual))
+            }
+        }
+    }
+}

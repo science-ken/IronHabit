@@ -13,6 +13,8 @@ import com.ironhabit.app.domain.repository.PlanRepository
 import com.ironhabit.app.domain.usecase.DeleteMealUseCase
 import com.ironhabit.app.domain.usecase.DetailedCheckInUseCase
 import com.ironhabit.app.domain.usecase.GenerateDietPlanUseCase
+import com.ironhabit.app.domain.usecase.GenerateTrainingPlanUseCase
+import com.ironhabit.app.domain.usecase.GeneratedPlanSummary
 import com.ironhabit.app.domain.usecase.GetTodayMealsUseCase
 import com.ironhabit.app.domain.usecase.GetTodayOverviewUseCase
 import com.ironhabit.app.domain.usecase.QuickCheckInUseCase
@@ -31,6 +33,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
@@ -64,6 +67,7 @@ class TodayViewModel @Inject constructor(
     private val getTodayMeals: GetTodayMealsUseCase,
     private val toggleMeal: ToggleMealUseCase,
     private val generateDietPlan: GenerateDietPlanUseCase,
+    private val generateTrainingPlan: GenerateTrainingPlanUseCase,
     private val deleteMeal: DeleteMealUseCase,
     private val upsertMeal: UpsertMealUseCase,
     private val checkInRepository: CheckInRepository,
@@ -81,21 +85,20 @@ class TodayViewModel @Inject constructor(
     /** 日期游标：默认今天；由日期栏 chip / `‹ ›` 跨周改写。 */
     private val selectedEpochDay = MutableStateFlow(todayEpochDay())
 
-    private val plannedWeekdaysFlow = planRepository.observePlannedWeekdays()
-
     /** 数据流（Room 触发 → 聚合视图 → UiState），按 `stateIn` 转为冷启动的 StateFlow；支持手动重试。 */
     private val overviewState: StateFlow<TodayUiState> =
         combine(retryTrigger, selectedEpochDay) { _, day -> day }
             .flatMapLatest { day ->
                 checkInRepository.observeActiveDaysSince(TRIGGER_SINCE_EPOCH_DAY)
                     .flatMapLatest {
+                        // ⚠️ 这里不再额外 combine `planRepository.observePlannedWeekdays()`：
+                        // P3 起"哪几天有课"是**按周**算的，`getTodayOverview(day)` 已经带回了
+                        // 那一天所在周的结果 —— 再挂一条"当前周"的流会把它覆盖错（翻到下个月就露馅）。
                         combine(
                             getTodayOverview(day),
-                            plannedWeekdaysFlow,
                             getTodayMeals(day),
-                        ) { overview, weekdays, meals ->
+                        ) { overview, meals ->
                             overview.toUiState().copy(
-                                plannedWeekdays = weekdays,
                                 meals = meals.meals,
                                 mealTotals = meals.totals,
                                 dietTarget = meals.target,
@@ -325,8 +328,50 @@ class TodayViewModel @Inject constructor(
         }
     }
 
+    /**
+     * **让 AI 给"这一周"生成训练计划**（P3：计划按周存放）。
+     *
+     * 用户在「今日」页翻到某一周、看到「这一周还没有训练计划」时点这个按钮：
+     * 生成的是**那一周**的计划（`weekStartMon1(选中日)`），不是"每周相同"那份。
+     *
+     * ⚠️ 生成结果是**直接写库**的（沿用 [GenerateTrainingPlanUseCase] 的既有契约：
+     * 手改行不动、陈旧 AI 行回收）；"先预览、逐天采纳"是 P3 下一步的事。
+     */
+    fun onCreatePlanByAi() {
+        if (_uiState.value.isCreatingPlan) return
+        val targetWeek: Long = DateUtils.weekStartMon1(selectedEpochDay.value)
+
+        viewModelScope.launch {
+            _uiState.update { state -> state.copy(isCreatingPlan = true) }
+            val snackbarRes: Int
+            val snackbarArgs: List<String>
+            try {
+                val summary: GeneratedPlanSummary = generateTrainingPlan(targetWeek)
+                snackbarRes = R.string.msg_plan_created
+                // 本通道实参是 String（List<String>）→ 资源占位符用 %1$s。
+                snackbarArgs = listOf(summary.writtenCount.toString())
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (throwable: Throwable) {
+                // 生成失败要说出来（不能"点了没反应"）：沿用页面级错误通道。
+                _uiState.update { state ->
+                    state.copy(isCreatingPlan = false, errorRes = R.string.error_generic)
+                }
+                return@launch
+            }
+            _uiState.update { state ->
+                state.copy(
+                    isCreatingPlan = false,
+                    snackbarRes = snackbarRes,
+                    snackbarArgs = snackbarArgs,
+                )
+            }
+        }
+    }
+
     /** 消费一次 Snackbar（弹完后由 UI 调用）。 */
-    fun onSnackbarShown() {        _uiState.update { state ->
+    fun onSnackbarShown() {
+        _uiState.update { state ->
             state.copy(snackbarRes = null, snackbarArgs = emptyList())
         }
     }
@@ -405,6 +450,8 @@ class TodayViewModel @Inject constructor(
                 trainingStreak = data.trainingStreak,
                 isRestDay = data.isRestDay,
                 plannedWeekdays = data.plannedWeekdays,
+                selectedWeekStartEpochDay = DateUtils.weekStartMon1(data.dateEpochDay),
+                hasPlanThisWeek = data.plannedWeekdays.isNotEmpty(),
                 todayEpochDay = todayEpochDay(),
                 errorRes = null,
                 snackbarRes = streakRes ?: state.snackbarRes,

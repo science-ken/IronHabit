@@ -54,6 +54,21 @@
     <string name="msg_streak_broken">已断档，重新开始</string>
     <string name="msg_rest_day">今天是休息日，好好放松 😌</string>
     <string name="empty_today_plan">今天还没有安排，去「训练」页添加计划吧</string>
+
+    <!-- ===== 每周一份计划（P3）===== -->
+    <string name="empty_week_plan_title">这一周还没有训练计划</string>
+    <string name="empty_week_plan_hint">让 AI 按你的档案排一份，或者自己挑动作安排。排好之后只对这一周生效。</string>
+    <string name="action_create_plan_title">创建训练计划</string>
+    <string name="action_create_plan_ai">让 AI 生成</string>
+    <string name="action_create_plan_manual">自己创建</string>
+    <string name="msg_plan_created">已为这一周排好 %1$s 条计划</string>
+    <string name="msg_plan_creating">正在生成这一周的计划…</string>
+    <string name="label_week_of">%1$s 那一周</string>
+    <string name="hint_plan_week_scope">只对这一周生效；想每周都用同一份，可在计划里勾「每周相同」</string>
+    <string name="action_repeat_weekly">每周相同</string>
+    <string name="hint_repeat_weekly">勾上之后，没有单独排计划的周都会用这一份</string>
+    <string name="msg_repeat_weekly_on">已设为「每周相同」：以后没单独排计划的周都会用这一份</string>
+    <string name="msg_repeat_weekly_off">已取消「每周相同」：没排计划的周会是空的</string>
     <string name="empty_today_habits">还没有习惯，去「自律」页添加一个吧</string>
 
     <!-- ===== 训练页 ===== -->
