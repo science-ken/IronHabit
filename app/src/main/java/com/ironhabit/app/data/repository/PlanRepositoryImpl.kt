@@ -72,6 +72,7 @@ class PlanRepositoryImpl @Inject constructor(
     override suspend fun upsert(plan: WeekPlan): Long =
         weekPlanDao.upsertExplicit(PlanMapper.toEntity(plan).copy(isUserEdited = true))
 
+    /** 恢复为推荐：DAO 侧带 `is_active = 1` 守卫（软删行不受影响，见 [WeekPlanDao.resetToRecommended]）。 */
     override suspend fun resetToRecommended(id: Long) {
         weekPlanDao.resetToRecommended(id)
     }

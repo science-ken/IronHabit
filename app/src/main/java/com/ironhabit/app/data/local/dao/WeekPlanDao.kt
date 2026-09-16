@@ -114,9 +114,18 @@ interface WeekPlanDao {
     @Query("UPDATE week_plans SET is_active = 0, is_user_edited = 1 WHERE id = :id")
     suspend fun softDelete(id: Long)
 
-    /** 用户点「恢复为推荐」→ 交还 AI 接管。 */
-    @Query("UPDATE week_plans SET is_user_edited = 0 WHERE id = :id")
-    suspend fun resetToRecommended(id: Long)
+    /**
+     * 用户点「恢复为推荐」→ 交还 AI 接管（清掉 `is_user_edited`）。
+     *
+     * 🔒 **必须带 `is_active = 1`**（补守卫）：软删除行（`is_active = 0`）是"用户明确删掉的槽位"，
+     * 一旦把它的 `is_user_edited` 清成 0，下次 AI 生成就会把这个槽位**复活** ——
+     * 用户会看到"我删掉的那条又回来了"，而且不知道是自己哪一步点出来的。
+     * 守卫做两道：`ResetPlanItemUseCase` 先判一次（可单测），SQL 这里再兜一次（防别的调用方绕过）。
+     *
+     * @return 实际影响行数（`0` = 什么都没改，例如对软删除行 / 不存在的 id 调用）
+     */
+    @Query("UPDATE week_plans SET is_user_edited = 0 WHERE id = :id AND is_active = 1")
+    suspend fun resetToRecommended(id: Long): Int
 
     /**
      * **回收被淘汰的旧 AI 行**（修复 C2）：把 [ids] 中**非用户手改**的行置为停用（`is_active = 0`）。

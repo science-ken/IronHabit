@@ -89,6 +89,12 @@ data class WeekPlanBackup(
     val isActive: Boolean = true,
     /** 行级：本条（某天 × 某动作）被用户手动改过（v2 新增）。 */
     val isUserEdited: Boolean = false,
+    /**
+     * 这一条属于哪一周（v4 新增）：`0` = 模板（每周循环），> 0 = 只属于那一周（周一 epochDay）。
+     *
+     * `0`（默认值）= 老备份未携带该字段 → 导入后全部按**模板**处理，与升级前的行为一致。
+     */
+    val weekStartEpochDay: Long = 0L,
     /** 创建时刻（UTC 毫秒，v3 新增）；`0` = 老备份未携带 → 导入时回落到导入时刻。 */
     val createdAt: Long = 0L,
 )

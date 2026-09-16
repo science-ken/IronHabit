@@ -20,6 +20,7 @@ object PlanMapper {
         sortOrder = entity.sortOrder,
         isActive = entity.isActive,
         isUserEdited = entity.isUserEdited,
+        weekStartEpochDay = entity.weekStartEpochDay,
         createdAt = entity.createdAt,
     )
 
@@ -35,6 +36,7 @@ object PlanMapper {
         sortOrder = domain.sortOrder,
         isActive = domain.isActive,
         isUserEdited = domain.isUserEdited,
+        weekStartEpochDay = domain.weekStartEpochDay,
         createdAt = domain.createdAt,
     )
 }

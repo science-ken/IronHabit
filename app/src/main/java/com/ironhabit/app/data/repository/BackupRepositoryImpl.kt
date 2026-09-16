@@ -281,6 +281,7 @@ private fun WeekPlanEntity.toBackup(): WeekPlanBackup = WeekPlanBackup(
     sortOrder = sortOrder,
     isActive = isActive,
     isUserEdited = isUserEdited,
+    weekStartEpochDay = weekStartEpochDay,
     createdAt = createdAt,
 )
 
@@ -295,6 +296,7 @@ private fun WeekPlanBackup.toEntity(importMillis: Long): WeekPlanEntity = WeekPl
     sortOrder = sortOrder,
     isActive = isActive,
     isUserEdited = isUserEdited,
+    weekStartEpochDay = weekStartEpochDay,
     createdAt = BackupRestoreRules.resolveCreatedAt(createdAt, importMillis),
 )
 

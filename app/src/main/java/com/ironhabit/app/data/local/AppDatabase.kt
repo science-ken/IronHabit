@@ -68,6 +68,6 @@ abstract class AppDatabase : RoomDatabase() {
         const val DATABASE_NAME: String = "ironhabit.db"
 
         /** 当前 schema 版本。 */
-        const val VERSION: Int = 3
+        const val VERSION: Int = 4
     }
 }

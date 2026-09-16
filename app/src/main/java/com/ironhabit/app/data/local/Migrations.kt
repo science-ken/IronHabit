@@ -112,3 +112,51 @@ val MIGRATION_2_3: Migration = object : Migration(2, 3) {
         )
     }
 }
+
+/**
+ * v3 → v4：`week_plans` 支持「模板 + 某周专属」（P3）。
+ *
+ * 做两件事：
+ * 1. `ADD COLUMN week_start_epoch_day INTEGER NOT NULL DEFAULT 0`
+ *    —— `0` = 模板（每周循环，也就是升级前的行为），> 0 = 只属于那一周（周一 epochDay）。**存量行全部是模板**，所以默认值就是回填值，不需要额外 `UPDATE`；
+ * 2. **重建唯一索引**：把 `UNIQUE(day_of_week, exercise_id)` 换成
+ *    `UNIQUE(day_of_week, exercise_id, week_start_epoch_day)`。
+ *    不换的话，"模板里排深蹲"和"下周专属里也排深蹲"会撞同一个唯一槽位 —— 而这是合法状态。
+ *
+ * ## 为什么用哨兵 `0` 而不是 `NULL`
+ * `ALTER TABLE ... DEFAULT NULL` 也能加列，但 SQLite 的**唯一索引把 NULL 视为互不相等**：
+ * `(1, 7, NULL)` 可以插任意多行 → 同「天 × 动作」会出现多条模板行，
+ * 直接打破 v1 起就有的"同槽位只有一行"不变量。`0` 不在真实数据里出现（epochDay 0 = 1970-01-01），
+ * 当哨兵安全。这也是与预览稿（写的是 `DEFAULT NULL`）的**有意偏差**。
+ *
+ * 约束（与其它迁移同）：`minSdk = 24` → 只 `ADD COLUMN` / 改索引，
+ * **`DROP COLUMN` / `RENAME COLUMN` 一律不用**；`DROP INDEX` / `CREATE INDEX` 无版本要求。
+ *
+ * ⚠️ 索引名必须与 Room 按 [WeekPlanEntity] 生成的默认名逐字一致，否则运行时 schema 校验会报
+ * "Migration didn't properly handle week_plans"。
+ *
+ * Room 升级路径（链式，三个 Migration 都注册在 `DatabaseModule`）：
+ * ```
+ *   v1 ──► 1→2 ──► 2→3 ──► 3→4 ──► v4
+ *   v2 ──► 2→3 ──► 3→4 ──► v4
+ *   v3 ──► 3→4 ──► v4
+ *   全新安装 ──► 直接按实体建表（不跑迁移）
+ * ```
+ */
+val MIGRATION_3_4: Migration = object : Migration(3, 4) {
+
+    override fun migrate(db: SupportSQLiteDatabase) {
+        // ---- 1) 加列：存量行 = 模板（0），不需要回填 UPDATE ----
+        db.execSQL(
+            "ALTER TABLE week_plans ADD COLUMN week_start_epoch_day INTEGER NOT NULL DEFAULT 0"
+        )
+
+        // ---- 2) 唯一键加上"哪一周"这一维 ----
+        db.execSQL("DROP INDEX IF EXISTS `index_week_plans_day_of_week_exercise_id`")
+        db.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS " +
+                "`index_week_plans_day_of_week_exercise_id_week_start_epoch_day` " +
+                "ON `week_plans` (`day_of_week`, `exercise_id`, `week_start_epoch_day`)"
+        )
+    }
+}
