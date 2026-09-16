@@ -133,7 +133,16 @@ fun AiCoachScreen(
                         onAddPlan = onAddPlan,
                         onEditPlan = onEditPlan,
                     )
-                    ExplainBlock(bmr = viewModel.estimateBmr())
+                    ExplainBlock(bmr = viewModel.estimateBmr(), canAsk = uiState.canAskCoach)
+                    // ⑤ 问教练（AI 自由问答）：离线显示诚实禁用说明，在线可用，发送中禁用。
+                    CoachChatCard(
+                        canAsk = uiState.canAskCoach,
+                        messages = uiState.chatMessages,
+                        input = uiState.chatInput,
+                        isAsking = uiState.isAsking,
+                        onInputChange = viewModel::onChatInputChange,
+                        onSend = viewModel::onAskCoach,
+                    )
                     SuggestBlock(
                         uiState = uiState,
                         onAdopt = viewModel::adopt,
@@ -526,9 +535,15 @@ private fun formatKg(kg: Float): String {
     return if (rounded % 1f == 0f) rounded.toInt().toString() else rounded.toString()
 }
 
-/** ③ 教练解读（含自由问答的诚实禁用说明）。 */
+/**
+ * ③ 教练解读（含自由问答的诚实说明）。
+ *
+ * @param canAsk 「问教练」是否具备联网条件（开关开 + 已配 Key）。
+ *   `false` → 保留原有的诚实禁用说明 [R.string.ai_freechat_disabled]；
+ *   `true` → **不再显示那句话**（下方「问教练」区块已经可用，继续说"暂不提供"就是不诚实）。
+ */
 @Composable
-private fun ExplainBlock(bmr: Int?) {
+private fun ExplainBlock(bmr: Int?, canAsk: Boolean) {
     SectionTitle(text = stringResource(R.string.ai_section_explain))
     Card(
         colors = CardDefaults.cardColors(
@@ -542,12 +557,14 @@ private fun ExplainBlock(bmr: Int?) {
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(
-                text = stringResource(R.string.ai_freechat_disabled),
-                style = MaterialTheme.typography.bodySmall,
-            )
+            if (!canAsk) {
+                Text(
+                    text = stringResource(R.string.ai_freechat_disabled),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
             if (bmr != null) {
-                HorizontalDivider()
+                if (!canAsk) HorizontalDivider()
                 Text(
                     text = stringResource(R.string.ai_explain_bmr, bmr),
                     style = MaterialTheme.typography.bodyMedium,

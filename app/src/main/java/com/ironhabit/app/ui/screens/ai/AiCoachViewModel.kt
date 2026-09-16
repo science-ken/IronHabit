@@ -18,10 +18,13 @@ import com.ironhabit.app.domain.model.WeekPlan
 import com.ironhabit.app.domain.repository.BodyMetricRepository
 import com.ironhabit.app.domain.repository.ExerciseRepository
 import com.ironhabit.app.domain.repository.SettingsRepository
+import com.ironhabit.app.domain.usecase.AskCoachUseCase
+import com.ironhabit.app.domain.usecase.CoachAnswer
 import com.ironhabit.app.domain.usecase.GenerateTrainingPlanUseCase
 import com.ironhabit.app.domain.usecase.SuggestExercisesUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -65,6 +68,9 @@ data class PlanResultUi(
  * @property suggestions 补充动作建议（已排除动作库中已有的）
  * @property adoptedNames 本次会话已收入的动名称（幂等：重复点击不再写入）
  * @property exerciseNames 动作 id → 名称（用于把"为什么这样排"里的 id 显示成动作名）
+ * @property chatMessages 「问教练」最近若干轮消息（**只在内存里，问答不落库**）
+ * @property chatInput 「问教练」输入框当前内容
+ * @property isAsking 正在等 AI 回答（发送中：输入框与按钮都禁用）
  * @property errorRes 页面级错误资源 id
  * @property snackbarRes 一次性提示资源 id
  * @property snackbarArgs 提示的格式化参数（**类型必须与资源占位符一致**：`%1$d` 传 Int、`%1$s` 传 String；
@@ -87,10 +93,26 @@ data class AiCoachUiState(
     val aiRemoteEnabled: Boolean = false,
     /** 是否已配置 API Key（快照；加密文件无响应式流，写入后由 ViewModel 手动刷新）。 */
     val hasApiKey: Boolean = false,
+    /** 「问教练」最近若干轮消息（**内存态**：问答不落库，离开页面即丢弃）。 */
+    val chatMessages: List<CoachChatMessage> = emptyList(),
+    /** 「问教练」输入框内容（内存态）。 */
+    val chatInput: String = "",
+    /** 正在等 AI 回答：发送中禁用输入框与按钮，避免并发发问。 */
+    val isAsking: Boolean = false,
     @StringRes val errorRes: Int? = null,
     @StringRes val snackbarRes: Int? = null,
     val snackbarArgs: List<Any> = emptyList(),
-)
+) {
+
+    /**
+     * 是否具备「问教练」的联网条件：**开关已开 且 已配 Key**。
+     *
+     * UI 只认这一个派生值（不要在页面里各写一遍 `aiRemoteEnabled && hasApiKey`）：
+     * `false` → 显示诚实禁用说明、不渲染输入框；`true` → 可用。
+     */
+    val canAskCoach: Boolean
+        get() = aiRemoteEnabled && hasApiKey
+}
 
 /**
  * 「AI 教练」ViewModel（**本地规则版 · 完全离线**）。
@@ -111,6 +133,7 @@ class AiCoachViewModel @Inject constructor(
     private val aiCredentialsStore: AiCredentialsStore,
     private val generateTrainingPlan: GenerateTrainingPlanUseCase,
     private val suggestExercises: SuggestExercisesUseCase,
+    private val askCoach: AskCoachUseCase,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AiCoachUiState())
@@ -277,6 +300,58 @@ class AiCoachViewModel @Inject constructor(
         _uiState.update { it.copy(snackbarRes = null, snackbarArgs = emptyList()) }
     }
 
+    /** 「问教练」输入框变化（纯内存态，问答不落库）。 */
+    fun onChatInputChange(text: String) {
+        _uiState.update { it.copy(chatInput = text) }
+    }
+
+    /**
+     * 发送一条问题给 AI 教练（**问答不落库**：只在内存里保留最近 [MAX_CHAT_MESSAGES] 条消息）。
+     *
+     * 三态由 [AskCoachUseCase] 的**可识别结果**决定，UI 不做任何猜测：
+     * - [CoachAnswer.Ok] → 正常回答气泡（内容来自 DeepSeek）；
+     * - [CoachAnswer.NeedsNetwork] → 固定的「需要联网」气泡（**绝不本地编造回答冒充 AI**）；
+     * - [CoachAnswer.Failed] → 固定的「联网失败」气泡，用户可以再问一次。
+     *
+     * 发送中（[AiCoachUiState.isAsking]）直接忽略重复调用，避免并发发问与消息乱序。
+     */
+    fun onAskCoach() {
+        val snapshot: AiCoachUiState = _uiState.value
+        if (snapshot.isAsking) return
+        val question: String = snapshot.chatInput.trim()
+        if (question.isEmpty()) return
+
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    chatInput = "",
+                    isAsking = true,
+                    chatMessages = it.chatMessages.appendChat(
+                        CoachChatMessage(kind = CoachChatKind.USER, text = question),
+                    ),
+                )
+            }
+
+            val answer: CoachAnswer = try {
+                askCoach(question)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (unexpected: Exception) {
+                // 兜底：用例内部已把网络/解析失败转成可识别结果，这里只兜住意外异常，绝不冒泡到 UI。
+                CoachAnswer.Failed(RemoteFallbackReason.REMOTE_ERROR)
+            }
+
+            val bubble: CoachChatMessage = when (answer) {
+                is CoachAnswer.Ok -> CoachChatMessage(kind = CoachChatKind.ANSWER, text = answer.text)
+                is CoachAnswer.NeedsNetwork -> CoachChatMessage(kind = CoachChatKind.NEEDS_NETWORK)
+                is CoachAnswer.Failed -> CoachChatMessage(kind = CoachChatKind.FAILED)
+            }
+            _uiState.update {
+                it.copy(isAsking = false, chatMessages = it.chatMessages.appendChat(bubble))
+            }
+        }
+    }
+
     /**
      * 基础代谢估算（Mifflin-St Jeor），**纯本地计算**。
      *
@@ -306,3 +381,14 @@ private enum class FailedAction {
     /** 建议加载 / 收入失败 → 重试重新加载建议。 */
     LOAD_SUGGESTIONS,
 }
+
+/** 「问教练」内存里保留的消息条数上限（6 条 = 3 轮问答）。 */
+private const val MAX_CHAT_MESSAGES: Int = 6
+
+/**
+ * 追加一条消息，并只保留最近 [MAX_CHAT_MESSAGES] 条。
+ *
+ * 问答**不落库**：页面退出即丢弃，因此这里用纯内存截断，不做任何持久化。
+ */
+private fun List<CoachChatMessage>.appendChat(message: CoachChatMessage): List<CoachChatMessage> =
+    (this + message).takeLast(MAX_CHAT_MESSAGES)

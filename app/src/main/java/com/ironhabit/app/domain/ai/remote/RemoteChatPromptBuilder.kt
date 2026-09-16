@@ -1,0 +1,165 @@
+package com.ironhabit.app.domain.ai.remote
+
+import com.ironhabit.app.domain.usecase.CoachContext
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+
+/**
+ * 自由问答（子项 A）的**远端提示词组装 + 回答解析**，纯函数、零 IO（JVM 单测可直接覆盖）。
+ *
+ * ## 为什么是 JSON
+ * 复用的 [DeepSeekApi.complete] 强制 `response_format = json_object`（见 [DeepSeekClient]），
+ * 模型**必然**返回 JSON。因此这里要求模型把回答放进 `{"answer": "..."}`，
+ * 再用 [parseChatAnswer] 取出正文 —— **不改动既有 [DeepSeekApi] 接口**。
+ *
+ * ⚠️ 本文件的提示词是给**模型**的指令；载荷里的中文（动作名等）是**数据**，不进 `strings.xml`。
+ */
+internal object RemoteChatPromptBuilder {
+
+    /** 自由问答的 system 段。 */
+    fun buildChatSystemPrompt(): String = CHAT_SYSTEM_PROMPT
+
+    /**
+     * 自由问答的 user 段：用户问题 + 一份用户现状上下文（档案 / 本周计划 / 近期打卡 / 今日饮食）。
+     *
+     * ⚠️ **绝不把 API Key 拼进提示词**（Key 只进 Authorization header，见红线）。
+     */
+    fun buildChatUserPrompt(question: String, context: CoachContext): String {
+        val payload = ChatPayload(
+            profile = ChatProfilePayload(
+                gender = context.profile.gender?.name,
+                age = context.profile.age,
+                heightCm = context.profile.heightCm,
+                goal = context.profile.goal.name,
+                equipment = context.profile.equipment.map { it.name },
+                injuryAreas = context.profile.injuryAreas.map { it.name },
+                dietaryAvoid = context.profile.dietaryAvoid.map { it.name },
+                injuryNote = context.profile.injuryNote,
+            ),
+            weeklyPlan = context.weeklyPlan.map { line ->
+                ChatPlanLinePayload(
+                    dayOfWeek = line.dayOfWeek,
+                    exerciseName = line.exerciseName,
+                    targetSets = line.targetSets,
+                    targetReps = line.targetReps,
+                )
+            },
+            recentCheckIn = ChatCheckInPayload(
+                windowDays = context.windowDays,
+                count = context.checkInCount,
+                averageRpe = context.averageRpe,
+                currentStreak = context.currentStreak,
+            ),
+            weightDeltaKg = context.weightDeltaKg,
+            todayDiet = ChatDietPayload(
+                intakeKcal = context.todayIntakeKcal,
+                planKcal = context.todayPlanKcal,
+            ),
+            question = question,
+        )
+        return chatJson.encodeToString(ChatPayload.serializer(), payload)
+    }
+
+    /**
+     * 从模型返回文本里取出回答正文（`{"answer": "..."}`）。
+     *
+     * 宽松策略：
+     * ① 去 ``` 围栏 → ② 是合法 JSON → **以 `answer` 字段为准**（缺字段 / 空串 = 本次回答无效 → `null`，
+     * 绝不把 JSON 原文当回答显示给用户）→ ③ 不是 JSON（模型偶尔直接输出正文）→ 退回原文
+     * → ④ 结果 trim 后为空则返回 `null`（由调用方转成可识别的**空响应失败**）。
+     */
+    fun parseChatAnswer(raw: String): String? {
+        val cleaned: String = stripFence(raw).trim()
+        if (cleaned.isEmpty()) return null
+        val parsed: ChatAnswer? = runCatching {
+            chatJson.decodeFromString(ChatAnswer.serializer(), cleaned)
+        }.getOrNull()
+        val text: String = when {
+            parsed != null -> parsed.answer?.trim().orEmpty()
+            else -> cleaned
+        }
+        return text.takeIf { it.isNotEmpty() }
+    }
+
+    /** 容忍模型违规包裹 ``` 围栏（system 段已禁止，但双保险）。 */
+    private fun stripFence(raw: String): String {
+        var text: String = raw.trim()
+        if (text.startsWith("```")) {
+            text = text
+                .removePrefix("```json")
+                .removePrefix("```JSON")
+                .removePrefix("```")
+            val closing: Int = text.lastIndexOf("```")
+            if (closing >= 0) text = text.substring(0, closing)
+        }
+        return text.trim()
+    }
+
+    // ---------------- 载荷 / 回答 DTO（内部私有） ----------------
+
+    @Serializable
+    private data class ChatPayload(
+        val profile: ChatProfilePayload,
+        val weeklyPlan: List<ChatPlanLinePayload>,
+        val recentCheckIn: ChatCheckInPayload,
+        val weightDeltaKg: Float? = null,
+        val todayDiet: ChatDietPayload,
+        val question: String,
+    )
+
+    @Serializable
+    private data class ChatProfilePayload(
+        val gender: String?,
+        val age: Int?,
+        val heightCm: Int?,
+        val goal: String,
+        val equipment: List<String>,
+        val injuryAreas: List<String>,
+        val dietaryAvoid: List<String>,
+        val injuryNote: String?,
+    )
+
+    @Serializable
+    private data class ChatPlanLinePayload(
+        val dayOfWeek: Int,
+        val exerciseName: String,
+        val targetSets: Int,
+        val targetReps: Int,
+    )
+
+    @Serializable
+    private data class ChatCheckInPayload(
+        val windowDays: Int,
+        val count: Int,
+        val averageRpe: Double? = null,
+        val currentStreak: Int,
+    )
+
+    @Serializable
+    private data class ChatDietPayload(
+        val intakeKcal: Int,
+        val planKcal: Int,
+    )
+
+    @Serializable
+    private data class ChatAnswer(
+        val answer: String? = null,
+    )
+
+    private val chatJson: Json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+
+    private const val CHAT_SYSTEM_PROMPT: String = """
+你是一名用户的私人健身教练，只回答与训练、饮食、恢复、坚持健身相关的问题。
+
+硬性规则：
+1. 只回答训练 / 饮食 / 恢复 / 坚持健身相关的问题；与之无关的问题（政治、法律、编程、闲聊等）一律礼貌拒答，并说明你只聊健身。
+2. 不做医疗诊断：涉及伤病、疾病、用药、孕期等问题，只给一般性建议并明确提示"请咨询医生"，绝不给出诊断或处方。
+3. 必须结合下面提供的用户上下文（身体档案 / 本周训练计划 / 近期打卡 / 今日饮食）来回答，给出贴合他本人的具体建议，不要泛泛而谈。
+4. 用简体中文回答。
+5. 回答控制在 200 字以内，直接给可执行的建议（做什么、几组几次、怎么吃、注意什么）。
+6. 只输出一个 JSON 对象（不要使用 Markdown 代码块围栏），形如 {"answer":"你的回答"}，把简体中文回答正文放进 answer 字段。
+
+输出格式：
+{"answer":"结合你上周的训练与今日饮食，建议……"}
+"""
+}

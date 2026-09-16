@@ -378,6 +378,18 @@
     <string name="note_ai_equipment_fit">与你现有器械匹配，无需额外器材</string>
     <string name="note_ai_goal_support">贴合你的目标方向，用于补强薄弱环节</string>
 
+    <!-- 区块⑤：问教练（AI 自由问答 · 联网可选） -->
+    <string name="ai_chat_section_title">问教练（AI 自由问答）</string>
+    <string name="ai_chat_hint">可以问训练、饮食、恢复、坚持相关的问题；回答由 AI 联网生成，仅供参考</string>
+    <string name="ai_chat_empty">还没有对话。比如问：今天练完有点累，明天该怎么调整？</string>
+    <string name="ai_chat_input_placeholder">输入你的问题…</string>
+    <string name="ai_chat_send">发送</string>
+    <string name="ai_chat_in_progress">正在生成回答…</string>
+    <string name="ai_chat_label_you">你</string>
+    <string name="ai_chat_label_coach">教练</string>
+    <string name="ai_chat_needs_network">发问需要联网：请在「我的 → 设置 → AI 设置」开启「AI 联网增强」并填写 Key</string>
+    <string name="ai_chat_failed">联网失败，没能拿到回答；可以改成更短的问题再试一次</string>
+
     <!-- 页面标题 -->
     <string name="title_ai_coach">AI 教练</string>
 
