@@ -800,3 +800,82 @@ graph TD
 | `aiSugCard()` 去重（`:641`） | `suggestExercises` 按 `name` 去重（幂等，§4.2） |
 | `adoptAi()`（`:656-659`） | `SuggestExercisesUseCase.adopt(name)`（`source = AI_SUGGESTED`） |
 | 「AI 教练设置」API Key（`:672-676`） | **本地版隐藏**，登记为 §6.2 N2 |
+
+---
+
+## 12. P1 / P2 增量（2026-09-16 落地，v2.0.2）
+
+> 依据：`deliverables/ironhabit-preview-v6-decided.html`（用户定稿：1C 2B 3B 4B 5A 6A 7 周日 20:00 8A 9B）。
+> 本节只记录**已落地**的行为与**诚实边界**；实现细节看代码注释。
+
+### 12.1 P1 —— 档案真正参与排课
+
+**新增 `domain/ai/ProfileLoadPolicy.kt`（纯函数、零 IO、零随机、零文案）**：把档案字段变成规则引擎
+真正会用的数字。以前"目标 / 体重 / 体脂"只写在生成依据里凑字数，现在它们决定：
+
+| 输入 | 输出 |
+|------|------|
+| 目标 BULK / RECOMP / MAINTAIN / SHAPE / CUT | 每组次数区间 `8–12 / 10–12 / 10–12 / 12–15 / 12–15`；组数区间 `3–4 / 3–4 / 3–3 / 3–3 / 3–3`；每周有氧 `1 / 2 / 1 / 2 / 3`；加重步长 `2.5 / 2.5 / 2.5 / 1.25 / 1.25 kg` |
+| 体脂 ≥ 男 25% / 女 32% | 有氧 +1 |
+| 体脂 ≤ 男 12% / 女 20% 且目标是增肌类 | 有氧 −1（下限 1） |
+| 当前体重 − 目标体重 ≥ 1kg | 有氧 +1 |
+| 目标体重 − 当前体重 ≥ 3kg | 组数区间上限 +1 |
+| 年龄 ≥ 50 / ≥ 40 | 单日动作数 −1（下限 3）/ 附一条恢复建议 |
+
+**诚实边界（不做的比做的更重要）**：
+- **性别未知 → 完全不做体脂判断**（男女阈值差 7 个百分点，猜错不如不判）；
+- **没记过体重（`body_metrics` 无记录）→ 完全不做体重/目标体重判断**（不用 0 或"标准体重"冒充）；
+- **身高不进训练规则**：它对训练量与恢复没有可靠依据，只用于 BMR / 饮食估算
+  （预览稿里写过"身高影响默认量级"，实现时**没有做**）。
+
+**每周训练天数**：`UserProfile.trainingDaysPerWeek`（`3–6`，默认 3 = 旧行为）。
+`LocalRuleAdvisor.TRAINING_DAY_SETS`：3 = 一/三/五、4 = 一/二/四/五、5 = 一/二/三/五/六、6 = 一~六
+（**周日恒为休息日**）。
+
+**不再连排同肌群**：训练日改为**按日历顺序**生成（原因见 `trainingDays` 的 KDoc：从"今天起"排的链
+会在链尾/链首跨过日历相邻的那一对），并把"前一天排到的肌群"传给下一天，跨重点补位与有氧兜底
+都先避开它。**唯一例外是有氧**：有氧配额（每周至少 N 个）优先，且它不是需要 48 小时恢复的力量训练。
+
+**伤病从「排除」升级为「替代」**：被挡掉的肌群仍然不排（排除这一层没有放松），但当某天的**训练重点
+本身被伤病挡掉**时，这一天里来自"安全邻近肌群"（`SAFE_SUBSTITUTION_TAGS`）的动作标成
+`PlanReason.INJURY_SAFE`，并写进依据 `basis_injury_swap`。
+**没被挡掉的日子不标**——那些是正常的重点安排，标成"因伤病替代"是假理由。
+⚠️ 实体层只有"肌群标签"这一层粒度（没有关节角度/动作风险字段），所以这是**粗粒度避让**，
+**不是医学建议**；真正个性化的避让由用户手改（`isUserEdited` 行永远优先）。
+
+**生成依据（basis）扩写为 16 个 key**：`basis_frequency` 现在带 `%1$d`（实际天数），
+新增 `basis_volume` / `basis_cardio` / `basis_recovery_age` / `basis_age_volume` /
+`basis_bodyfat_high` / `basis_bodyfat_low` / `basis_weight_cut` / `basis_weight_gain` /
+`basis_injury_swap`。**参数一律是 `Int`，资源只能用 `%d`**（见 `StringResourcePlaceholderContractTest`）。
+
+### 12.2 P2 —— 周复盘 + 数据包
+
+**新增 `domain/model/WeeklyReview.kt` + `domain/usecase/BuildWeeklyReviewUseCase.kt`**：
+一周（周一 00:00 ~ 周日）的实际训练数据，全部本地聚合、**只读**：
+出勤 / 总容量（只算有重量的记录）/ 总组数 / 平均 RPE（圆到 1 位小数）/ 体重变化 /
+饮食日均 / 进步与停滞（本周 + 前 3 周共 4 个周桶，每桶取该动作最大重量）/
+7 天齐全的逐日明细 / `ReviewNote` 诚实说明。
+
+**「不猜」三条硬规则（都有单测）**：
+1. 拿不到的体重 / RPE / 饮食一律 `null`，**不用 0 冒充**；
+2. **一周只称一次体重 → `deltaKg = null`**（一次称重算不出"变化"；真机上曾显示成 `0`，会被读成"体重没变"）；
+   有两条记录且数值相同才照实给 `0`；
+3. 停滞只在**有记录的周**之间连数：中间断档就停止计数，否则一个刚开始练的动作第一周就被判"停滞 3 周"。
+
+**新增 `domain/usecase/ExportWeekPackageUseCase.kt`**：把上述数据 + 档案 + 动作库序列化成
+`ironhabit-week-package/v1` 的 JSON（`@Serializable` DTO，字段名是合同；`explicitNulls = true`，
+拿不到的字段输出 `null` 而**不删字段**；浮点圆到 1 位小数去掉 Float 噪声）。
+**包里没有 API Key / 设备标识 / 账号**（有测试断言）。
+与预览稿的一处偏差（已获批）：删掉 `streakDays` —— 那是"今日"页指标，进周数据包只占 token。
+
+**界面**：`ui/screens/ai/WeeklyReviewBlock.kt`（周复盘卡 + 往期回看 + `WeekPackageSheet` 数据包弹层，
+可切"明细 + 汇总 / 只传汇总"、一键复制）。复制反馈**画在弹层内部**：Snackbar 属于外层 Scaffold，
+会被底部弹层盖住（真机实测：点了复制毫无反馈）。
+
+### 12.3 新增/改动的测试（P1+P2 共 +72 项）
+
+- `ProfileLoadPolicyTest`（15）：映射表逐行断言；
+- `LocalRuleAdvisorTest`（+13）：3–6 天、脏数据钳制、目标/体脂/体重/年龄、伤病替代真假、相邻天不撞肌群、确定性；
+- `BuildWeeklyReviewUseCaseTest`（21）：空周不猜、RPE 舍入、进步/停滞/断档、单条体重不给 0、周界与负数 epochDay；
+- `ExportWeekPackageUseCaseTest`（10）：JSON 字段名/嵌套/日期格式、`includeDetails=false`、library 去重排序、无密钥泄漏；
+- `AiCoachViewModelWeeklyReviewTest`（11）：首帧载入、周偏移夹取、粒度切换重算、失败可见性。
