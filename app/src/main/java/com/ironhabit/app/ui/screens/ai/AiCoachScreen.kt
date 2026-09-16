@@ -1,4 +1,4 @@
-package com.ironhabit.app.ui.screens.ai
+﻿package com.ironhabit.app.ui.screens.ai
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -50,23 +50,23 @@ import com.ironhabit.app.ui.components.ProfileSummaryCard
 import com.ironhabit.app.ui.components.aiPlanGoalText
 
 /**
- * Tab「AI 教练」页面（**联网可选 · 本地规则兜底**）。
+ * Tab銆孉I 鏁欑粌銆嶉〉闈紙**鑱旂綉鍙€?路 鏈湴瑙勫垯鍏滃簳**锛夈€?
  *
- * 区块：
- * ① 我的身体档案（复用 [ProfileSummaryCard]，点击去设置页编辑）
- * ② 生成计划（写入本周计划；**用户手改行永不覆盖**）
- * ②B 饮食计划（数值全部本地算，联网时另附「为什么这样吃」）
- * ②C 进度解读（数字来自本地聚合，联网时另附 AI 的下一步建议）
- * ③ 教练解读（BMR 等本地解读；未联网时附带自由问答的诚实禁用说明）
- * ④ 补充动作（按档案与伤病筛出，一键收入动作库，幂等）
- * ⑤ 问教练（AI 自由问答，联网可选）
+ * 鍖哄潡锛?
+ * 鈶?鎴戠殑韬綋妗ｆ锛堝鐢?[ProfileSummaryCard]锛岀偣鍑诲幓璁剧疆椤电紪杈戯級
+ * 鈶?鐢熸垚璁″垝锛堝啓鍏ユ湰鍛ㄨ鍒掞紱**鐢ㄦ埛鎵嬫敼琛屾案涓嶈鐩?*锛?
+ * 鈶 楗璁″垝锛堟暟鍊煎叏閮ㄦ湰鍦扮畻锛岃仈缃戞椂鍙﹂檮銆屼负浠€涔堣繖鏍峰悆銆嶏級
+ * 鈶 杩涘害瑙ｈ锛堟暟瀛楁潵鑷湰鍦拌仛鍚堬紝鑱旂綉鏃跺彟闄?AI 鐨勪笅涓€姝ュ缓璁級
+ * 鈶?鏁欑粌瑙ｈ锛圔MR 绛夋湰鍦拌В璇伙紱鏈仈缃戞椂闄勫甫鑷敱闂瓟鐨勮瘹瀹炵鐢ㄨ鏄庯級
+ * 鈶?琛ュ厖鍔ㄤ綔锛堟寜妗ｆ涓庝激鐥呯瓫鍑猴紝涓€閿敹鍏ュ姩浣滃簱锛屽箓绛夛級
+ * 鈶?闂暀缁冿紙AI 鑷敱闂瓟锛岃仈缃戝彲閫夛級
  *
- * ⚠️ **诚实原则（硬要求）**：
- * 1. 页首徽标如实反映三态（本地规则 / 联网已开 / 未配 Key）；
- * 2. **只有真的调用了 DeepSeek** 才显示「AI 分析」字样，来源由 UseCase 回传、UI 不猜；
- * 3. 离线 / 无 Key / 调用失败一律回落本地规则并**明确标注**，绝不冒充 AI。
+ * 鈿狅笍 **璇氬疄鍘熷垯锛堢‖瑕佹眰锛?*锛?
+ * 1. 椤甸寰芥爣濡傚疄鍙嶆槧涓夋€侊紙鏈湴瑙勫垯 / 鑱旂綉宸插紑 / 鏈厤 Key锛夛紱
+ * 2. **鍙湁鐪熺殑璋冪敤浜?DeepSeek** 鎵嶆樉绀恒€孉I 鍒嗘瀽銆嶅瓧鏍凤紝鏉ユ簮鐢?UseCase 鍥炰紶銆乁I 涓嶇寽锛?
+ * 3. 绂荤嚎 / 鏃?Key / 璋冪敤澶辫触涓€寰嬪洖钀芥湰鍦拌鍒欏苟**鏄庣‘鏍囨敞**锛岀粷涓嶅啋鍏?AI銆?
  *
- * @param onEditProfile 编辑完整档案（跳设置页「我的档案」区块）
+ * @param onEditProfile 缂栬緫瀹屾暣妗ｆ锛堣烦璁剧疆椤点€屾垜鐨勬。妗堛€嶅尯鍧楋級
  */
 @Composable
 fun AiCoachScreen(
@@ -79,7 +79,7 @@ fun AiCoachScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // 从设置页改完 Key 回来时刷新徽标（加密文件无响应式流，只能主动拉）。
+    // 浠庤缃〉鏀瑰畬 Key 鍥炴潵鏃跺埛鏂板窘鏍囷紙鍔犲瘑鏂囦欢鏃犲搷搴斿紡娴侊紝鍙兘涓诲姩鎷夛級銆?
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         viewModel.refreshKeyStatus()
     }
@@ -91,6 +91,17 @@ fun AiCoachScreen(
             snackbarHostState.showSnackbar(message)
             viewModel.onSnackbarShown()
         }
+    }
+
+    // 銆孉I 浼氱湅鍒颁粈涔堛€嶆暟鎹寘寮瑰眰锛堝彧鍦ㄧ敤鎴风偣浜嗗鍑哄悗鍑虹幇锛夈€?
+    if (uiState.weekPackageJson != null || uiState.isBuildingPackage) {
+        WeekPackageSheet(
+            json = uiState.weekPackageJson,
+            includeDetails = uiState.includePackageDetails,
+            onToggleDetails = viewModel::onTogglePackageDetails,
+            onCopied = viewModel::onPackageCopied,
+            onDismissRequest = viewModel::onDismissPackage,
+        )
     }
 
     Scaffold(
@@ -111,8 +122,8 @@ fun AiCoachScreen(
                 onGoSettings = onEditProfile,
             )
 
-            // 失败必须可见：生成 / 建议加载 / 收入失败都在这里给内联错误卡 + 一键重试，
-            // 而不是像以前那样"什么都没发生"。放在 when 之外，加载中也照样能看到错误。
+            // 澶辫触蹇呴』鍙锛氱敓鎴?/ 寤鸿鍔犺浇 / 鏀跺叆澶辫触閮藉湪杩欓噷缁欏唴鑱旈敊璇崱 + 涓€閿噸璇曪紝
+            // 鑰屼笉鏄儚浠ュ墠閭ｆ牱"浠€涔堥兘娌″彂鐢?銆傛斁鍦?when 涔嬪锛屽姞杞戒腑涔熺収鏍疯兘鐪嬪埌閿欒銆?
             val errorRes: Int? = uiState.errorRes
             if (errorRes != null) {
                 ErrorCard(
@@ -132,24 +143,30 @@ fun AiCoachScreen(
                         uiState = uiState,
                         onEditProfile = onEditProfile,
                     )
+                    // 鈶燘 鍛ㄥ鐩?+ 鏁版嵁鍖咃紙P2锛夛細鏁板瓧鍏ㄩ儴鏈湴绠楋紝鏁版嵁鍖呭彲澶嶅埗缁欎换浣?AI銆?
+                    WeeklyReviewBlock(
+                        uiState = uiState,
+                        onWeekChange = viewModel::loadWeeklyReview,
+                        onExport = viewModel::onExportPackage,
+                    )
                     GeneratePlanBlock(
                         uiState = uiState,
                         onGenerate = viewModel::generatePlan,
                         onAddPlan = onAddPlan,
                         onEditPlan = onEditPlan,
                     )
-                    // ②B 饮食计划（子项 B）：本地算数值 + 联网时附 AI 的「为什么这样吃」。
+                    // 鈶 楗璁″垝锛堝瓙椤?B锛夛細鏈湴绠楁暟鍊?+ 鑱旂綉鏃堕檮 AI 鐨勩€屼负浠€涔堣繖鏍峰悆銆嶃€?
                     DietBlock(
                         uiState = uiState,
                         onGenerateDiet = viewModel::generateDiet,
                     )
-                    // ②C 进度解读（子项 C）：数字来自本地聚合，联网时附 AI 的下一步建议。
+                    // 鈶 杩涘害瑙ｈ锛堝瓙椤?C锛夛細鏁板瓧鏉ヨ嚜鏈湴鑱氬悎锛岃仈缃戞椂闄?AI 鐨勪笅涓€姝ュ缓璁€?
                     InsightBlock(
                         uiState = uiState,
                         onReload = viewModel::loadInsight,
                     )
                     ExplainBlock(bmr = viewModel.estimateBmr(), canAsk = uiState.canAskCoach)
-                    // ⑤ 问教练（AI 自由问答）：离线显示诚实禁用说明，在线可用，发送中禁用。
+                    // 鈶?闂暀缁冿紙AI 鑷敱闂瓟锛夛細绂荤嚎鏄剧ず璇氬疄绂佺敤璇存槑锛屽湪绾垮彲鐢紝鍙戦€佷腑绂佺敤銆?
                     CoachChatCard(
                         canAsk = uiState.canAskCoach,
                         messages = uiState.chatMessages,
@@ -167,7 +184,7 @@ fun AiCoachScreen(
     }
 }
 
-/** ① 我的身体档案。 */
+/** 鈶?鎴戠殑韬綋妗ｆ銆?*/
 @Composable
 private fun ProfileBlock(
     uiState: AiCoachUiState,
@@ -183,7 +200,7 @@ private fun ProfileBlock(
     }
 }
 
-/** ② 生成计划。 */
+/** 鈶?鐢熸垚璁″垝銆?*/
 @Composable
 private fun GeneratePlanBlock(
     uiState: AiCoachUiState,
@@ -233,7 +250,7 @@ private fun GeneratePlanBlock(
         )
         SourceLine(source = result.source, fallback = result.fallbackReason)
 
-        // 本次生成的训练计划：逐条卡片（星期 / 动作 / 组数×次数×重量 / 理由），可编辑。
+        // 鏈鐢熸垚鐨勮缁冭鍒掞細閫愭潯鍗＄墖锛堟槦鏈?/ 鍔ㄤ綔 / 缁勬暟脳娆℃暟脳閲嶉噺 / 鐞嗙敱锛夛紝鍙紪杈戙€?
         if (result.plans.isNotEmpty()) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -291,10 +308,10 @@ private fun GeneratePlanBlock(
 }
 
 /**
- * 「本次生成的训练计划」中的单条动作卡。
+ * 銆屾湰娆＄敓鎴愮殑璁粌璁″垝銆嶄腑鐨勫崟鏉″姩浣滃崱銆?
  *
- * 把规则的产出**可视化成真计划**：星期 + 动作名 + 目标(组数×次数×重量) + 挑选理由，
- * 右上角可点「编辑」直接进计划编辑页改组数/重量/动作。解决"面板单调、看不出 AI 排了什么"。
+ * 鎶婅鍒欑殑浜у嚭**鍙鍖栨垚鐪熻鍒?*锛氭槦鏈?+ 鍔ㄤ綔鍚?+ 鐩爣(缁勬暟脳娆℃暟脳閲嶉噺) + 鎸戦€夌悊鐢憋紝
+ * 鍙充笂瑙掑彲鐐广€岀紪杈戙€嶇洿鎺ヨ繘璁″垝缂栬緫椤垫敼缁勬暟/閲嶉噺/鍔ㄤ綔銆傝В鍐?闈㈡澘鍗曡皟銆佺湅涓嶅嚭 AI 鎺掍簡浠€涔?銆?
  */
 @Composable
 private fun GeneratedPlanCard(
@@ -362,7 +379,7 @@ private fun GeneratedPlanCard(
     }
 }
 
-/** 星期 → 全名标签（1=周一 … 7=周日）。 */
+/** 鏄熸湡 鈫?鍏ㄥ悕鏍囩锛?=鍛ㄤ竴 鈥?7=鍛ㄦ棩锛夈€?*/
 @Composable
 private fun weekdayLabel(day: Int): String = stringResource(
     when (day) {
@@ -377,10 +394,10 @@ private fun weekdayLabel(day: Int): String = stringResource(
 )
 
 /**
- * 「本次挑了这些动作」——把规则/AI 给出的每一条选择**连同理由**摊开给用户看。
+ * 銆屾湰娆℃寫浜嗚繖浜涘姩浣溿€嶁€斺€旀妸瑙勫垯/AI 缁欏嚭鐨勬瘡涓€鏉￠€夋嫨**杩炲悓鐞嗙敱**鎽婂紑缁欑敤鎴风湅銆?
  *
- * 只报"写了几条"看不出差别，这里逐条列出「动作名 · 为什么选它」：
- * 主项 / 辅助 / 按器械 / 避伤病 / 加重 / 维持。来源标签一并显示（AI 还是本地规则）。
+ * 鍙姤"鍐欎簡鍑犳潯"鐪嬩笉鍑哄樊鍒紝杩欓噷閫愭潯鍒楀嚭銆屽姩浣滃悕 路 涓轰粈涔堥€夊畠銆嶏細
+ * 涓婚」 / 杈呭姪 / 鎸夊櫒姊?/ 閬夸激鐥?/ 鍔犻噸 / 缁存寔銆傛潵婧愭爣绛句竴骞舵樉绀猴紙AI 杩樻槸鏈湴瑙勫垯锛夈€?
  */
 @Composable
 private fun AiOutputCard(
@@ -424,7 +441,7 @@ private fun AiOutputCard(
             notes.forEach { note ->
                 val name = exerciseNames[note.exerciseId] ?: return@forEach
                 Text(
-                    text = "$name · ${planReasonText(note)}",
+                    text = "$name 路 ${planReasonText(note)}",
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
@@ -432,7 +449,7 @@ private fun AiOutputCard(
     }
 }
 
-/** 远端 AI（DeepSeek）返回的自由文本分析，仅当 source==REMOTE_LLM 且有内容时显示。 */
+/** 杩滅 AI锛圖eepSeek锛夎繑鍥炵殑鑷敱鏂囨湰鍒嗘瀽锛屼粎褰?source==REMOTE_LLM 涓旀湁鍐呭鏃舵樉绀恒€?*/
 @Composable
 private fun AiAnalysisCard(analysis: String) {
     Card(
@@ -461,7 +478,7 @@ private fun AiAnalysisCard(analysis: String) {
     }
 }
 
-/** 本地规则的「生成依据」：把规则真正用到的档案输入逐条摊开，明确标注非 AI 联网生成（诚实原则）。 */
+/** 鏈湴瑙勫垯鐨勩€岀敓鎴愪緷鎹€嶏細鎶婅鍒欑湡姝ｇ敤鍒扮殑妗ｆ杈撳叆閫愭潯鎽婂紑锛屾槑纭爣娉ㄩ潪 AI 鑱旂綉鐢熸垚锛堣瘹瀹炲師鍒欙級銆?*/
 @Composable
 private fun LocalBasisCard(basis: List<PlanBasisItem>) {
     Card(
@@ -502,7 +519,7 @@ private fun LocalBasisCard(basis: List<PlanBasisItem>) {
     }
 }
 
-/** [PlanBasisItem.key]（strings.xml 资源名）→ 资源 id。 */
+/** [PlanBasisItem.key]锛坰trings.xml 璧勬簮鍚嶏級鈫?璧勬簮 id銆?*/
 private fun basisKeyRes(key: String): Int = when (key) {
     "basis_frequency" -> R.string.basis_frequency
     "basis_goal" -> R.string.basis_goal
@@ -523,7 +540,7 @@ private fun basisKeyRes(key: String): Int = when (key) {
     else -> R.string.basis_frequency
 }
 
-/** [PlanNote] → 理由文案。按明细类型选句子：重量变化说 kg、组数变化说组、无参数说"维持原目标"。 */
+/** [PlanNote] 鈫?鐞嗙敱鏂囨銆傛寜鏄庣粏绫诲瀷閫夊彞瀛愶細閲嶉噺鍙樺寲璇?kg銆佺粍鏁板彉鍖栬缁勩€佹棤鍙傛暟璇?缁存寔鍘熺洰鏍?銆?*/
 @Composable
 private fun planReasonText(note: PlanNote): String = when (note.kind) {
     PlanReason.PRIMARY_LIFT -> stringResource(R.string.reason_primary_lift)
@@ -546,25 +563,25 @@ private fun planReasonText(note: PlanNote): String = when (note.kind) {
     }
 }
 
-/** 从 [PlanNoteDetail] 取"新重量/新组数"作为展示参数。 */
+/** 浠?[PlanNoteDetail] 鍙?鏂伴噸閲?鏂扮粍鏁?浣滀负灞曠ず鍙傛暟銆?*/
 private fun formatWeight(detail: PlanNoteDetail): String = when (detail) {
     is PlanNoteDetail.WeightDelta -> detail.newWeightKg?.let { formatKg(it) } ?: ""
     is PlanNoteDetail.SetsDelta -> "${detail.newSets}"
     PlanNoteDetail.None -> ""
 }
 
-/** 整数重量不带小数点（避免显示成 `20.0`）。 */
-private fun formatKg(kg: Float): String {
+/** 鏁存暟閲嶉噺涓嶅甫灏忔暟鐐癸紙閬垮厤鏄剧ず鎴?`20.0`锛夈€?*/
+internal fun formatKg(kg: Float): String {
     val rounded = kotlin.math.round(kg * 10) / 10f
     return if (rounded % 1f == 0f) rounded.toInt().toString() else rounded.toString()
 }
 
 /**
- * ②B 饮食计划（子项 B）。
+ * 鈶 楗璁″垝锛堝瓙椤?B锛夈€?
  *
- * **数值一律来自本地纯函数**（热量 / 蛋白质 / 各餐内容），远端 AI 只提供一段
- * 「为什么这样吃」的文字分析 —— 因此离线、未配 Key、调用失败时这里依然有完整可信的结果，
- * 只是把分析卡换成**明确标注本地规则**的「生成依据」卡。
+ * **鏁板€间竴寰嬫潵鑷湰鍦扮函鍑芥暟**锛堢儹閲?/ 铔嬬櫧璐?/ 鍚勯鍐呭锛夛紝杩滅 AI 鍙彁渚涗竴娈?
+ * 銆屼负浠€涔堣繖鏍峰悆銆嶇殑鏂囧瓧鍒嗘瀽 鈥斺€?鍥犳绂荤嚎銆佹湭閰?Key銆佽皟鐢ㄥけ璐ユ椂杩欓噷渚濈劧鏈夊畬鏁村彲淇＄殑缁撴灉锛?
+ * 鍙槸鎶婂垎鏋愬崱鎹㈡垚**鏄庣‘鏍囨敞鏈湴瑙勫垯**鐨勩€岀敓鎴愪緷鎹€嶅崱銆?
  */
 @Composable
 private fun DietBlock(
@@ -617,7 +634,7 @@ private fun DietBlock(
         }
         if (summary.filteredCount > 0) {
             Text(
-                // ⚠️ msg_diet_filtered 的占位符是 %1$s（String 通道）→ 传 toString()，别传 Int。
+                // 鈿狅笍 msg_diet_filtered 鐨勫崰浣嶇鏄?%1$s锛圫tring 閫氶亾锛夆啋 浼?toString()锛屽埆浼?Int銆?
                 text = stringResource(R.string.msg_diet_filtered, summary.filteredCount.toString()),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -633,7 +650,7 @@ private fun DietBlock(
     }
 }
 
-/** 远端 AI 的「为什么这样吃」（仅联网成功时出现；数值仍以本地为准）。 */
+/** 杩滅 AI 鐨勩€屼负浠€涔堣繖鏍峰悆銆嶏紙浠呰仈缃戞垚鍔熸椂鍑虹幇锛涙暟鍊间粛浠ユ湰鍦颁负鍑嗭級銆?*/
 @Composable
 private fun DietAnalysisCard(analysis: String) {
     Card(
@@ -660,7 +677,7 @@ private fun DietAnalysisCard(analysis: String) {
     }
 }
 
-/** 离线 / 未联网时的本地「生成依据」卡（**明确标注本地规则**，不冒充 AI）。 */
+/** 绂荤嚎 / 鏈仈缃戞椂鐨勬湰鍦般€岀敓鎴愪緷鎹€嶅崱锛?*鏄庣‘鏍囨敞鏈湴瑙勫垯**锛屼笉鍐掑厖 AI锛夈€?*/
 @Composable
 private fun DietLocalBasisCard() {
     Card(
@@ -688,11 +705,11 @@ private fun DietLocalBasisCard() {
 }
 
 /**
- * ②C 进度解读（子项 C）。
+ * 鈶 杩涘害瑙ｈ锛堝瓙椤?C锛夈€?
  *
- * **数字永远来自本地聚合**（打卡次数 / 平均 RPE / 体重变化 / 连续天数）：
- * 联网成功时多一段 AI 文案（标题标注「AI 分析」），否则显示本地小结并标注「本地规则」——
- * 两者都不会缺数字，所以离线也能看。
+ * **鏁板瓧姘歌繙鏉ヨ嚜鏈湴鑱氬悎**锛堟墦鍗℃鏁?/ 骞冲潎 RPE / 浣撻噸鍙樺寲 / 杩炵画澶╂暟锛夛細
+ * 鑱旂綉鎴愬姛鏃跺涓€娈?AI 鏂囨锛堟爣棰樻爣娉ㄣ€孉I 鍒嗘瀽銆嶏級锛屽惁鍒欐樉绀烘湰鍦板皬缁撳苟鏍囨敞銆屾湰鍦拌鍒欍€嶁€斺€?
+ * 涓よ€呴兘涓嶄細缂烘暟瀛楋紝鎵€浠ョ绾夸篃鑳界湅銆?
  */
 @Composable
 private fun InsightBlock(
@@ -789,7 +806,7 @@ private fun InsightBlock(
     }
 }
 
-/** 平均 RPE 展示：四舍五入到一位小数；无记录显示「暂无」（文案在 strings.xml）。 */
+/** 骞冲潎 RPE 灞曠ず锛氬洓鑸嶄簲鍏ュ埌涓€浣嶅皬鏁帮紱鏃犺褰曟樉绀恒€屾殏鏃犮€嶏紙鏂囨鍦?strings.xml锛夈€?*/
 @Composable
 private fun insightRpeText(rpe: Double?): String {
     if (rpe == null) return stringResource(R.string.ai_insight_unknown)
@@ -797,7 +814,7 @@ private fun insightRpeText(rpe: Double?): String {
     return rounded.toString()
 }
 
-/** 体重变化展示：带符号一位小数（如 `+0.4` / `-0.6`）；不足两条记录显示「暂无」。 */
+/** 浣撻噸鍙樺寲灞曠ず锛氬甫绗﹀彿涓€浣嶅皬鏁帮紙濡?`+0.4` / `-0.6`锛夛紱涓嶈冻涓ゆ潯璁板綍鏄剧ず銆屾殏鏃犮€嶃€?*/
 @Composable
 private fun insightWeightDeltaText(deltaKg: Float?): String {
     if (deltaKg == null) return stringResource(R.string.ai_insight_unknown)
@@ -807,11 +824,11 @@ private fun insightWeightDeltaText(deltaKg: Float?): String {
 }
 
 /**
- * ③ 教练解读（含自由问答的诚实说明）。
+ * 鈶?鏁欑粌瑙ｈ锛堝惈鑷敱闂瓟鐨勮瘹瀹炶鏄庯級銆?
  *
- * @param canAsk 「问教练」是否具备联网条件（开关开 + 已配 Key）。
- *   `false` → 保留原有的诚实禁用说明 [R.string.ai_freechat_disabled]；
- *   `true` → **不再显示那句话**（下方「问教练」区块已经可用，继续说"暂不提供"就是不诚实）。
+ * @param canAsk 銆岄棶鏁欑粌銆嶆槸鍚﹀叿澶囪仈缃戞潯浠讹紙寮€鍏冲紑 + 宸查厤 Key锛夈€?
+ *   `false` 鈫?淇濈暀鍘熸湁鐨勮瘹瀹炵鐢ㄨ鏄?[R.string.ai_freechat_disabled]锛?
+ *   `true` 鈫?**涓嶅啀鏄剧ず閭ｅ彞璇?*锛堜笅鏂广€岄棶鏁欑粌銆嶅尯鍧楀凡缁忓彲鐢紝缁х画璇?鏆備笉鎻愪緵"灏辨槸涓嶈瘹瀹烇級銆?
  */
 @Composable
 private fun ExplainBlock(bmr: Int?, canAsk: Boolean) {
@@ -850,7 +867,7 @@ private fun ExplainBlock(bmr: Int?, canAsk: Boolean) {
     }
 }
 
-/** ④ 补充动作 · 一键收入。 */
+/** 鈶?琛ュ厖鍔ㄤ綔 路 涓€閿敹鍏ャ€?*/
 @Composable
 private fun SuggestBlock(
     uiState: AiCoachUiState,
@@ -911,10 +928,10 @@ private fun SuggestionRow(
 }
 
 /**
- * 来源诚实标注：本次结果到底是谁产的。
+ * 鏉ユ簮璇氬疄鏍囨敞锛氭湰娆＄粨鏋滃埌搴曟槸璋佷骇鐨勩€?
  *
- * 三态：联网失败回落本地 > AI 联网生成 > 本地规则。**不许 UI 猜、不许美化**——
- * 这是你自己的原则「离线仍可用，AI 只是增强」落到界面上的部分。
+ * 涓夋€侊細鑱旂綉澶辫触鍥炶惤鏈湴 > AI 鑱旂綉鐢熸垚 > 鏈湴瑙勫垯銆?*涓嶈 UI 鐚溿€佷笉璁哥編鍖?*鈥斺€?
+ * 杩欐槸浣犺嚜宸辩殑鍘熷垯銆岀绾夸粛鍙敤锛孉I 鍙槸澧炲己銆嶈惤鍒扮晫闈笂鐨勯儴鍒嗐€?
  */
 @Composable
 private fun SourceLine(
@@ -933,7 +950,7 @@ private fun SourceLine(
     )
 }
 
-/** 页首徽标：三态诚实标注当前 AI 模式，让用户一眼看出背后是谁在干活。 */
+/** 椤甸寰芥爣锛氫笁鎬佽瘹瀹炴爣娉ㄥ綋鍓?AI 妯″紡锛岃鐢ㄦ埛涓€鐪肩湅鍑鸿儗鍚庢槸璋佸湪骞叉椿銆?*/
 @Composable
 private fun LocalRulesBadge(
     aiRemoteEnabled: Boolean,
@@ -974,12 +991,12 @@ private fun badgeRes(aiRemoteEnabled: Boolean, hasApiKey: Boolean): Int = when {
 }
 
 /**
- * 内联错误卡：把「生成 / 建议加载 / 收入」的失败摆到页面上，并给一个**真正有用**的重试按钮。
+ * 鍐呰仈閿欒鍗★細鎶娿€岀敓鎴?/ 寤鸿鍔犺浇 / 鏀跺叆銆嶇殑澶辫触鎽嗗埌椤甸潰涓婏紝骞剁粰涓€涓?*鐪熸鏈夌敤**鐨勯噸璇曟寜閽€?
  *
- * 配色用 `errorContainer` 与正常卡片区分；按钮文案走 [R.string.action_retry]（不在状态里存字符串）。
+ * 閰嶈壊鐢?`errorContainer` 涓庢甯稿崱鐗囧尯鍒嗭紱鎸夐挳鏂囨璧?[R.string.action_retry]锛堜笉鍦ㄧ姸鎬侀噷瀛樺瓧绗︿覆锛夈€?
  *
- * @param message 已由调用方 `stringResource` 解析好的错误文案
- * @param onRetry 重试回调（ViewModel 会重跑失败的那个动作）
+ * @param message 宸茬敱璋冪敤鏂?`stringResource` 瑙ｆ瀽濂界殑閿欒鏂囨
+ * @param onRetry 閲嶈瘯鍥炶皟锛圴iewModel 浼氶噸璺戝け璐ョ殑閭ｄ釜鍔ㄤ綔锛?
  */
 @Composable
 private fun ErrorCard(
@@ -1012,7 +1029,7 @@ private fun ErrorCard(
 }
 
 @Composable
-private fun SectionTitle(text: String) {
+internal fun SectionTitle(text: String) {
     Text(
         text = text,
         style = MaterialTheme.typography.titleMedium,
@@ -1021,7 +1038,7 @@ private fun SectionTitle(text: String) {
     )
 }
 
-/** 补充动作理由 → 文案资源（规则层只产枚举，文案一律走资源）。 */
+/** 琛ュ厖鍔ㄤ綔鐞嗙敱 鈫?鏂囨璧勬簮锛堣鍒欏眰鍙骇鏋氫妇锛屾枃妗堜竴寰嬭蛋璧勬簮锛夈€?*/
 private fun suggestionReasonRes(reason: SuggestionReason): Int = when (reason) {
     SuggestionReason.INJURY_SWAP -> R.string.note_ai_injury_swap
     SuggestionReason.EQUIPMENT_FIT -> R.string.note_ai_equipment_fit

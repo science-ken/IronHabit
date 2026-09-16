@@ -16,14 +16,17 @@ import com.ironhabit.app.domain.model.PlanNote
 import com.ironhabit.app.domain.model.RemoteFallbackReason
 import com.ironhabit.app.domain.model.UserProfile
 import com.ironhabit.app.domain.model.WeekPlan
+import com.ironhabit.app.domain.model.WeeklyReview
 import com.ironhabit.app.domain.repository.BodyMetricRepository
 import com.ironhabit.app.domain.repository.ExerciseRepository
 import com.ironhabit.app.domain.repository.SettingsRepository
 import com.ironhabit.app.domain.usecase.AskCoachUseCase
+import com.ironhabit.app.domain.usecase.BuildWeeklyReviewUseCase
 import com.ironhabit.app.domain.usecase.CoachAnswer
 import com.ironhabit.app.domain.usecase.CoachInsightResult
 import com.ironhabit.app.domain.usecase.CoachInsightUseCase
 import com.ironhabit.app.domain.usecase.ExplainDietUseCase
+import com.ironhabit.app.domain.usecase.ExportWeekPackageUseCase
 import com.ironhabit.app.domain.usecase.GenerateDietPlanUseCase
 import com.ironhabit.app.domain.usecase.GenerateTrainingPlanUseCase
 import com.ironhabit.app.domain.usecase.SuggestExercisesUseCase
@@ -144,6 +147,28 @@ data class AiCoachUiState(
     val insightResult: CoachInsightResult? = null,
     /** 进度解读进行中（离线只算本地聚合，通常瞬间完成）。 */
     val isLoadingInsight: Boolean = false,
+
+    /**
+     * 周复盘（P2）：本周 / 上一周的实际训练数据（**全部本地算出来，不联网、不花 token**）。
+     *
+     * `null` = 还没算出来（首帧）。
+     */
+    val weeklyReview: WeeklyReview? = null,
+    /** 周复盘整理中。 */
+    val isLoadingReview: Boolean = false,
+    /** 周偏移：`0` = 本周，`-1` = 上一周（往期只读回看）。 */
+    val weekOffset: Int = 0,
+    /**
+     * 已生成的数据包 JSON（非 `null` = 「AI 会看到什么」弹层正在显示）。
+     *
+     * 只在用户点「导出数据包」时才算，不让首帧多跑一次序列化。
+     */
+    val weekPackageJson: String? = null,
+    /** 数据包生成中。 */
+    val isBuildingPackage: Boolean = false,
+    /** 数据包粒度：`true` = 明细 + 汇总（默认，定稿 2B）；`false` = 只传汇总（省 token）。 */
+    val includePackageDetails: Boolean = true,
+
     @StringRes val errorRes: Int? = null,
     @StringRes val snackbarRes: Int? = null,
     val snackbarArgs: List<Any> = emptyList(),
@@ -187,6 +212,8 @@ class AiCoachViewModel @Inject constructor(
     private val generateDietPlan: GenerateDietPlanUseCase,
     private val explainDiet: ExplainDietUseCase,
     private val coachInsight: CoachInsightUseCase,
+    private val buildWeeklyReview: BuildWeeklyReviewUseCase,
+    private val exportWeekPackage: ExportWeekPackageUseCase,
     private val clock: Clock,
     private val timeZone: TimeZone,
 ) : ViewModel() {
@@ -230,6 +257,7 @@ class AiCoachViewModel @Inject constructor(
         }
         loadSuggestions()
         loadInsight()
+        loadWeeklyReview()
         viewModelScope.launch {
             exerciseRepository.observeActive().collect { exercises ->
                 _uiState.update { it.copy(exerciseNames = exercises.associate { e -> e.id to e.name }) }
@@ -260,6 +288,83 @@ class AiCoachViewModel @Inject constructor(
             }
             _uiState.update { it.copy(isLoadingInsight = false, insightResult = result) }
         }
+    }
+
+    // ---------------- 周复盘 + 数据包（P2） ----------------
+
+    /**
+     * 载入某一周的复盘（[weekOffset]：`0` = 本周，`-1` = 上一周……）。
+     *
+     * 纯本地聚合：不联网、不花 token。**失败不写 [AiCoachUiState.errorRes]** ——
+     * "算不出来"在这里等价于"这一周没有数据"，界面用语是「本周还没有打卡记录」，
+     * 而不是弹一个吓人的错误卡。
+     *
+     * 周偏移 → 周一仍然走 [BuildWeeklyReviewUseCase.weekStartOf]（**同一套取整规则**，
+     * 不允许界面层再写一遍，否则会出现"点了上一周但数字没变"）。
+     */
+    fun loadWeeklyReview(weekOffset: Int = _uiState.value.weekOffset) {
+        // 未来的周没有意义（周复盘是"已经发生的事"）→ 夹到 `≤ 0`，避免任何调用方翻到未来。
+        val offset: Int = weekOffset.coerceAtMost(0)
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingReview = true, weekOffset = offset) }
+            val weekStart: Long = BuildWeeklyReviewUseCase.weekStartOf(
+                todayEpochDay() + offset.toLong() * DAYS_PER_WEEK,
+            )
+            val review: WeeklyReview? = try {
+                buildWeeklyReview(weekStart)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (unexpected: Exception) {
+                null
+            }
+            _uiState.update { it.copy(isLoadingReview = false, weeklyReview = review) }
+        }
+    }
+
+    /**
+     * 生成数据包并打开「AI 会看到什么」弹层（按当前粒度 [AiCoachUiState.includePackageDetails]）。
+     *
+     * ⚠️ 只序列化，**不落库、不外发**：数据包是一段文本，复制/粘贴由用户自己决定。
+     */
+    fun onExportPackage() {
+        val review: WeeklyReview = _uiState.value.weeklyReview ?: return
+        if (_uiState.value.isBuildingPackage) return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isBuildingPackage = true) }
+            val json: String? = try {
+                exportWeekPackage(review, _uiState.value.includePackageDetails)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (unexpected: Exception) {
+                null
+            }
+            _uiState.update { state ->
+                state.copy(
+                    isBuildingPackage = false,
+                    weekPackageJson = json,
+                    // 序列化失败是"真错误"（不是"没数据"）→ 必须可见。
+                    errorRes = if (json == null) R.string.error_save_failed else state.errorRes,
+                )
+            }
+        }
+    }
+
+    /** 切换数据包粒度；弹层已经打开时**立即按新粒度重算**（否则开关变了内容没变，看着像坏了）。 */
+    fun onTogglePackageDetails() {
+        val next: Boolean = !_uiState.value.includePackageDetails
+        _uiState.update { it.copy(includePackageDetails = next) }
+        if (_uiState.value.weekPackageJson != null) onExportPackage()
+    }
+
+    /** 关闭数据包弹层（内容一并清掉，避免下次打开看到旧数据）。 */
+    fun onDismissPackage() {
+        _uiState.update { it.copy(weekPackageJson = null) }
+    }
+
+    /** 已复制到剪贴板（剪贴板由 UI 层写入，VM 只负责给反馈）。 */
+    fun onPackageCopied() {
+        _uiState.update { it.copy(snackbarRes = R.string.ai_package_copied) }
     }
 
     /**
@@ -557,6 +662,9 @@ private enum class FailedAction {
 
 /** 「问教练」内存里保留的消息条数上限（6 条 = 3 轮问答）。 */
 private const val MAX_CHAT_MESSAGES: Int = 6
+
+/** 一周的天数（周偏移换算用）。 */
+private const val DAYS_PER_WEEK: Int = 7
 
 /**
  * 追加一条消息，并只保留最近 [MAX_CHAT_MESSAGES] 条。

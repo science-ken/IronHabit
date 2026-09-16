@@ -1,4 +1,4 @@
-package com.ironhabit.app.ui.screens.ai
+﻿package com.ironhabit.app.ui.screens.ai
 
 import com.ironhabit.app.data.preferences.AiCredentialsStore
 import com.ironhabit.app.domain.model.AdviceSource
@@ -11,7 +11,9 @@ import com.ironhabit.app.domain.repository.SettingsRepository
 import com.ironhabit.app.domain.usecase.AskCoachUseCase
 import com.ironhabit.app.domain.usecase.CoachAnswer
 import com.ironhabit.app.domain.usecase.CoachInsightResult
+import com.ironhabit.app.domain.usecase.BuildWeeklyReviewUseCase
 import com.ironhabit.app.domain.usecase.CoachInsightUseCase
+import com.ironhabit.app.domain.usecase.ExportWeekPackageUseCase
 import com.ironhabit.app.domain.usecase.ExplainDietUseCase
 import com.ironhabit.app.domain.usecase.GenerateDietPlanUseCase
 import com.ironhabit.app.domain.usecase.GenerateTrainingPlanUseCase
@@ -55,6 +57,8 @@ class AiCoachViewModelChatTest {
     private val askCoach = mockk<AskCoachUseCase>()
     private val generateDietPlan = mockk<GenerateDietPlanUseCase>(relaxed = true)
     private val explainDiet = mockk<ExplainDietUseCase>(relaxed = true)
+    private val buildWeeklyReview = mockk<BuildWeeklyReviewUseCase>(relaxed = true)
+    private val exportWeekPackage = mockk<ExportWeekPackageUseCase>(relaxed = true)
     private val coachInsight = mockk<CoachInsightUseCase>(relaxed = true)
 
     /** 固定时钟：让 `todayEpochDay()` 可复现（本类只关心问答，故取任意确定时刻）。 */
@@ -86,6 +90,8 @@ class AiCoachViewModelChatTest {
             generateDietPlan = generateDietPlan,
             explainDiet = explainDiet,
             coachInsight = coachInsight,
+            buildWeeklyReview = buildWeeklyReview,
+            exportWeekPackage = exportWeekPackage,
             clock = clock,
             timeZone = utc,
         )

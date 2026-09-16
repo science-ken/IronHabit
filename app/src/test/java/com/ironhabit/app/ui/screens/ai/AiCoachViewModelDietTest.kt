@@ -1,4 +1,4 @@
-package com.ironhabit.app.ui.screens.ai
+﻿package com.ironhabit.app.ui.screens.ai
 
 import com.ironhabit.app.data.preferences.AiCredentialsStore
 import com.ironhabit.app.domain.model.AdviceSource
@@ -12,7 +12,9 @@ import com.ironhabit.app.domain.repository.SettingsRepository
 import com.ironhabit.app.domain.usecase.AskCoachUseCase
 import com.ironhabit.app.domain.usecase.CoachAnswer
 import com.ironhabit.app.domain.usecase.CoachInsightResult
+import com.ironhabit.app.domain.usecase.BuildWeeklyReviewUseCase
 import com.ironhabit.app.domain.usecase.CoachInsightUseCase
+import com.ironhabit.app.domain.usecase.ExportWeekPackageUseCase
 import com.ironhabit.app.domain.usecase.ExplainDietUseCase
 import com.ironhabit.app.domain.usecase.GenerateDietPlanUseCase
 import com.ironhabit.app.domain.usecase.GeneratedDietSummary
@@ -59,6 +61,8 @@ class AiCoachViewModelDietTest {
     private val askCoach = mockk<AskCoachUseCase>(relaxed = true)
     private val generateDietPlan = mockk<GenerateDietPlanUseCase>()
     private val explainDiet = mockk<ExplainDietUseCase>()
+    private val buildWeeklyReview = mockk<BuildWeeklyReviewUseCase>(relaxed = true)
+    private val exportWeekPackage = mockk<ExportWeekPackageUseCase>(relaxed = true)
     private val coachInsight = mockk<CoachInsightUseCase>(relaxed = true)
 
     private val utc = TimeZone.UTC
@@ -89,6 +93,8 @@ class AiCoachViewModelDietTest {
             generateDietPlan = generateDietPlan,
             explainDiet = explainDiet,
             coachInsight = coachInsight,
+            buildWeeklyReview = buildWeeklyReview,
+            exportWeekPackage = exportWeekPackage,
             clock = clock,
             timeZone = utc,
         )

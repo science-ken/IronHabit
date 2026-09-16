@@ -342,6 +342,35 @@ class BuildWeeklyReviewUseCaseTest {
     }
 
     @Test
+    fun singleWeightInWeek_hasNoDelta_insteadOfZero() = runTest {
+        // 真机上发现的坑：一周只称了一次 → 旧实现算出 0，界面上显示"体重变化 0"，
+        // 会被读成"体重没变"。一次称重根本算不出"变化" → 必须是 null（界面显示 "—"）。
+        stub(weights = listOf(weightMetric(epochDay = day(1), value = 74.6f)))
+
+        val review = useCase()()
+
+        assertEquals(74.6f, review.body.startWeightKg!!, 0.0001f)
+        assertEquals(1, review.body.sampleCount)
+        assertNull("只有一条记录 → 不许给 0", review.body.deltaKg)
+    }
+
+    @Test
+    fun twoEqualWeightsInWeek_reportZeroDelta() = runTest {
+        // 真的有两条、且数值相同 → 这时 0 是**真结论**（不是编的），必须照实给 0。
+        stub(
+            weights = listOf(
+                weightMetric(epochDay = day(0), value = 74.6f),
+                weightMetric(epochDay = day(3), value = 74.6f),
+            ),
+        )
+
+        val review = useCase()()
+
+        assertEquals(2, review.body.sampleCount)
+        assertEquals(0f, review.body.deltaKg!!, 0.0001f)
+    }
+
+    @Test
     fun weightOutsideWeek_isIgnored() = runTest {
         stub(
             weights = listOf(
@@ -430,8 +459,7 @@ class BuildWeeklyReviewUseCaseTest {
     }
 
     @Test
-    fun sameInputYieldsSameOutput() = runTest {
-        stub(
+    fun sameInputYieldsSameOutput() = runTest {        stub(
             checkIns = listOf(
                 checkIn(exerciseId = 1L, epochDay = day(-7), weightKg = 40f, rpe = 6),
                 checkIn(exerciseId = 1L, epochDay = day(0), weightKg = 42.5f, rpe = 6),

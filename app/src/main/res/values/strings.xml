@@ -486,6 +486,42 @@
     <string name="basis_overload">检测到你上次 %1$d 个动作做满且强度有余量，已自动小幅加重</string>
     <string name="basis_history_none">暂无打卡记录，先用基础目标值，练几次后会自动进阶</string>
 
+    <!-- ===== 周复盘 + 数据包（P2）===== -->
+    <string name="ai_review_title">本周复盘</string>
+    <string name="ai_review_subtitle">这一周实际练了什么，全部本地算出来（不联网、不花 token）</string>
+    <string name="ai_review_loading">正在整理这一周的数据…</string>
+    <string name="ai_review_stat_days">出勤天数</string>
+    <string name="ai_review_stat_volume">周总容量 kg</string>
+    <string name="ai_review_stat_rpe">平均 RPE</string>
+    <string name="ai_review_stat_weight">体重变化</string>
+    <string name="ai_review_stat_diet">日均摄入 kcal</string>
+    <string name="ai_review_value_missing">—</string>
+    <string name="ai_review_progressed">进步：%1$s</string>
+    <string name="ai_review_stalled">停滞：%1$s</string>
+    <string name="ai_review_stalled_item">%1$s（%2$d 周没涨）</string>
+    <string name="ai_review_trend_none">本周还看不出进步或停滞（记录还不够）</string>
+    <string name="ai_review_note_no_checkin">本周还没有打卡记录</string>
+    <string name="ai_review_note_no_rpe">有打卡但都没评 RPE，判断不了用力程度</string>
+    <string name="ai_review_note_no_weight">本周没有体重记录</string>
+    <string name="ai_review_note_no_diet">本周没有饮食记录</string>
+    <string name="ai_review_note_in_progress">这一周还没过完，数字还会变</string>
+    <string name="ai_review_nav_prev">‹ 上一周</string>
+    <string name="ai_review_nav_next">下一周 ›</string>
+    <string name="ai_review_week_this">本周</string>
+    <string name="ai_review_week_prev">上一周</string>
+    <string name="ai_review_week_offset">%1$d 周前</string>
+    <string name="ai_review_week_range">%1$s ~ %2$s</string>
+    <string name="ai_review_export">导出数据包</string>
+    <string name="ai_review_export_hint">数据包就是这段 JSON：可以复制给任何 AI 看；App 直连 DeepSeek 时用的也是同一份数据</string>
+    <string name="ai_package_title">AI 会看到什么</string>
+    <string name="ai_package_detail_on">明细 + 汇总</string>
+    <string name="ai_package_detail_off">只传汇总（省 token）</string>
+    <string name="ai_package_copy">复制 JSON</string>
+    <string name="ai_package_copied">已复制到剪贴板</string>
+    <string name="ai_package_close">关闭</string>
+    <string name="ai_package_building">正在整理数据包…</string>
+    <string name="ai_package_empty">还没有生成数据包</string>
+
     <!-- ===== 饮食模块（v3 增量 · meals）===== -->
     <!-- 今日页区块 -->
     <string name="title_today_meals">今日饮食</string>

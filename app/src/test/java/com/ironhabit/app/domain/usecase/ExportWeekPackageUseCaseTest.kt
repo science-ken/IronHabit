@@ -110,7 +110,7 @@ class ExportWeekPackageUseCaseTest {
                 ),
             ),
         ),
-        body = BodyReview(startWeightKg = 74.6f, latestWeightKg = 74.2f),
+        body = BodyReview(startWeightKg = 74.6f, latestWeightKg = 74.2f, sampleCount = 2),
         diet = DietReview(loggedDays = 2, avgKcal = 1150, avgProteinG = 55),
         days = (0..6).map { offset ->
             if (offset == 1) {

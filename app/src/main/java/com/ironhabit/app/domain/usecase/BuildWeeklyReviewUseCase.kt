@@ -218,6 +218,8 @@ class BuildWeeklyReviewUseCase @Inject constructor(
         return BodyReview(
             startWeightKg = weights.firstOrNull(),
             latestWeightKg = weights.lastOrNull(),
+            // 记录条数要带上：只有一条时"变化"算不出来（见 BodyReview.deltaKg）。
+            sampleCount = weights.size,
         )
     }
 
@@ -294,22 +296,31 @@ class BuildWeeklyReviewUseCase @Inject constructor(
         if (weekEndEpochDay > today) add(ReviewNote.WEEK_IN_PROGRESS)
     }
 
-    private companion object {
-        const val DAYS_IN_WEEK: Long = 7
+    /**
+     * 周界工具（公开 [weekStartOf]：界面层要算"上一周 / 下一周"，必须用**同一套取整规则**，
+     * 不允许在两处各写一遍 —— 两处不一致就会出现"点了上一周但数字没变"这种诡异 bug）。
+     */
+    companion object {
+        private const val DAYS_IN_WEEK: Long = 7
 
         /** 趋势窗口里"本周之前"还有几个周桶。 */
-        const val TREND_PREVIOUS_WEEKS: Int = 3
+        private const val TREND_PREVIOUS_WEEKS: Int = 3
 
         /** 本周所在的桶下标。 */
-        const val CURRENT_BUCKET: Int = TREND_PREVIOUS_WEEKS
+        private const val CURRENT_BUCKET: Int = TREND_PREVIOUS_WEEKS
 
         /** 上周所在的桶下标。 */
-        const val PREVIOUS_BUCKET: Int = TREND_PREVIOUS_WEEKS - 1
+        private const val PREVIOUS_BUCKET: Int = TREND_PREVIOUS_WEEKS - 1
 
         /** epochDay `0`（1970-01-01，周四）距其所在周的周一（`-3`）的偏移。 */
-        const val MONDAY_ALIGN_OFFSET: Long = 3
+        private const val MONDAY_ALIGN_OFFSET: Long = 3
 
-        /** 取某个 epochDay 所在周的周一。 */
+        /**
+         * 取某个 epochDay 所在周的周一。
+         *
+         * `weekStart = epochDay − (((epochDay + 3) % 7 + 7) % 7)` —— 负数 epochDay 也正确
+         * （`%` 在 Kotlin 里对负数取余仍是负数，所以外面再补一次 `+7 %7`）。
+         */
         fun weekStartOf(epochDay: Long): Long =
             epochDay - (((epochDay + MONDAY_ALIGN_OFFSET) % DAYS_IN_WEEK + DAYS_IN_WEEK) % DAYS_IN_WEEK)
     }

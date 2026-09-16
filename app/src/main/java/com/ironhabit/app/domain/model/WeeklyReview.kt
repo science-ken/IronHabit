@@ -73,18 +73,31 @@ data class ExerciseTrend(
  *
  * @property startWeightKg 本周最早的体重记录（没有 = `null`）
  * @property latestWeightKg 本周最新的体重记录（没有 = `null`）
+ * @property sampleCount 本周一共有几条体重记录
  */
 data class BodyReview(
     val startWeightKg: Float?,
     val latestWeightKg: Float?,
+    val sampleCount: Int = 0,
 ) {
-    /** 本周体重变化；任一端缺失 = `null`（**不要**用 0 冒充"没变"）。 */
+    /**
+     * 本周体重变化。
+     *
+     * ⚠️ **只有一条记录时返回 `null`，不是 `0f`** —— 一次称重算不出"变化"，
+     * 显示成 `0` 会被读成"体重没变"，那是编出来的结论（真机上就是这么发现的）。
+     * 任一端缺失同样返回 `null`。
+     */
     val deltaKg: Float?
-        get() = if (startWeightKg == null || latestWeightKg == null) {
+        get() = if (sampleCount < MIN_SAMPLES_FOR_DELTA || startWeightKg == null || latestWeightKg == null) {
             null
         } else {
             latestWeightKg - startWeightKg
         }
+
+    private companion object {
+        /** 算"变化"至少要有两条记录。 */
+        const val MIN_SAMPLES_FOR_DELTA: Int = 2
+    }
 }
 
 /**
