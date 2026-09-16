@@ -4,8 +4,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -81,6 +84,12 @@ fun MealEditSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                // ⚠️ 真机验证发现（1080x1920）：本弹层字段比「补录详情」多（餐次 chips + 三行条目 +
+                // 两个数字 + 错误提示 + 按钮），内容高度超过弹层可用高度时会被**裁掉**——
+                // 「保存 / 取消」直接够不到（uiautomator 层级里压根没有这两个节点）。
+                // 故这里必须可滚动，并加 imePadding 让键盘弹出时按钮仍能滚出来。
+                .verticalScroll(rememberScrollState())
+                .imePadding()
                 .padding(horizontal = 20.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
