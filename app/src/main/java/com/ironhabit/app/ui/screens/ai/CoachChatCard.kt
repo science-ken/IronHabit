@@ -23,7 +23,7 @@ import com.ironhabit.app.R
  * 「问教练」区块（子项 A）—— 输入框 + 发送按钮 + 最近几轮问答气泡。
  *
  * **诚实三态**（硬要求）：
- * - 未联网（[canAsk] == false）→ 显示既有的诚实禁用说明 `ai_freechat_disabled`（**保留原文案**），
+ * - 未联网（[canAsk] == false）→ 显示 `ai_chat_needs_network`（**告诉用户去哪儿开启联网**），
  *   不展示输入框，**绝不本地编造回答**；
  * - 在线 → 输入框可用；
  * - [isAsking] → 按钮禁用 + 进行中提示。
@@ -60,9 +60,11 @@ fun CoachChatCard(
             )
 
             if (!canAsk) {
-                // 离线 / 未配 Key：保持诚实的禁用说明（原文案），不渲染输入框。
+                // 离线 / 未配 Key：说清"去哪儿开启联网"，同时保持诚实（不渲染输入框、绝不本地编造回答）。
+                // 这里刻意**不重复**「教练解读」区块的 `ai_freechat_disabled`：同一句话在同一页出现两次很吵，
+                // 而且那句只说"暂不提供"，用户不知道该怎么办。
                 Text(
-                    text = stringResource(R.string.ai_freechat_disabled),
+                    text = stringResource(R.string.ai_chat_needs_network),
                     style = MaterialTheme.typography.bodySmall,
                 )
                 return@Column
