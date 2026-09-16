@@ -1,6 +1,7 @@
 package com.ironhabit.app.domain.diet
 
 import com.ironhabit.app.data.preset.BuiltInMealTemplates
+import com.ironhabit.app.domain.model.DietRestriction
 import com.ironhabit.app.domain.model.DietTarget
 import com.ironhabit.app.domain.model.Gender
 import com.ironhabit.app.domain.model.Goal
@@ -244,5 +245,203 @@ class DietPlanGeneratorTest {
                 assertTrue("blank item in $type", item.isNotBlank())
             }
         }
+    }
+
+    // ------------------------------------------------------------------
+    // ④ 忌口过滤（dietaryAvoid）+ ⑤ 按比例缩放宏量
+    // ------------------------------------------------------------------
+
+    /** 取某日某餐的「原样」条目（不过滤），作为过滤前的对照。 */
+    private fun originalItems(epochDay: Long, type: MealType): List<String> =
+        DietPlanGenerator.buildDraft(epochDay, type, target1670, 0L, emptySet()).meal.items
+
+    @Test
+    fun dietaryAvoid_emptySet_isByteIdenticalToUnfiltered() {
+        // 验收 6：空忌口时，buildMeal（旧签名）与 buildDraft(emptySet) 必须逐字一致，且 filteredCount=0。
+        for (day in listOf(0L, 7L, 100L, 20_000L, 20_001L, 20_002L, 20_003L, 31_234L)) {
+            for (type in MealType.entries) {
+                val viaBuildMeal = DietPlanGenerator.buildMeal(day, type, target1670, 0L)
+                val draft = DietPlanGenerator.buildDraft(day, type, target1670, 0L, emptySet())
+                assertEquals(viaBuildMeal, draft.meal)
+                assertEquals(0, draft.filteredCount)
+            }
+        }
+    }
+
+    @Test
+    fun dietaryAvoid_dairy_dropsDairyItemAndScalesMacros() {
+        // BREAKFAST，epochDay=20000 → 模板下标 0 = [燕麦+牛奶(GLUTEN,DAIRY), 水煮蛋, 蓝莓]，原 3 条。
+        // 过滤 {DAIRY} → 剩 2 条 → factor = 2/3。
+        // kcal   = round(1670 × 0.25 × 2/3) = round(278.333…) = 278
+        // 蛋白   = 126 × 0.25 × 2/3          = 21.0
+        val before = originalItems(20_000L, MealType.BREAKFAST)
+        val draft = DietPlanGenerator.buildDraft(
+            20_000L, MealType.BREAKFAST, target1670, 0L, setOf(DietRestriction.DAIRY),
+        )
+        assertEquals(3, before.size)
+        assertEquals(listOf("水煮蛋 2 个", "蓝莓 80g"), draft.meal.items)
+        assertEquals(278, draft.meal.kcal)
+        assertEquals(21.0, draft.meal.proteinG, 1e-9)
+        assertEquals(1, draft.filteredCount)
+    }
+
+    @Test
+    fun dietaryAvoid_gluten_dropsGlutenItem() {
+        // LUNCH，epochDay=20001 → 下标 2 = [全麦意面(GLUTEN), 瘦牛肉, 混合蔬菜]。
+        val draft = DietPlanGenerator.buildDraft(
+            20_001L, MealType.LUNCH, target1670, 0L, setOf(DietRestriction.GLUTEN),
+        )
+        assertEquals(listOf("瘦牛肉 120g", "混合蔬菜 200g"), draft.meal.items)
+        // round(1670 × 0.335 × 2/3) = round(372.966…) = 373
+        assertEquals(373, draft.meal.kcal)
+        assertEquals(126 * 0.335 * 2.0 / 3.0, draft.meal.proteinG, 1e-9)
+        assertEquals(1, draft.filteredCount)
+    }
+
+    @Test
+    fun dietaryAvoid_seafood_dropsSeafoodItem() {
+        // LUNCH，epochDay=20000 → 下标 1 = [藜麦, 清蒸鱼(SEAFOOD), 凉拌菠菜]。
+        val draft = DietPlanGenerator.buildDraft(
+            20_000L, MealType.LUNCH, target1670, 0L, setOf(DietRestriction.SEAFOOD),
+        )
+        assertEquals(listOf("藜麦 120g", "凉拌菠菜 200g"), draft.meal.items)
+        assertEquals(1, draft.filteredCount)
+
+        // DINNER，epochDay=20001 → 下标 0 = [三文鱼(SEAFOOD), 杂粮饭, 菠菜沙拉]。
+        val dinner = DietPlanGenerator.buildDraft(
+            20_001L, MealType.DINNER, target1670, 0L, setOf(DietRestriction.SEAFOOD),
+        )
+        assertEquals(listOf("杂粮饭 100g", "菠菜沙拉 200g"), dinner.meal.items)
+        // round(1670 × 0.29 × 2/3) = round(322.866…) = 323
+        assertEquals(323, dinner.meal.kcal)
+    }
+
+    @Test
+    fun dietaryAvoid_peanut_dropsNutItem() {
+        // SNACK，epochDay=20002 → 下标 0 = [酸奶(DAIRY), 杏仁(PEANUT)]，原 2 条。
+        // 过滤 {PEANUT} → 剩 1 条 → factor = 1/2。
+        val draft = DietPlanGenerator.buildDraft(
+            20_002L, MealType.SNACK, target1670, 0L, setOf(DietRestriction.PEANUT),
+        )
+        assertEquals(listOf("无糖希腊酸奶 150g"), draft.meal.items)
+        // round(1670 × 0.125 × 1/2) = round(104.375) = 104
+        assertEquals(104, draft.meal.kcal)
+        assertEquals(126 * 0.125 * 0.5, draft.meal.proteinG, 1e-9)
+        assertEquals(1, draft.filteredCount)
+    }
+
+    @Test
+    fun dietaryAvoid_spicyAndAlcohol_areNoOpWhenLibraryHasNoSuchItems() {
+        // 诚实登记的边界：内置库无「辛辣 / 酒精」条目 → 这两个忌口**不过滤任何条目、不缩放**（不误伤）。
+        for (restriction in listOf(DietRestriction.SPICY, DietRestriction.ALCOHOL)) {
+            val draft = DietPlanGenerator.buildDraft(
+                20_000L, MealType.BREAKFAST, target1670, 0L, setOf(restriction),
+            )
+            assertEquals(originalItems(20_000L, MealType.BREAKFAST), draft.meal.items)
+            assertEquals(418, draft.meal.kcal) // 与不过滤完全一致
+            assertEquals(0, draft.filteredCount)
+        }
+    }
+
+    @Test
+    fun dietaryAvoid_removesOnlyMatchingItems_keepsTheRest() {
+        // 每种「有对应条目」的忌口，都只删它自己的条目、保留其余（其它条目原样在）。
+        val cases = listOf(
+            Triple(20_000L, MealType.BREAKFAST, DietRestriction.DAIRY),
+            Triple(20_001L, MealType.LUNCH, DietRestriction.GLUTEN),
+            Triple(20_000L, MealType.LUNCH, DietRestriction.SEAFOOD),
+            Triple(20_002L, MealType.SNACK, DietRestriction.PEANUT),
+            Triple(20_001L, MealType.DINNER, DietRestriction.SEAFOOD),
+        )
+        for ((day, type, restriction) in cases) {
+            val before = originalItems(day, type)
+            val after = DietPlanGenerator.buildDraft(day, type, target1670, 0L, setOf(restriction)).meal.items
+            assertTrue("$type should lose at least one item on $restriction", after.size < before.size)
+            // 保留项 ⊆ 原项，且顺序保持（子序列）。
+            assertTrue("$type kept items must be a subsequence of the original", isSubsequence(after, before))
+        }
+    }
+
+    @Test
+    fun dietaryAvoid_whenPrimaryTemplateEmptied_fallsBackToNextRotationTemplate() {
+        // SNACK，epochDay=20002 → 下标 0 = [酸奶(DAIRY), 杏仁(PEANUT)]。
+        // 过滤 {DAIRY, PEANUT} → 本份全空 → 兜底到下标 1 = [苹果, 花生酱(PEANUT)] → 只剩苹果。
+        val draft = DietPlanGenerator.buildDraft(
+            20_002L, MealType.SNACK, target1670, 0L,
+            setOf(DietRestriction.DAIRY, DietRestriction.PEANUT),
+        )
+        assertEquals(listOf("苹果 1 个"), draft.meal.items)
+        // factor = 保留 1 / 兜底模板原 2 = 1/2 → round(1670 × 0.125 × 1/2) = 104
+        assertEquals(104, draft.meal.kcal)
+        assertEquals(126 * 0.125 * 0.5, draft.meal.proteinG, 1e-9)
+        // filteredCount 口径 = 本应使用那份额外被丢掉的条目数（酸奶 + 杏仁 = 2）。
+        assertEquals(2, draft.filteredCount)
+    }
+
+    @Test
+    fun dietaryAvoid_allTemplatesFilteredOut_keepsEmptyMealWithoutCrash() {
+        // 注入一份「全部条目都被忌口命中」的模板库，覆盖「整餐过滤空」路径。
+        val allTagged: List<List<BuiltInMealTemplates.TaggedItem>> = listOf(
+            listOf(BuiltInMealTemplates.TaggedItem("甲", setOf(DietRestriction.DAIRY))),
+            listOf(BuiltInMealTemplates.TaggedItem("乙", setOf(DietRestriction.DAIRY))),
+        )
+        val draft = DietPlanGenerator.buildDraft(
+            0L, MealType.BREAKFAST, target1670, 0L, setOf(DietRestriction.DAIRY), allTagged,
+        )
+        assertTrue("整餐被过滤空时应保留空条目（不删餐次）", draft.meal.items.isEmpty())
+        assertEquals(0, draft.meal.kcal)
+        assertEquals(0.0, draft.meal.proteinG, 1e-9)
+        assertEquals(1, draft.filteredCount)
+        // 不产生 NaN / 负值。
+        assertFalse(draft.meal.kcal < 0)
+        assertFalse(draft.meal.proteinG.isNaN())
+        assertFalse(draft.meal.proteinG < 0.0)
+    }
+
+    @Test
+    fun dietaryAvoid_filteredResult_isStillIdempotent() {
+        val avoid = setOf(DietRestriction.SEAFOOD, DietRestriction.PEANUT)
+        for (type in MealType.entries) {
+            val a = DietPlanGenerator.buildDraft(31_234L, type, target1670, 5L, avoid)
+            val b = DietPlanGenerator.buildDraft(31_234L, type, target1670, 5L, avoid)
+            assertEquals(a, b)
+        }
+    }
+
+    @Test
+    fun dietaryAvoid_neverProducesNaNAcrossEveryRestrictionSubset() {
+        // 覆盖各种忌口组合，确保不产出 NaN / 负值 / 越界。
+        val all = DietRestriction.entries
+        val subsets = listOf(
+            emptySet(),
+            setOf(DietRestriction.PEANUT),
+            setOf(DietRestriction.SEAFOOD),
+            setOf(DietRestriction.DAIRY),
+            setOf(DietRestriction.GLUTEN),
+            setOf(DietRestriction.SPICY),
+            setOf(DietRestriction.ALCOHOL),
+            all.toSet(),
+            setOf(DietRestriction.DAIRY, DietRestriction.PEANUT),
+            setOf(DietRestriction.SEAFOOD, DietRestriction.GLUTEN),
+        )
+        for (avoid in subsets) {
+            for (day in listOf(0L, 1L, 2L, 3L, 20_000L, 20_001L, 20_002L, 20_003L)) {
+                for (type in MealType.entries) {
+                    val meal = DietPlanGenerator.buildDraft(day, type, target1670, 0L, avoid).meal
+                    assertFalse("protein NaN in $avoid/$type", meal.proteinG.isNaN())
+                    assertTrue("negative kcal in $avoid/$type", meal.kcal >= 0)
+                    assertTrue("negative protein in $avoid/$type", meal.proteinG >= 0.0)
+                }
+            }
+        }
+    }
+
+    /** `sub` 是否为 `full` 的子序列（保序）。 */
+    private fun isSubsequence(sub: List<String>, full: List<String>): Boolean {
+        var index = 0
+        for (value in full) {
+            if (index < sub.size && sub[index] == value) index++
+        }
+        return index == sub.size
     }
 }

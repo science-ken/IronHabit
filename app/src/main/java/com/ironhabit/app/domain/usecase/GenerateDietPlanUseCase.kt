@@ -3,6 +3,7 @@ package com.ironhabit.app.domain.usecase
 import com.ironhabit.app.di.IoDispatcher
 import com.ironhabit.app.domain.diet.DietPlanGenerator
 import com.ironhabit.app.domain.model.BodyMetricType
+import com.ironhabit.app.domain.model.DietRestriction
 import com.ironhabit.app.domain.model.DietTarget
 import com.ironhabit.app.domain.model.MealType
 import com.ironhabit.app.domain.repository.BodyMetricRepository
@@ -23,11 +24,15 @@ import kotlinx.datetime.TimeZone
  * @property writtenCount 本次实际写入的餐数
  * @property preservedCount 被完整保留的**用户手改行**餐数（含软删行），对应「不会被覆盖」提示
  * @property target 本次使用的目标（供 UI 展示"已摄入 / 目标"）
+ * @property filteredCount 本次因**忌口**丢弃的食物条目总数（供 UI 诚实提示，见 `msg_diet_filtered`）
+ * @property appliedRestrictions 本次生效的忌口集合（`filteredCount == 0` 时 UI 不提示）
  */
 data class GeneratedDietSummary(
     val writtenCount: Int = 0,
     val preservedCount: Int = 0,
     val target: DietTarget = DietTarget(),
+    val filteredCount: Int = 0,
+    val appliedRestrictions: Set<DietRestriction> = emptySet(),
 )
 
 /**
@@ -76,16 +81,21 @@ class GenerateDietPlanUseCase @Inject constructor(
             .toSet()
 
         val nowMillis: Long = clock.now().toEpochMilliseconds()
-        val drafts = MealType.entries
+        // 忌口过滤在纯函数内完成（§7.5.2 `dietaryAvoid`）：丢弃 tags ∩ 忌口 ≠ ∅ 的条目，
+        // 并按存活条目比例近似缩放宏量。空忌口 → 与过滤前逐字一致。
+        val drafts: List<DietPlanGenerator.MealDraft> = MealType.entries
             .filter { type -> type !in blockedTypes }
-            .map { type -> DietPlanGenerator.buildMeal(epochDay, type, target, nowMillis) }
+            .map { type -> DietPlanGenerator.buildDraft(epochDay, type, target, nowMillis, profile.dietaryAvoid) }
 
-        val written: Int = mealRepository.upsertGenerated(drafts)
+        val written: Int = mealRepository.upsertGenerated(drafts.map { draft -> draft.meal })
+        val filteredCount: Int = drafts.sumOf { draft -> draft.filteredCount }
 
-        GeneratedDietSummary(
+        return@withContext GeneratedDietSummary(
             writtenCount = written,
             preservedCount = blockedTypes.size,
             target = target,
+            filteredCount = filteredCount,
+            appliedRestrictions = profile.dietaryAvoid,
         )
     }
 }

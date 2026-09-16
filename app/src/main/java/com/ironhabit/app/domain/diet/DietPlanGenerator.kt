@@ -1,6 +1,7 @@
 package com.ironhabit.app.domain.diet
 
 import com.ironhabit.app.data.preset.BuiltInMealTemplates
+import com.ironhabit.app.domain.model.DietRestriction
 import com.ironhabit.app.domain.model.DietTarget
 import com.ironhabit.app.domain.model.Gender
 import com.ironhabit.app.domain.model.Goal
@@ -18,7 +19,9 @@ import kotlin.math.roundToInt
  * ① BMR（Mifflin-St Jeor）：男 `10·kg + 6.25·cm − 5·age + 5`，女 `… − 161`
  *   （与预览「BMR≈1720 kcal / 78kg」吻合）；② TDEE = BMR × 活动系数（训练日 1.55 / 休息日 1.375）；
  * ③ 目标热量 = TDEE × [Goal.kcalFactor]；④ 目标蛋白 = kg × 1.6（预览 78×1.6 ≈ 125g）；
- * ⑤ 按餐次比例拆分（由预览 4 餐精确反解：0.25 / 0.335 / 0.125 / 0.29，合计 1.0）。
+ * ⑤ 按餐次比例拆分（由预览 4 餐精确反解：0.25 / 0.335 / 0.125 / 0.29，合计 1.0）；
+ * ⑥ 按用户忌口（`UserProfile.dietaryAvoid`）过滤食物条目，并**按存活条目比例近似缩放**宏量
+ *   （`tags ∩ 忌口 ≠ ∅` 的条目丢弃；见 [buildDraft]）。忌口为空集时**结果与本功能引入前逐字一致**。
  *
  * ## 降级（§7.5.3：默认值补全 + 出口钳制 + 显式提示，三重保险）
  * 任何输入下都产出 `[1200, 4000]` 内的有限热量 / `[50, 300]` 内的蛋白，**绝不为负 / NaN / 极低，绝不抛异常**。
@@ -131,44 +134,119 @@ object DietPlanGenerator {
     }
 
     // ------------------------------------------------------------------
-    // 纯函数 ②：单餐草案
+    // 纯函数 ②：单餐草案（含忌口过滤 + 按比例缩放）
     // ------------------------------------------------------------------
+
+    /**
+     * 一餐草案 + 过滤计数。
+     *
+     * @property meal 该餐（条目已按忌口过滤、宏量已按比例缩放；`id = 0` 未落库）
+     * @property filteredCount 该餐因忌口被**丢弃的条目数**（相对「本应使用的那份轮换模板」）
+     */
+    data class MealDraft(
+        val meal: Meal,
+        val filteredCount: Int,
+    )
 
     /**
      * 由目标 + 餐次比例 + 内置模板，构造一餐草案（**确定性、可复现**）。
      *
-     * 热量 = `targetKcal × ratio` 四舍五入；蛋白 = `targetProtein × ratio`（不四舍五入，保留精度）；
-     * 条目 = 内置模板里 `((epochDay + mealType.ordinal) % templates.size)` 那一套。
+     * 等价于 [buildDraft] 的便捷重载（丢弃过滤计数）；保留本签名以兼容既有调用方与单测。
      *
-     * @param epochDay 日期口径（驱动模板轮换）
-     * @param mealType 餐次
-     * @param target 当日目标
-     * @param createdAt 创建时间戳（UTC 毫秒；由调用方注入以保持纯函数无时钟依赖）
-     * @return 尚未落库的 [Meal]（`id = 0`，`isActive = true`，`isUserEdited = false`，`isCompleted = false`）
+     * @param dietaryAvoid 用户忌口（空集 = 不过滤，结果与本功能引入前**逐字一致**）
      */
     fun buildMeal(
         epochDay: Long,
         mealType: MealType,
         target: DietTarget,
         createdAt: Long,
-    ): Meal {
-        val ratio: Double = ratioOf(mealType)
-        val templates: List<List<String>> = BuiltInMealTemplates.forType(mealType)
+        dietaryAvoid: Set<DietRestriction> = emptySet(),
+    ): Meal = buildDraft(epochDay, mealType, target, createdAt, dietaryAvoid).meal
+
+    /**
+     * 构造一餐草案 + 过滤计数（**确定性、可复现、零 Android**）。
+     *
+     * ## 忌口过滤（§7.5.2 `dietaryAvoid`）
+     * 丢弃所有 `tags ∩ dietaryAvoid ≠ ∅` 的条目。
+     *
+     * ## 宏量口径（**近似，诚实登记**）
+     * 热量 / 蛋白按 **(保留条目数 / 原条目数)** **等比缩放并四舍五入**
+     * （`原条目数` = 最终采用的那份模板过滤前的条目数）。
+     * 理由：条目本身**不带各自的 kcal/蛋白**（见设计文档 §2.2①），无法精确扣减，
+     * 故用「条目存活比例」近似 —— 目的是**不把没吃到的食物算进当日总量**。
+     * 这是近似值，非营养学精算。
+     *
+     * ## 兜底（某餐被过滤空时，按顺序尝试）
+     * 1. 先取本应使用的那份轮换模板并过滤；**非空**即采用；
+     * 2. 为空 → 按**轮换顺序**取同餐次的下 N 份模板（仍过滤），采用**第一份过滤后非空**的；
+     * 3. 全部为空 → **保留空条目**（**不删餐次、不崩**），宏量归 0。
+     *
+     * 任何输入下都不产生 NaN / 负值（`factor` 有 0 分母保护）。
+     *
+     * @param epochDay 日期口径（驱动模板轮换）
+     * @param mealType 餐次
+     * @param target 当日目标
+     * @param createdAt 创建时间戳（UTC 毫秒；由调用方注入以保持纯函数无时钟依赖）
+     * @param dietaryAvoid 用户忌口（空集 = 不过滤）
+     * @param templates 模板库（默认取内置库；单测可注入以覆盖「整餐过滤空」路径）
+     */
+    fun buildDraft(
+        epochDay: Long,
+        mealType: MealType,
+        target: DietTarget,
+        createdAt: Long,
+        dietaryAvoid: Set<DietRestriction>,
+        templates: List<List<BuiltInMealTemplates.TaggedItem>> = BuiltInMealTemplates.forType(mealType),
+    ): MealDraft {
+        val size: Int = templates.size
         // Math.floorMod 正确处理负的 epochDay（1970 前），保证下标恒落 [0, size)。
-        val index: Int = Math.floorMod(epochDay + mealType.ordinal, templates.size)
-        return Meal(
-            dateEpochDay = epochDay,
-            mealType = mealType,
-            items = templates[index],
-            kcal = (target.targetKcal * ratio).roundToInt(),
-            proteinG = target.targetProtein * ratio,
-            isCompleted = false,
-            sortOrder = mealType.ordinal,
-            isActive = true,
-            isUserEdited = false,
-            createdAt = createdAt,
+        val startIndex: Int = Math.floorMod(epochDay + mealType.ordinal, size)
+        val primary: List<BuiltInMealTemplates.TaggedItem> = templates[startIndex]
+        val primaryKept: List<BuiltInMealTemplates.TaggedItem> = primary.filter { survives(it, dietaryAvoid) }
+        val filteredCount: Int = primary.size - primaryKept.size
+
+        // 兜底：本份过滤空时，按轮换顺序找第一份「过滤后仍非空」的模板。
+        var chosenOriginal: List<BuiltInMealTemplates.TaggedItem> = primary
+        var chosenKept: List<BuiltInMealTemplates.TaggedItem> = primaryKept
+        if (primaryKept.isEmpty()) {
+            for (offset in 1 until size) {
+                val candidate: List<BuiltInMealTemplates.TaggedItem> = templates[(startIndex + offset) % size]
+                val kept: List<BuiltInMealTemplates.TaggedItem> = candidate.filter { survives(it, dietaryAvoid) }
+                if (kept.isNotEmpty()) {
+                    chosenOriginal = candidate
+                    chosenKept = kept
+                    break
+                }
+            }
+            // 全空 → 保留空条目（不删餐次、不崩）。
+        }
+
+        val factor: Double =
+            if (chosenOriginal.isEmpty()) 0.0 else chosenKept.size.toDouble() / chosenOriginal.size
+        val ratio: Double = ratioOf(mealType)
+
+        return MealDraft(
+            meal = Meal(
+                dateEpochDay = epochDay,
+                mealType = mealType,
+                items = chosenKept.map { item -> item.text },
+                kcal = (target.targetKcal * ratio * factor).roundToInt(),
+                proteinG = target.targetProtein * ratio * factor,
+                isCompleted = false,
+                sortOrder = mealType.ordinal,
+                isActive = true,
+                isUserEdited = false,
+                createdAt = createdAt,
+            ),
+            filteredCount = filteredCount,
         )
     }
+
+    /** 条目是否在忌口下「存活」：其标签与忌口无交集即为存活（空忌口 → 全存活）。 */
+    private fun survives(
+        item: BuiltInMealTemplates.TaggedItem,
+        dietaryAvoid: Set<DietRestriction>,
+    ): Boolean = item.tags.none { tag -> tag in dietaryAvoid }
 
     /** 餐次比例（未知餐次回落 `0.0`，防御性；当前 4 餐全部有值）。 */
     fun ratioOf(mealType: MealType): Double = MEAL_RATIOS[mealType] ?: 0.0

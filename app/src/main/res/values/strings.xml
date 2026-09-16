@@ -449,6 +449,8 @@
     <string name="action_generate_diet">生成饮食计划</string>
     <string name="action_regenerate_diet">重新生成</string>
     <string name="msg_diet_generated">饮食计划已生成</string>
+    <!-- 忌口过滤的诚实提示（本地规则不许伪装成 AI 行为） -->
+    <string name="msg_diet_filtered">已按你的忌口过滤掉 %1$d 项食物</string>
     <!-- 餐次名（必须资源化，禁止硬编码中文；顺序 = MealType ordinal：早餐/午餐/加餐/晚餐） -->
     <string name="meal_breakfast">早餐</string>
     <string name="meal_lunch">午餐</string>

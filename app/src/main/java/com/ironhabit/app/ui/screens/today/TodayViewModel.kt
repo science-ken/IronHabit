@@ -232,20 +232,35 @@ class TodayViewModel @Inject constructor(
     /**
      * 生成 / 重新生成饮食计划（对应预览 `doDiet()`）。
      *
-     * 生成后若用了默认值（档案未填全 / 无体重），给出**非阻断**提示（不改变生成结果）；
-     * 否则提示「已生成」。两者都走既有 Snackbar 通道，不新造机制。
+     * 提示优先级（都走既有 Snackbar 通道，不新造机制；**均为非阻断、不改变生成结果**）：
+     * ① 因忌口过滤掉条目（更具体、更诚实）→ `msg_diet_filtered(N)`；
+     * ② 用了默认值（档案未填全 / 无体重）→ `profile_incomplete_hint`；
+     * ③ 其它 → `msg_diet_generated`。
      */
     fun onGenerateDiet() {
         viewModelScope.launch {
             try {
                 val summary = generateDietPlan(currentEpochDay())
-                val hintRes: Int = if (summary.target.usedDefaults) {
-                    R.string.profile_incomplete_hint
-                } else {
-                    R.string.msg_diet_generated
+                val hintRes: Int
+                val hintArgs: List<String>
+                when {
+                    summary.filteredCount > 0 -> {
+                        hintRes = R.string.msg_diet_filtered
+                        hintArgs = listOf(summary.filteredCount.toString())
+                    }
+
+                    summary.target.usedDefaults -> {
+                        hintRes = R.string.profile_incomplete_hint
+                        hintArgs = emptyList()
+                    }
+
+                    else -> {
+                        hintRes = R.string.msg_diet_generated
+                        hintArgs = emptyList()
+                    }
                 }
                 _uiState.update { state ->
-                    state.copy(snackbarRes = hintRes, snackbarArgs = emptyList())
+                    state.copy(snackbarRes = hintRes, snackbarArgs = hintArgs)
                 }
             } catch (throwable: Throwable) {
                 _uiState.update { state -> state.copy(errorRes = R.string.error_generic) }
