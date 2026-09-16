@@ -118,6 +118,19 @@ interface WeekPlanDao {
     @Query("UPDATE week_plans SET is_user_edited = 0 WHERE id = :id")
     suspend fun resetToRecommended(id: Long)
 
+    /**
+     * **回收被淘汰的旧 AI 行**（修复 C2）：把 [ids] 中**非用户手改**的行置为停用（`is_active = 0`）。
+     *
+     * 🔒 **只做 `UPDATE`，绝不 `DELETE` / `REPLACE`**（父表红线，架构 §6.3 坑 3/4）：
+     * 软删除保留唯一槽位 `UNIQUE(day_of_week, exercise_id)`，避免"先删再建"重建行、错乱历史关联。
+     * 二次兜底 `is_user_edited = 0`：即使用例漏筛，也**不会**误停用用户手改行。
+     *
+     * @param ids 待淘汰的行主键（调用方已按"AI 生成 / 已启用 / 不在本次写入集合内"筛过）
+     * @return 实际被停用的行数（`retiredCount` 的真源）
+     */
+    @Query("UPDATE week_plans SET is_active = 0 WHERE id IN (:ids) AND is_user_edited = 0")
+    suspend fun deactivateGenerated(ids: List<Long>): Int
+
     /** AI 生成前的保护判定：该「天 × 动作」是否被用户动过（**含软删行**）。 */
     @Query(
         "SELECT EXISTS(SELECT 1 FROM week_plans " +

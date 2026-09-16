@@ -161,7 +161,8 @@ internal object RemotePromptBuilder {
     private data class HistoryPayload(
         val exerciseId: Long,
         val lastSetsCompleted: Int,
-        val lastTargetSets: Int,
+        /** `null` = 该次打卡未关联计划，无可信目标（修复 C4）；不得让模型据此判定"做满"。 */
+        val lastTargetSets: Int? = null,
         val lastRpe: Int?,
         val lastWeightKg: Float?,
     )

@@ -194,6 +194,13 @@ private fun GeneratePlanBlock(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        if (result.retiredCount > 0) {
+            Text(
+                text = stringResource(R.string.ai_plan_retired_hint, result.retiredCount),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         Text(
             text = stringResource(R.string.ai_plan_written_hint, result.writtenCount),
             style = MaterialTheme.typography.bodySmall,

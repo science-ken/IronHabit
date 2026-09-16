@@ -98,7 +98,12 @@ class GetTodayOverviewUseCase @Inject constructor(
                 habit = habit,
                 isCompletedToday = completedToday,
                 // 「每周几」习惯按自己的排期计连续；每日习惯传 null（每天都应做）。
-                streak = calculateStreakUseCase(doneDays, habit.expectedWeekdays),
+                // 修复 C5：口径基准 = **所选日**（游标日），而非"真实今天"。
+                streak = calculateStreakUseCase(
+                    epochDays = doneDays,
+                    expectedWeekdays = habit.expectedWeekdays,
+                    asOfEpochDay = core.epochDay,
+                ),
             )
         }
 
@@ -113,9 +118,11 @@ class GetTodayOverviewUseCase @Inject constructor(
             totalCount = totalCount,
             // 训练连续天数按「已排计划的星期」计应做日：周一三五的计划不再因休息日断档。
             // 没有任何计划时传 null → 退回「每天都算」的旧口径，避免把无计划用户清零。
+            // 修复 C5：同样以**所选日**为基准，避免"游标日"与"真实今天"口径混用（切换日期时 streak 不一致）。
             trainingStreak = calculateStreakUseCase(
                 epochDays = core.activeDays,
                 expectedWeekdays = core.plannedWeekdays.toExpectedWeekdaysOrNull(),
+                asOfEpochDay = core.epochDay,
             ),
         )
     }

@@ -25,14 +25,21 @@ class CalculateStreakUseCase @Inject constructor(
      * @param epochDays 活跃日期列表（约定降序；内部会去重再排序）
      * @param expectedWeekdays 「应做日」星期集合（`1` = 周一 … `7` = 周日）；
      *   `null` / 空集 = 每天都应做（旧行为）
+     * @param asOfEpochDay **统计口径基准日**（修复 C5）：今日页可切换到历史某天，
+     *   此时 streak 必须**按所选日**（游标日）计算，而不是"真实今天"。
+     *   `null`（默认）= 用注入时钟的"真实今天"（旧行为，既有调用点一字不改）。
+     *
+     * 说明：[StreakCalculator.calculate] 内部已过滤 `> todayEpochDay` 的未来日，
+     * 因此这里只需把 **游标日** 作为 `todayEpochDay` 传入即可 —— 无需改动计算器语义。
      */
     operator fun invoke(
         epochDays: List<Long>,
         expectedWeekdays: Set<Int>? = null,
+        asOfEpochDay: Long? = null,
     ): StreakInfo =
         StreakCalculator.calculate(
             sortedDescEpochDays = epochDays,
-            todayEpochDay = DateUtils.todayEpochDay(clock, timeZone),
+            todayEpochDay = asOfEpochDay ?: DateUtils.todayEpochDay(clock, timeZone),
             expectedWeekdays = expectedWeekdays,
         )
 }

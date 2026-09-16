@@ -36,6 +36,20 @@ interface PlanRepository {
      */
     suspend fun upsertGenerated(plans: List<WeekPlan>): Int
 
+    /**
+     * **回收被淘汰的旧 AI 行**（修复 C2）：把 [plans] 中**非用户手改**的行停用（`isActive = false`）。
+     *
+     * 场景：重新生成后，上一版 AI 排出、本次不再出现的条目会残留 —— 旧实现"只 upsert、不回收"，
+     * 导致计划里混着过期条目。本方法在 [upsertGenerated] 之后调用，把这类"陈旧 AI 行"停用。
+     *
+     * 🔒 **只做 `UPDATE is_active = 0`，绝不 `DELETE` / `REPLACE`**（父表红线，架构 §6.3）。
+     * 调用方（UseCase）**必须**先排除用户手改行（含软删除行）；DAO 侧再有 `is_user_edited = 0` 兜底。
+     *
+     * @param plans 待淘汰的行（UseCase 已筛：AI 生成 / 已启用 / 不在本次写入集合内）
+     * @return 实际被停用的行数
+     */
+    suspend fun deactivateGenerated(plans: List<WeekPlan>): Int
+
     /** 观察「有计划的日子」（`1..7`，升序）→ 预览里的 chip 行。 */
     fun observePlannedWeekdays(): Flow<List<Int>>
 

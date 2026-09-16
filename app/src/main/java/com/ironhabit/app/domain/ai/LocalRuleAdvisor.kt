@@ -78,14 +78,27 @@ object LocalRuleAdvisor : PlanAdvisor {
     /** 偏好的训练日（周一 / 周三 / 周五）。 */
     private val PREFERRED_TRAINING_DAYS: List<Int> = listOf(1, 3, 5)
 
-    /** 第 n 个训练日的训练重点（与 `today` 无关的固定顺序，保证同一输入同输出）。 */
-    private val FOCUS_BY_INDEX: List<TrainingFocus> = listOf(
-        TrainingFocus.FULL_BODY,
+    /**
+     * 训练重点**轮换池**（每周从中顺延取 [ROTATION_PER_WEEK] 个，再恒补一个 [TrainingFocus.UPPER_PULL]）。
+     *
+     * ⚠️ **修复 C1**：旧实现用 `FOCUS_BY_INDEX[index % size]`（一个 5 元素固定表）给每天取重点，
+     * 而每周只排 [DEFAULT_TRAINING_DAYS] = 3 天、`index` 只到 `0/1/2` ——
+     * 于是下标 3 的"背（[TrainingFocus.UPPER_PULL]）"与下标 4 的"有氧 + 核心（[TrainingFocus.CARDIO_CORE]）"
+     * **永远排不到**。现改为"轮换池 + 每周必含背日"，保证一周内**必然**练到背与有氧/核心，
+     * 且不同周的重点按 [weekIndex] 轮换（同一周内重复生成结果稳定 → 幂等）。
+     */
+    private val FOCUS_ROTATION_POOL: List<TrainingFocus> = listOf(
         TrainingFocus.LOWER_BODY,
         TrainingFocus.UPPER_PUSH,
-        TrainingFocus.UPPER_PULL,
+        TrainingFocus.FULL_BODY,
         TrainingFocus.CARDIO_CORE,
     )
+
+    /** 每周从 [FOCUS_ROTATION_POOL] 轮换取几个重点（其余一个位置恒留给 UPPER_PULL）。 */
+    private const val ROTATION_PER_WEEK: Int = 2
+
+    /** 轮换**相位**：对齐周的起始位置（纯常量；保证同一周稳定、跨周推进一格）。 */
+    private const val ROTATION_PHASE: Int = 1
 
     /** 视为"力量训练所需"的器械集合。 */
     private val STRENGTH_GEAR: Set<Equipment> = setOf(
@@ -194,11 +207,14 @@ object LocalRuleAdvisor : PlanAdvisor {
         val historyByExercise: Map<Long, ExerciseProgress> = history.associateBy { it.exerciseId }
 
         // 3) 逐日生成草案（先保留中间产物，便于汇总 note）。
+        //    训练重点由「本周轮换表」决定（见 focusSchedule）：**每周必含背日**，
+        //    并按 trainingDays 的顺序与三个训练日一一对应。
+        val schedule: List<TrainingFocus> = focusSchedule(today)
         val drafts: List<DayDraft> = trainingDays(today)
             .mapIndexed { index, dayOfWeek ->
                 buildDay(
                     dayOfWeek = dayOfWeek,
-                    focus = FOCUS_BY_INDEX[index % FOCUS_BY_INDEX.size],
+                    focus = schedule[index % schedule.size],
                     eligible = eligible,
                     blockedIds = occupiedByDay[dayOfWeek].orEmpty(),
                     historyByExercise = historyByExercise,
@@ -251,8 +267,12 @@ object LocalRuleAdvisor : PlanAdvisor {
         val matching: List<Exercise> = usable.filter { it.muscleGroups.any { tag -> tag in focusTags } }
         val pool: List<Exercise> = matching.ifEmpty { usable }
 
+        // 修复 C1：不再简单 `take(4)`（会把同一主肌群的动作排满一整天）——
+        // 改为「优先一主肌群一个」挑满 ITEMS_PER_DAY，不足时才按序补足（允许重复肌群）。
+        val selected: List<Exercise> = selectForDay(pool, ITEMS_PER_DAY)
+
         val items: List<Pair<PlanItemDraft, PlanNoteDetail>> =
-            pool.take(ITEMS_PER_DAY).mapIndexed { itemIndex, exercise ->
+            selected.mapIndexed { itemIndex, exercise ->
                 val baseSets: Int = (exercise.defaultSets ?: DEFAULT_SETS).coerceAtLeast(MIN_SETS)
                 val baseReps: Int = (exercise.defaultReps ?: DEFAULT_REPS).coerceAtLeast(MIN_REPS)
                 val decision: LoadDecision = decideLoad(
@@ -266,6 +286,9 @@ object LocalRuleAdvisor : PlanAdvisor {
                     targetSets = decision.targetSets,
                     targetReps = baseReps,
                     targetWeightKg = decision.targetWeightKg,
+                    // 修复 C3：有氧动作的时长从「默认时长（秒）」换算成分钟带入生成链路（秒→分，<1 分记 null）。
+                    targetDurationMin = exercise.defaultDurationSec?.let { sec -> sec / SECONDS_PER_MINUTE }
+                        ?.takeIf { minutes -> minutes >= MIN_DURATION_MIN },
                     reason = reason,
                 )
                 item to decision.detail
@@ -311,7 +334,12 @@ object LocalRuleAdvisor : PlanAdvisor {
             )
         }
 
-        val completedAll: Boolean = progress.lastSetsCompleted >= progress.lastTargetSets
+        // 修复 C4：上次**没有关联计划**（`lastTargetSets == null`）→ **不能**假定"做满"。
+        // 旧实现用兜底常量 3 顶替缺失的目标组数，只要完成数 ≥ 3 就误判"做满"，
+        // 再叠加"有余量"就凭空加重 2.5kg。现改为：缺失判据 = 未做满 → 维持（不猜）。
+        val completedAll: Boolean = progress.lastTargetSets?.let { target ->
+            progress.lastSetsCompleted >= target
+        } ?: false
         val previousWeight: Float? = progress.lastWeightKg
         val rpe: Int? = progress.lastRpe
 
@@ -371,6 +399,69 @@ object LocalRuleAdvisor : PlanAdvisor {
         return PREFERRED_TRAINING_DAYS
             .sortedBy { day -> (day - todayIso + WEEK_DAYS) % WEEK_DAYS }
             .take(DEFAULT_TRAINING_DAYS)
+    }
+
+    /**
+     * 本周的 3 个训练重点（**修复 C1**）：从 [FOCUS_ROTATION_POOL] 按 [weekIndex] 顺延取
+     * [ROTATION_PER_WEEK] 个，再**恒补一个** [TrainingFocus.UPPER_PULL]（背日）。
+     *
+     * - 输出长度 = [DEFAULT_TRAINING_DAYS]（3），与 [trainingDays] 一一对应；
+     * - `UPPER_PULL` 永远在表中（保证"背"排得到）；
+     * - [weekIndex] 只由 [today] 所在周决定 → **同一周内重复生成得到同一套重点**（幂等），
+     *   跨周则轮换（例如下周换成 下肢 / 上肢推 / 背）。
+     *
+     * @param today 今天（决定"第几周"，从而决定轮换偏移）
+     */
+    private fun focusSchedule(today: LocalDate): List<TrainingFocus> {
+        val pool: List<TrainingFocus> = FOCUS_ROTATION_POOL
+        val start: Int = weekIndex(today) + ROTATION_PHASE
+        val rotating: List<TrainingFocus> = (0 until ROTATION_PER_WEEK).map { step ->
+            // Math.floorMod 保证负数周号也能安全落到 [0, size) 区间（不依赖 `%` 的符号）。
+            pool[Math.floorMod(start + step, pool.size)]
+        }
+        return (rotating + TrainingFocus.UPPER_PULL).take(DEFAULT_TRAINING_DAYS)
+    }
+
+    /**
+     * 以**周一为桶首**的周序号（同周内恒定、跨周 +1）。
+     *
+     * epochDay `0` = 1970-01-01（周四）→ 该周的周一是 `-3`；故 `epochDay + 3` 后整除 7
+     * 即得以周一为界、每 7 天 +1 的稳定周号（用 `Math.floorDiv` 正确处理负的 epochDay）。
+     */
+    private fun weekIndex(today: LocalDate): Int =
+        Math.floorDiv(today.toEpochDays() + MONDAY_ALIGN_OFFSET, WEEK_DAYS)
+
+    /**
+     * 从 [pool] 中挑至多 [limit] 个动作，**优先保证主肌群多样化**（修复 C1 的单日同质化）。
+     *
+     * 规则（确定性、零随机）：
+     * 1. 第一轮：按 [pool] 顺序，每个**尚未出现过的主肌群**取一个，直到凑满 [limit] 或遍历完；
+     * 2. 第二轮：若第一轮不足 [limit]（可用动作的肌群种类本就少于上限），按 [pool] 顺序
+     *    补足剩余名额（允许重复肌群）—— 保证"动作够就排满"，不会因去重把一天排空。
+     *
+     * 主肌群为空的动作视为"各自独立"（不参与去重），避免误合并无标签动作。
+     */
+    private fun selectForDay(pool: List<Exercise>, limit: Int): List<Exercise> {
+        if (pool.size <= limit) return pool
+        val chosen: MutableList<Exercise> = ArrayList(limit)
+        val seenGroups: MutableSet<String> = HashSet()
+        // 第一轮：一主肌群一个。
+        for (exercise in pool) {
+            if (chosen.size >= limit) break
+            val group: String? = exercise.primaryMuscleGroup?.takeIf { it.isNotBlank() }
+            if (group != null && group in seenGroups) continue
+            chosen.add(exercise)
+            if (group != null) seenGroups.add(group)
+        }
+        // 第二轮：补足剩余名额（允许重复肌群）。
+        if (chosen.size < limit) {
+            val chosenIds: Set<Long> = chosen.map { it.id }.toSet()
+            for (exercise in pool) {
+                if (chosen.size >= limit) break
+                if (exercise.id !in chosenIds) chosen.add(exercise)
+            }
+        }
+        return chosen
     }
 
     // ------------------------------------------------------------------
@@ -459,6 +550,15 @@ object LocalRuleAdvisor : PlanAdvisor {
     }
 
     private const val WEEK_DAYS: Int = 7
+
+    /** epochDay `0`（1970-01-01，周四）距其所在周的周一（`-3`）的偏移；用于周一对齐的周号。 */
+    private const val MONDAY_ALIGN_OFFSET: Int = 3
+
+    /** 秒 → 分换算基数（有氧动作 `defaultDurationSec` → 计划 `targetDurationMin`）。 */
+    private const val SECONDS_PER_MINUTE: Int = 60
+
+    /** 有氧时长合法下界（分钟）；不足 1 分钟视为"无有效时长"（`null`），不写 0。 */
+    private const val MIN_DURATION_MIN: Int = 1
 
     private const val NOTE_KEY_INJURY_SWAP: String = "note_ai_injury_swap"
     private const val NOTE_KEY_EQUIPMENT_FIT: String = "note_ai_equipment_fit"

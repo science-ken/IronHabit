@@ -9,11 +9,13 @@ import com.ironhabit.app.domain.model.PlanItemDraft
 import com.ironhabit.app.domain.model.PlanNoteDetail
 import com.ironhabit.app.domain.model.PlanProposal
 import com.ironhabit.app.domain.model.PlanReason
+import com.ironhabit.app.domain.model.TrainingFocus
 import com.ironhabit.app.domain.model.UserProfile
 import com.ironhabit.app.domain.model.WeekPlan
 import kotlinx.datetime.LocalDate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -40,6 +42,7 @@ class LocalRuleAdvisorTest {
         sets: Int = 3,
         reps: Int = 12,
         isActive: Boolean = true,
+        durationSec: Int? = null,
     ): Exercise = Exercise(
         id = id,
         name = "ex-$id",
@@ -48,6 +51,7 @@ class LocalRuleAdvisorTest {
         isActive = isActive,
         defaultSets = sets,
         defaultReps = reps,
+        defaultDurationSec = durationSec,
     )
 
     /** 默认动作库：覆盖腿部 / 胸部 / 背部 / 腹部 / 核心 / 有氧 / 全身 + 2 个力量动作。 */
@@ -550,5 +554,99 @@ class LocalRuleAdvisorTest {
         assertTrue("应包含 basis_equipment（有器械）", "basis_equipment" in keys)
         assertTrue("应包含 basis_overload（PROGRESSIVE_OVERLOAD 触发）", "basis_overload" in keys)
         assertTrue("本地规则不产出自由文本 analysis", proposal.analysis == null)
+    }
+
+    // ---------------- C1：每周必含「背」+ 单日动作不再同质化 ----------------
+
+    @Test
+    fun planWeek_alwaysSchedulesUpperPullDay() {
+        // 修复 C1：旧实现用固定表按 index 取重点（每周只排 3 天 → index 只到 0/1/2），
+        // 下标 3 的「背（UPPER_PULL）」永远排不到。现要求每周**必含**背日。
+        val proposal = LocalRuleAdvisor.planWeek(
+            profile = UserProfile(),
+            library = library,
+            existing = emptyList(),
+            today = today,
+        )
+        assertTrue(
+            "每周训练计划必须包含一个「上肢拉（背）」训练日",
+            proposal.days.any { it.focus == TrainingFocus.UPPER_PULL },
+        )
+    }
+
+    @Test
+    fun planWeek_singleDayExerciseSelection_isNotHomogenizedByPrimaryMuscle() {
+        // 构造「同一主肌群动作数 > 每日上限」的池：4 个胸部 + 1 个肩部。
+        // 背日这些动作都不匹配背的肌群 → 走"全天可用动作"兜底池（≥ 每日上限 4）。
+        // 旧实现 `pool.take(4)` 会把前 4 个（全是胸部）排满一天 → 同质化；
+        // 新实现优先"一主肌群一个"，单日内至少出现 2 个不同主肌群。
+        val monoLibrary = listOf(
+            exercise(1L, ExerciseCategory.BODYWEIGHT, "胸部"),
+            exercise(2L, ExerciseCategory.BODYWEIGHT, "胸部"),
+            exercise(3L, ExerciseCategory.BODYWEIGHT, "胸部"),
+            exercise(4L, ExerciseCategory.BODYWEIGHT, "胸部"),
+            exercise(5L, ExerciseCategory.BODYWEIGHT, "肩部"),
+        )
+
+        val proposal = LocalRuleAdvisor.planWeek(
+            profile = UserProfile(),
+            library = monoLibrary,
+            existing = emptyList(),
+            today = today,
+        )
+
+        val pullDay = proposal.days.first { it.focus == TrainingFocus.UPPER_PULL }
+        val groups = pullDay.items.mapNotNull { item ->
+            monoLibrary.first { it.id == item.exerciseId }.primaryMuscleGroup
+        }
+        assertTrue("单日动作不得全是同一主肌群（去同质化）", groups.distinct().size >= 2)
+    }
+
+    // ---------------- C3：有氧时长带入生成链路 ----------------
+
+    @Test
+    fun planWeek_cardioDurationFlowsIntoDraft_inMinutes() {
+        val cardioLibrary = listOf(
+            exercise(1L, ExerciseCategory.CARDIO, "有氧", durationSec = 1200), // 20 分钟
+            exercise(2L, ExerciseCategory.CARDIO, "有氧", durationSec = 600),  // 10 分钟
+            exercise(3L, ExerciseCategory.CARDIO, "有氧", durationSec = 45),   // <1 分钟 → null
+            exercise(4L, ExerciseCategory.CARDIO, "有氧", durationSec = null), // 无时长 → null
+        )
+        val proposal = LocalRuleAdvisor.planWeek(
+            profile = UserProfile(),
+            library = cardioLibrary,
+            existing = emptyList(),
+            today = today,
+        )
+        assertEquals("1200 秒 → 20 分钟", 20, proposal.itemFor(1L)!!.targetDurationMin)
+        assertEquals("600 秒 → 10 分钟", 10, proposal.itemFor(2L)!!.targetDurationMin)
+        assertNull("不足 1 分钟不写 0（记 null）", proposal.itemFor(3L)!!.targetDurationMin)
+        assertNull("无默认时长 → null", proposal.itemFor(4L)!!.targetDurationMin)
+    }
+
+    // ---------------- C4：无目标组数（未关联计划）→ 不猜「做满」→ 维持 ----------------
+
+    @Test
+    fun overload_nullTargetSets_isNotAssumedCompleted_andMaintains() {
+        // 修复 C4：旧实现把缺失的目标组数兜底为常量 3 → 完成 3 组即被判"做满"，
+        // 叠加 RPE ≤ 6「有余量」→ 凭空加重 2.5kg。现应保持重量、理由为 MAINTAIN。
+        val proposal = LocalRuleAdvisor.planWeek(
+            profile = UserProfile(),
+            library = overloadLibrary(),
+            existing = emptyList(),
+            history = listOf(
+                ExerciseProgress(
+                    exerciseId = 2L,
+                    lastSetsCompleted = 3,
+                    lastTargetSets = null,   // 未关联计划 → 无可信目标
+                    lastRpe = 5,
+                    lastWeightKg = 40f,
+                ),
+            ),
+            today = today,
+        )
+        val item = proposal.itemFor(2L)!!
+        assertEquals("无目标组数 → 不得假定做满 → 维持重量（不加重）", 40f, item.targetWeightKg!!, 0.0001f)
+        assertEquals(PlanReason.MAINTAIN, item.reason)
     }
 }

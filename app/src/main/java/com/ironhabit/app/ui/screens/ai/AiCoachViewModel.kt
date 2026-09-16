@@ -38,6 +38,8 @@ data class PlanResultUi(
     val writtenCount: Int = 0,
     /** 被完整保留的用户手改条数（**未被覆盖**）。 */
     val preservedCount: Int = 0,
+    /** 本次被回收的陈旧 AI 行条数（上版生成、本次不再出现 → 已停用，修复 C2）。 */
+    val retiredCount: Int = 0,
     /** 「为什么这样排」的理由列表。 */
     val notes: List<PlanNote> = emptyList(),
     /** 本次实际来源（本地规则 / AI 联网）——诚实标注，不许 UI 猜。 */
@@ -179,6 +181,7 @@ class AiCoachViewModel @Inject constructor(
                             planResult = PlanResultUi(
                                 writtenCount = summary.writtenCount,
                                 preservedCount = summary.preservedCount,
+                                retiredCount = summary.retiredCount,
                                 notes = summary.notes,
                                 source = summary.source,
                                 fallbackReason = summary.fallbackReason,

@@ -291,6 +291,7 @@ private fun PlanRow(
                     sets = plan.targetSets,
                     reps = plan.targetReps,
                     weightKg = plan.targetWeightKg,
+                    durationMin = plan.targetDurationMin,
                 ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

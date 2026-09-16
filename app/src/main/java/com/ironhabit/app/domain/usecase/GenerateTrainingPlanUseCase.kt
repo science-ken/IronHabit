@@ -25,6 +25,7 @@ import kotlinx.datetime.toLocalDateTime
  *
  * @property writtenCount 本次实际写入的计划条目数
  * @property preservedCount 被完整保留的**用户手改行**条数（含软删除行），对应 `ai_plan_preserved_hint`
+ * @property retiredCount 本次**被回收的陈旧 AI 行**条数（上版生成、本次不再出现 → 已停用），对应 `ai_plan_retired_hint`（修复 C2）
  * @property notes "为什么这样排"的确定性理由，对应 `ai_*` 文案
  * @property source 本次实际使用的来源（本地规则 / AI 联网生成；联网失败回落时为 LOCAL_RULES）
  * @property fallbackReason 走本地规则时的回落原因；`null` = 未发生回落（联网一期 §6.2 N4）
@@ -32,6 +33,7 @@ import kotlinx.datetime.toLocalDateTime
 data class GeneratedPlanSummary(
     val writtenCount: Int = 0,
     val preservedCount: Int = 0,
+    val retiredCount: Int = 0,
     val notes: List<PlanNote> = emptyList(),
     val source: AdviceSource = AdviceSource.LOCAL_RULES,
     val fallbackReason: RemoteFallbackReason? = null,
@@ -55,6 +57,9 @@ data class GeneratedPlanSummary(
  * 2. **禁用 REPLACE / 禁用"先删再建"**：本用例**没有任何 DELETE 调用**，
  *    写入统一走 `PlanRepository.upsertGenerated`（内部是显式 upsert）。
  * 3. **纯函数外置**：规则判断全在 [PlanAdvisor]，本用例只负责取数与写入。
+ * 4. **回收陈旧 AI 行（修复 C2）**：上版生成、本次不再出现的启用行 → 调用
+ *    [PlanRepository.deactivateGenerated] 置 `isActive = false`（**仍是显式 `UPDATE`，无 DELETE**）；
+ *    **用户手改行（含软删除行）永不回收**。写入顺序：先 upsert 新计划，再回收陈旧行。
  *
  * ## 联网一期
  * 顾问调用包 `withContext(ioDispatcher)`：本地实现是纯计算（快），远端实现是
@@ -111,6 +116,8 @@ class GenerateTrainingPlanUseCase @Inject constructor(
                         targetSets = item.targetSets,
                         targetReps = item.targetReps,
                         targetWeightKg = item.targetWeightKg,
+                        // 修复 C3：把有氧时长（分钟）一并写入，避免生成链路丢字段。
+                        targetDurationMin = item.targetDurationMin,
                         sortOrder = index,
                     )
                 }
@@ -118,9 +125,21 @@ class GenerateTrainingPlanUseCase @Inject constructor(
         }
         planRepository.upsertGenerated(drafts)
 
+        // ③ 修复 C2：回收**上版生成、本次不再出现**的陈旧 AI 行（只停用，不删除）。
+        //    过滤：已启用 + 非用户手改 + 本次未写入；用户手改行（含软删除行）永不淘汰。
+        val writtenSlots: Set<Pair<Int, Long>> =
+            drafts.map { it.dayOfWeek to it.exerciseId }.toSet()
+        val staleRows: List<WeekPlan> = existing.filter { row ->
+            row.isActive &&
+                !row.isUserEdited &&
+                (row.dayOfWeek to row.exerciseId) !in writtenSlots
+        }
+        val retiredCount: Int = planRepository.deactivateGenerated(staleRows)
+
         return GeneratedPlanSummary(
             writtenCount = drafts.size,
             preservedCount = proposal.preservedUserEditedIds.size,
+            retiredCount = retiredCount,
             notes = proposal.notes,
             source = proposal.source,
             fallbackReason = advisor.lastFallbackReason,

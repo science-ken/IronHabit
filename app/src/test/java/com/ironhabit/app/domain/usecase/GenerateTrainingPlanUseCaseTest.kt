@@ -10,6 +10,7 @@ import com.ironhabit.app.domain.repository.CheckInRepository
 import com.ironhabit.app.domain.repository.ExerciseRepository
 import com.ironhabit.app.domain.repository.PlanRepository
 import com.ironhabit.app.domain.repository.SettingsRepository
+import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
@@ -62,7 +63,7 @@ class GenerateTrainingPlanUseCaseTest {
         exercise(3L, ExerciseCategory.BODYWEIGHT, "背部"),
         exercise(4L, ExerciseCategory.BODYWEIGHT, "腹部"),
         exercise(5L, ExerciseCategory.BODYWEIGHT, "核心"),
-        exercise(6L, ExerciseCategory.CARDIO, "有氧"),
+        exercise(6L, ExerciseCategory.CARDIO, "有氧", durationSec = 1200),
         exercise(7L, ExerciseCategory.BODYWEIGHT, "全身"),
     )
 
@@ -70,6 +71,7 @@ class GenerateTrainingPlanUseCaseTest {
         id: Long,
         category: ExerciseCategory,
         muscle: String,
+        durationSec: Int? = null,
     ): Exercise = Exercise(
         id = id,
         name = "ex-$id",
@@ -78,6 +80,7 @@ class GenerateTrainingPlanUseCaseTest {
         isActive = true,
         defaultSets = 3,
         defaultReps = 12,
+        defaultDurationSec = durationSec,
     )
 
     private fun stubDefaults(existing: List<WeekPlan>) {
@@ -157,6 +160,66 @@ class GenerateTrainingPlanUseCaseTest {
             assertTrue("目标组数不得为 0 / 负", plan.targetSets >= 1)
             assertTrue("目标次数不得为 0 / 负", plan.targetReps >= 1)
         }
+    }
+
+    // ---------------- C2：回收陈旧 AI 行（只停用，不删除；手改行永不回收）----------------
+
+    @Test
+    fun generateTrainingPlan_retiresStaleAiRows_butNeverTouchesUserEdited() = runTest {
+        // 陈旧行：排在周日（训练日只有 1/3/5）→ 本次绝不会再生成 → 应被回收（停用）。
+        val staleAi = WeekPlan(id = 300L, exerciseId = 1L, dayOfWeek = 7, isActive = true, isUserEdited = false)
+        // 用户手改行：同样在周日，但被用户动过 → 永不回收。
+        val editedSunday = WeekPlan(id = 400L, exerciseId = 2L, dayOfWeek = 7, isActive = true, isUserEdited = true)
+        stubDefaults(existing = listOf(staleAi, editedSunday))
+        coEvery { planRepository.deactivateGenerated(any()) } returns 1
+
+        val summary = useCase()
+
+        val slot = slot<List<WeekPlan>>()
+        coVerify(exactly = 1) { planRepository.deactivateGenerated(capture(slot)) }
+        assertTrue("陈旧 AI 行（周日 × 动作1）应被回收", slot.captured.any { it.id == 300L })
+        assertFalse("用户手改行（周日 × 动作2）绝不被回收", slot.captured.any { it.id == 400L })
+        assertEquals("retiredCount 取自仓库实际停用行数", 1, summary.retiredCount)
+        // 回收走的是 UPDATE 通道，仍不得有任何 DELETE。
+        coVerify(exactly = 0) { planRepository.delete(any()) }
+    }
+
+    @Test
+    fun generateTrainingPlan_noStaleRows_reportsZeroRetired() = runTest {
+        stubDefaults(existing = emptyList())
+        coEvery { planRepository.deactivateGenerated(any()) } returns 0
+
+        val summary = useCase()
+
+        assertEquals("没有陈旧行 → retiredCount = 0", 0, summary.retiredCount)
+    }
+
+    // ---------------- C3：有氧时长贯通到「写入的周计划」----------------
+
+    @Test
+    fun generateTrainingPlan_carriesCardioDurationIntoWrittenPlan() = runTest {
+        // 只用有氧动作组成动作库 → 任何训练日都会命中（匹配或兜底），保证有氧必被排入。
+        val cardioLibrary = listOf(
+            Exercise(
+                id = 6L,
+                name = "ex-6",
+                category = ExerciseCategory.CARDIO,
+                muscleGroups = listOf("有氧"),
+                isActive = true,
+                defaultSets = 1,
+                defaultReps = 1,
+                defaultDurationSec = 1200,
+            ),
+        )
+        every { settingsRepository.profile() } returns flowOf(UserProfile())
+        every { exerciseRepository.observeActive() } returns flowOf(cardioLibrary)
+        every { planRepository.observeAllIncludingInactive() } returns flowOf(emptyList())
+        every { checkInRepository.latestProgressPerExercise() } returns flowOf(emptyList<ExerciseProgress>())
+
+        val summary = useCase()
+
+        val cardio = summary.plans.first { it.exerciseId == 6L }
+        assertEquals("有氧时长（1200s → 20min）应写入本周计划", 20, cardio.targetDurationMin)
     }
 
     private companion object {

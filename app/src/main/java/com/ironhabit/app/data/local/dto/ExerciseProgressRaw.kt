@@ -10,7 +10,8 @@ import androidx.room.ColumnInfo
  *
  * @property exerciseId 动作 id
  * @property lastSetsCompleted 最近一次完成组数
- * @property lastTargetSets 最近一次目标组数（来自关联计划；无计划时为 `null`，由仓库层回落默认值）
+ * @property lastTargetSets 最近一次目标组数（来自关联计划；**无计划时为 `null`**，仓库层保持原样不再兜底，
+ *   由规则层把 null 解释为"未做满 → 维持"，避免误加重）
  * @property lastRpe 最近一次 RPE（`1..10`），未评级为 `null`
  * @property lastWeightKg 最近一次使用重量；自重动作为 `null`
  */

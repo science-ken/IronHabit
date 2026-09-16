@@ -236,6 +236,8 @@
     <string name="cd_next_week">下一周</string>
     <!-- v3：计划目标重量单位（今日页训练卡片 / 训练页计划行共用；如「20kg」） -->
     <string name="label_weight_kg">%1$skg</string>
+    <!-- v3：计划目标时长（有氧动作；今日页训练卡片 / 训练页计划行共用；如「约20分钟」） -->
+    <string name="label_duration_min">约%1$d分钟</string>
 
     <!-- ===== 未来日只读（v3：所选日 > 今天时禁用全部写入口）===== -->
     <string name="msg_future_day_readonly">还没到这一天，先看看计划就好</string>
@@ -352,6 +354,7 @@
     <string name="ai_regenerate_plan">重新生成训练计划</string>
     <string name="ai_generate_hint">基于你的档案生成，写入后出现在「今日」页</string>
     <string name="ai_plan_preserved_hint">已保留你手动改过的 %1$d 条，不会被覆盖</string>
+    <string name="ai_plan_retired_hint">已清理 %1$d 条本次不再出现的旧计划</string>
     <string name="ai_plan_written_hint">已写入 %1$d 条到本周计划</string>
 
     <!-- 区块③：教练解读（替代"自由问答"） -->

@@ -55,6 +55,7 @@ fun parseProposalJson(
     val remote: RemoteProposal = decodeStrict<RemoteProposal>(json)
 
     val libraryIds: Set<Long> = library.map { it.id }.toSet()
+    val libraryById: Map<Long, Exercise> = library.associateBy { it.id }
     val blockedSlots: Set<Pair<Int, Long>> = existing
         .filter { it.isUserEdited }
         .map { it.dayOfWeek to it.exerciseId }
@@ -80,6 +81,11 @@ fun parseProposalJson(
                         targetSets = item.targetSets.coerceIn(MIN_SETS, MAX_SETS),   // 防线 ③
                         targetReps = item.targetReps.coerceIn(MIN_REPS, MAX_REPS),   // 防线 ③
                         targetWeightKg = item.targetWeightKg?.takeIf { it > 0f },
+                        // 修复 C3：有氧时长不由模型编造，而是按 exerciseId **回本地动作库**取默认时长换算成分。
+                        targetDurationMin = libraryById[item.exerciseId]
+                            ?.defaultDurationSec
+                            ?.let { sec -> sec / SECONDS_PER_MINUTE }
+                            ?.takeIf { minutes -> minutes >= MIN_DURATION_MIN },
                         reason = if (index == 0) PlanReason.PRIMARY_LIFT else PlanReason.SUPPLEMENT,
                     )
                 }
@@ -290,3 +296,9 @@ private const val MIN_SETS: Int = 1
 private const val MAX_SETS: Int = 31
 private const val MIN_REPS: Int = 1
 private const val MAX_REPS: Int = 100
+
+/** 秒 → 分换算基数（有氧动作 `defaultDurationSec` → 计划 `targetDurationMin`，修复 C3）。 */
+private const val SECONDS_PER_MINUTE: Int = 60
+
+/** 有氧时长合法下界（分钟）；不足 1 分钟视为无有效时长（`null`）。 */
+private const val MIN_DURATION_MIN: Int = 1

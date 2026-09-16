@@ -12,6 +12,7 @@ import com.ironhabit.app.domain.util.DateUtils
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -181,6 +182,29 @@ class CheckInRpeUpsertTest {
             dao.getForExerciseOnDate(1L, today)?.rpe,
         )
     }
+
+    // ---- C4：无目标组数（未关联计划）→ 仓库不得回落兜底常量 ----
+
+    @Test
+    fun latestProgressWithNullTargetSets_isNotBackfilledWithFallback() = runTest {
+        dao.latestProgress = listOf(
+            ExerciseProgressRaw(
+                exerciseId = 1L,
+                lastSetsCompleted = 3,
+                lastTargetSets = null,   // 该次打卡未关联计划（plan_id = NULL）
+                lastRpe = 5,
+                lastWeightKg = 40f,
+            ),
+        )
+
+        val progress = repository.latestProgressPerExercise().first().single()
+
+        assertNull(
+            "无目标组数必须保持 null（修复 C4：旧实现回落常量 3 → 误判'做满' → 误加重 2.5kg）",
+            progress.lastTargetSets,
+        )
+        assertEquals("完成组数照常透传", 3, progress.lastSetsCompleted)
+    }
 }
 
 /**
@@ -254,6 +278,10 @@ private class FakeCheckInDao : CheckInDao {
         rows.clear()
     }
 
-    // 本测试只验证 upsert / RPE 行为，不触达「最近一次完成情况」聚合查询 → 给空流即可。
-    override fun observeLatestPerExercise(): Flow<List<ExerciseProgressRaw>> = flowOf(emptyList())
+    // 本测试只验证 upsert / RPE 行为，不触达「最近一次完成情况」聚合查询 → 默认给空流；
+    // C4 回归测试可注入 [latestProgress]。
+    /** 「最近一次完成情况」聚合结果（默认空；C4 回归测试可注入）。 */
+    var latestProgress: List<ExerciseProgressRaw> = emptyList()
+
+    override fun observeLatestPerExercise(): Flow<List<ExerciseProgressRaw>> = flowOf(latestProgress)
 }

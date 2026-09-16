@@ -118,8 +118,9 @@ class CheckInRepositoryImpl @Inject constructor(
     /**
      * 每个动作"最近一次"的完成情况（**只读**，供本地规则引擎做渐进超负荷）。
      *
-     * 目标组数缺失时（打卡记录未关联计划 `plan_id`）回落到 [FALLBACK_TARGET_SETS]，
-     * 保证下游的"是否做满"判定**永远有判据**、不产生除零或 NaN。
+     * 目标组数缺失时（打卡记录未关联计划 `plan_id`）**保持 `null`** —— 不回落任何兜底常量。
+     * 由规则层把"无目标"解释为"未做满 → 维持"（修复 C4：旧实现回落常量 3，会让完成数 ≥3 的
+     * 记录被误判为"做满"，再叠加"有余量"就凭空加重 2.5kg）。
      */
     override fun latestProgressPerExercise(): Flow<List<ExerciseProgress>> =
         checkInDao.observeLatestPerExercise()
@@ -136,14 +137,11 @@ class CheckInRepositoryImpl @Inject constructor(
     }
 }
 
-/** 聚合投影 → 领域模型（目标组数缺失时回落常量）。 */
+/** 聚合投影 → 领域模型（目标组数缺失时**保持 `null`**，由规则层解释为"未做满"，不作兜底替换）。 */
 private fun ExerciseProgressRaw.toDomain(): ExerciseProgress = ExerciseProgress(
     exerciseId = exerciseId,
     lastSetsCompleted = lastSetsCompleted,
-    lastTargetSets = lastTargetSets ?: FALLBACK_TARGET_SETS,
+    lastTargetSets = lastTargetSets,
     lastRpe = lastRpe,
     lastWeightKg = lastWeightKg,
 )
-
-/** 目标组数兜底：打卡记录未关联计划（`plan_id = NULL`）时的判据（文件级常量，便于单测引用）。 */
-private const val FALLBACK_TARGET_SETS = 3

@@ -79,6 +79,7 @@ fun ExerciseCheckCard(
         sets = item.plan.targetSets,
         reps = item.plan.targetReps,
         weightKg = item.plan.targetWeightKg,
+        durationMin = item.plan.targetDurationMin,
     )
 
     Card(

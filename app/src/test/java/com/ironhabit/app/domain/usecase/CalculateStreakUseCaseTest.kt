@@ -100,4 +100,37 @@ class CalculateStreakUseCaseTest {
         assertEquals(5, actual.current)
         assertEquals(5, actual.best)
     }
+
+    // ---------------- C5：以「游标日」为统计基准（今日页可切到历史某天）----------------
+
+    @Test
+    fun asOfEpochDay_usesCursorDayInsteadOfRealToday() {
+        // 修复 C5：今日页显示的是"游标日"，streak 必须按该日计算，而不是真实今天。
+        // 晚于游标日的活跃日不得计入（StreakCalculator 内部过滤 > todayEpochDay）。
+        val cursor = baseEpochDay - 2L
+        val days = listOf(baseEpochDay, baseEpochDay - 1L, baseEpochDay - 2L)
+
+        val actual = useCase(days, asOfEpochDay = cursor)
+        val expected = StreakCalculator.calculate(
+            sortedDescEpochDays = days,
+            todayEpochDay = cursor,
+        )
+
+        assertEquals(expected, actual)
+        assertEquals("游标日之后的活动不得计入 streak", cursor, actual.lastActiveEpochDay)
+        assertEquals(1, actual.current)
+        assertEquals(1, actual.best)
+    }
+
+    @Test
+    fun asOfEpochDayNull_fallsBackToRealToday() {
+        // 默认（null）= 真实今天，保持既有调用点语义不变。
+        val days = listOf(baseEpochDay, baseEpochDay - 1L, baseEpochDay - 2L)
+
+        val withNull = useCase(days, asOfEpochDay = null)
+        val withoutArg = useCase(days)
+
+        assertEquals(withoutArg, withNull)
+        assertEquals("真实今天 → 连续 3 天", 3, withNull.current)
+    }
 }

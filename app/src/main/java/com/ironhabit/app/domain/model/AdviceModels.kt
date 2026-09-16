@@ -160,6 +160,13 @@ data class PlanItemDraft(
     val targetSets: Int,
     val targetReps: Int,
     val targetWeightKg: Float?,
+    /**
+     * 目标时长（分钟），可空（有氧动作用）。
+     *
+     * 修复 C3：生成链路此前丢掉了有氧动作的时长 —— 规则层 / 远端解析都不产出它，
+     * 落库时 `week_plans.target_duration_min` 恒为 `null`，训练页/今日卡片因此不显示"约 N 分钟"。
+     */
+    val targetDurationMin: Int? = null,
     val reason: PlanReason,
 )
 
@@ -221,14 +228,15 @@ data class ExerciseSuggestion(
  * 某个动作"最近一次"的完成情况（渐进超负荷的输入，由 UseCase 从既有打卡 + RPE 组装）。
  *
  * @property lastSetsCompleted 上次完成组数
- * @property lastTargetSets 上次目标组数（做满与否的判据）
+ * @property lastTargetSets 上次目标组数（做满与否的判据）；**`null` = 该次打卡未关联计划**，
+ *   即"没有可信目标"——此时**不得**假定做满（修复 C4：旧实现用兜底常量 3 顶替，导致误判做满 → 误加重）
  * @property lastRpe 上次主观强度 `1..10`，`null` = 未评级
  * @property lastWeightKg 上次使用重量；`null` = 自重动作
  */
 data class ExerciseProgress(
     val exerciseId: Long,
     val lastSetsCompleted: Int,
-    val lastTargetSets: Int,
+    val lastTargetSets: Int?,
     val lastRpe: Int?,
     val lastWeightKg: Float?,
 )

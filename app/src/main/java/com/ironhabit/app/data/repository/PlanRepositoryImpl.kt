@@ -48,6 +48,18 @@ class PlanRepositoryImpl @Inject constructor(
         return plans.size
     }
 
+    /**
+     * 回收陈旧 AI 行（修复 C2）：把 [plans] 对应 id 的行 `is_active = 0`。
+     *
+     * 只做 `UPDATE`（DAO 侧另有 `is_user_edited = 0` 兜底），**绝不 `DELETE` / `REPLACE`**。
+     * id 为 `0`（尚未落库）的行跳过；空集合直接返回 `0`（避免 `IN ()` 空列表 SQL）。
+     */
+    override suspend fun deactivateGenerated(plans: List<WeekPlan>): Int {
+        val ids: List<Long> = plans.map { it.id }.filter { it != 0L }
+        if (ids.isEmpty()) return 0
+        return weekPlanDao.deactivateGenerated(ids)
+    }
+
     override fun observePlannedWeekdays(): Flow<List<Int>> =
         weekPlanDao.observePlannedWeekdays().flowOn(ioDispatcher)
 

@@ -283,6 +283,37 @@ class RemoteLlmAdvisorTest {
         assertEquals(AdviceSource.REMOTE_LLM, proposal.source)
     }
 
+    // ---------------- C3：有氧时长按 exerciseId 回本地库取（不信模型编造）----------------
+
+    @Test
+    fun parseProposal_cardioDuration_isDerivedFromLibraryById() {
+        val cardios = listOf(
+            Exercise(
+                id = 1L,
+                name = "椭圆机稳态",
+                category = ExerciseCategory.CARDIO,
+                muscleGroups = listOf("有氧"),
+                isActive = true,
+                defaultSets = 1,
+                defaultReps = 1,
+                defaultDurationSec = 1200,
+            ),
+        )
+        val json = """
+            {"days":[{"dayOfWeek":1,"focus":"CARDIO_CORE","items":[
+                {"exerciseId":1,"targetSets":1,"targetReps":1,"targetWeightKg":null}
+            ]}]}
+        """.trimIndent()
+
+        val proposal = parseProposalJson(json, cardios, existing = emptyList())
+
+        assertEquals(
+            "有氧时长应回本地动作库按 id 取默认时长换算（1200s → 20min）",
+            20,
+            proposal.days.single().items.single().targetDurationMin,
+        )
+    }
+
     private companion object {
         const val FAKE_KEY: String = "sk-test-000000000000"
     }
