@@ -65,3 +65,50 @@ val MIGRATION_1_2: Migration = object : Migration(1, 2) {
         )
     }
 }
+
+/**
+ * v2 → v3：新增 `meals` 表（饮食模块，`docs/schema-v3-meals.md`）。
+ *
+ * **纯建表**：无数据变换、无回填 —— 本迁移**不可能因存量数据出错**（这正是选择独立
+ * `Migration(2, 3)` 而非并入 `MIGRATION_1_2` 的原因；见设计文档 §4）。
+ *
+ * 约束（与 [MIGRATION_1_2] 同）：`minSdk = 24`，**禁止** `DROP COLUMN` / `RENAME COLUMN`
+ * —— 本迁移只 `CREATE TABLE` / `CREATE INDEX`，天然满足。
+ *
+ * ⚠️ DDL 与 KSP 由 [MealEntity] 生成的 `app/schemas/.../3.json` 的 `createSql` **逐字对齐**
+ * （含反引号、`IF NOT EXISTS`、`DEFAULT` 的确切形态）。任何一方改动都必须在同一次提交内同步。
+ *
+ * Room 升级路径（链式，两个 Migration 都已注册于 `DatabaseModule`）：
+ * ```
+ *   v1 ──► 1→2（v2：改列+回填）──► 2→3（v3：纯建表）──► v3
+ *   v2 ──► 2→3 ──► v3
+ *   全新安装 ──► 直接按实体建表（不跑迁移）
+ * ```
+ */
+val MIGRATION_2_3: Migration = object : Migration(2, 3) {
+
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `meals` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`date_epoch_day` INTEGER NOT NULL, " +
+                "`meal_type` TEXT NOT NULL, " +
+                "`items_text` TEXT NOT NULL DEFAULT '', " +
+                "`kcal` INTEGER NOT NULL DEFAULT 0, " +
+                "`protein_g` REAL NOT NULL DEFAULT 0, " +
+                "`is_completed` INTEGER NOT NULL DEFAULT 0, " +
+                "`sort_order` INTEGER NOT NULL DEFAULT 0, " +
+                "`is_active` INTEGER NOT NULL DEFAULT 1, " +
+                "`is_user_edited` INTEGER NOT NULL DEFAULT 0, " +
+                "`created_at` INTEGER NOT NULL)"
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_meals_date_epoch_day` " +
+                "ON `meals` (`date_epoch_day`)"
+        )
+        db.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS `index_meals_date_epoch_day_meal_type` " +
+                "ON `meals` (`date_epoch_day`, `meal_type`)"
+        )
+    }
+}

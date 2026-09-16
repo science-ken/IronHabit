@@ -1,6 +1,9 @@
 package com.ironhabit.app.ui.screens.today
 
+import com.ironhabit.app.domain.model.DietTarget
 import com.ironhabit.app.domain.model.HabitItem
+import com.ironhabit.app.domain.model.Meal
+import com.ironhabit.app.domain.model.MealTotals
 import com.ironhabit.app.domain.model.StreakInfo
 import com.ironhabit.app.domain.model.TodayPlanItem
 
@@ -14,6 +17,9 @@ import com.ironhabit.app.domain.model.TodayPlanItem
  * @property dateEpochDay 今日日期口径（`LocalDate.toEpochDays()`）
  * @property plans 今日训练项
  * @property habits 今日习惯项
+ * @property meals 今日饮食餐列表（v3）
+ * @property mealTotals 今日饮食合计（已摄入 / 计划，v3）
+ * @property dietTarget 今日营养目标（规则现算，不落库，v3）
  * @property completedCount 已完成项数（训练 + 习惯）
  * @property totalCount 总项数
  * @property trainingStreak 训练连续打卡信息（进度环大字）
@@ -29,6 +35,9 @@ data class TodayUiState(
     val dateEpochDay: Long = 0L,
     val plans: List<TodayPlanItem> = emptyList(),
     val habits: List<HabitItem> = emptyList(),
+    val meals: List<Meal> = emptyList(),
+    val mealTotals: MealTotals = MealTotals(),
+    val dietTarget: DietTarget = DietTarget(),
     val completedCount: Int = 0,
     val totalCount: Int = 0,
     val trainingStreak: StreakInfo = StreakInfo(0, 0, null),

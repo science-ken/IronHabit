@@ -4,15 +4,20 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.HabitItem
+import com.ironhabit.app.domain.model.Meal
 import com.ironhabit.app.domain.model.TodayOverview
 import com.ironhabit.app.domain.model.TodayPlanItem
 import com.ironhabit.app.domain.repository.CheckInRepository
 import com.ironhabit.app.domain.repository.PlanRepository
+import com.ironhabit.app.domain.usecase.DeleteMealUseCase
 import com.ironhabit.app.domain.usecase.DetailedCheckInUseCase
+import com.ironhabit.app.domain.usecase.GenerateDietPlanUseCase
+import com.ironhabit.app.domain.usecase.GetTodayMealsUseCase
 import com.ironhabit.app.domain.usecase.GetTodayOverviewUseCase
 import com.ironhabit.app.domain.usecase.QuickCheckInUseCase
 import com.ironhabit.app.domain.usecase.SetRpeUseCase
 import com.ironhabit.app.domain.usecase.ToggleHabitUseCase
+import com.ironhabit.app.domain.usecase.ToggleMealUseCase
 import com.ironhabit.app.domain.usecase.ToggleSetUseCase
 import com.ironhabit.app.domain.usecase.UndoCheckInUseCase
 import com.ironhabit.app.domain.util.DateUtils
@@ -54,6 +59,10 @@ class TodayViewModel @Inject constructor(
     private val toggleHabit: ToggleHabitUseCase,
     private val toggleSet: ToggleSetUseCase,
     private val setRpe: SetRpeUseCase,
+    private val getTodayMeals: GetTodayMealsUseCase,
+    private val toggleMeal: ToggleMealUseCase,
+    private val generateDietPlan: GenerateDietPlanUseCase,
+    private val deleteMeal: DeleteMealUseCase,
     private val checkInRepository: CheckInRepository,
     private val planRepository: PlanRepository,
     private val clock: Clock,
@@ -80,8 +89,14 @@ class TodayViewModel @Inject constructor(
                         combine(
                             getTodayOverview(day),
                             plannedWeekdaysFlow,
-                        ) { overview, weekdays ->
-                            overview.toUiState().copy(plannedWeekdays = weekdays)
+                            getTodayMeals(day),
+                        ) { overview, weekdays, meals ->
+                            overview.toUiState().copy(
+                                plannedWeekdays = weekdays,
+                                meals = meals.meals,
+                                mealTotals = meals.totals,
+                                dietTarget = meals.target,
+                            )
                         }
                     }
                     .catch {
@@ -197,9 +212,49 @@ class TodayViewModel @Inject constructor(
         )
     }
 
+    // ---------------- 饮食（v3）----------------
+
+    /** 勾选 / 取消一餐（[done] = 勾选后的目标状态）。静默写入（连续点选时避免打扰）。 */
+    fun onToggleMeal(meal: Meal, done: Boolean) {
+        performSilentWrite {
+            toggleMeal(mealId = meal.id, done = done)
+        }
+    }
+
+    /** 删除这餐（软删除：`is_active = 0` + `is_user_edited = 1`，不会被重新生成复活）。 */
+    fun onDeleteMeal(meal: Meal) {
+        performWrite(
+            baseSnackbarRes = R.string.msg_meal_removed,
+            block = { deleteMeal(meal.id) },
+        )
+    }
+
+    /**
+     * 生成 / 重新生成饮食计划（对应预览 `doDiet()`）。
+     *
+     * 生成后若用了默认值（档案未填全 / 无体重），给出**非阻断**提示（不改变生成结果）；
+     * 否则提示「已生成」。两者都走既有 Snackbar 通道，不新造机制。
+     */
+    fun onGenerateDiet() {
+        viewModelScope.launch {
+            try {
+                val summary = generateDietPlan(currentEpochDay())
+                val hintRes: Int = if (summary.target.usedDefaults) {
+                    R.string.profile_incomplete_hint
+                } else {
+                    R.string.msg_diet_generated
+                }
+                _uiState.update { state ->
+                    state.copy(snackbarRes = hintRes, snackbarArgs = emptyList())
+                }
+            } catch (throwable: Throwable) {
+                _uiState.update { state -> state.copy(errorRes = R.string.error_generic) }
+            }
+        }
+    }
+
     /** 消费一次 Snackbar（弹完后由 UI 调用）。 */
-    fun onSnackbarShown() {
-        _uiState.update { state ->
+    fun onSnackbarShown() {        _uiState.update { state ->
             state.copy(snackbarRes = null, snackbarArgs = emptyList())
         }
     }
@@ -270,6 +325,9 @@ class TodayViewModel @Inject constructor(
                 dateEpochDay = data.dateEpochDay,
                 plans = data.plans,
                 habits = data.habits,
+                meals = data.meals,
+                mealTotals = data.mealTotals,
+                dietTarget = data.dietTarget,
                 completedCount = data.completedCount,
                 totalCount = data.totalCount,
                 trainingStreak = data.trainingStreak,

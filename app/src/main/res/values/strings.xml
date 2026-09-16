@@ -442,4 +442,24 @@
     <string name="basis_overload">检测到你上次 %1$d 个动作做满且强度有余量，已自动小幅加重</string>
     <string name="basis_history_none">暂无打卡记录，先用基础目标值，练几次后会自动进阶</string>
 
+    <!-- ===== 饮食模块（v3 增量 · meals）===== -->
+    <!-- 今日页区块 -->
+    <string name="title_today_meals">今日饮食</string>
+    <string name="empty_today_meals">还没有饮食计划，点下面生成一份吧</string>
+    <string name="action_generate_diet">生成饮食计划</string>
+    <string name="action_regenerate_diet">重新生成</string>
+    <string name="msg_diet_generated">饮食计划已生成</string>
+    <!-- 餐次名（必须资源化，禁止硬编码中文；顺序 = MealType ordinal：早餐/午餐/加餐/晚餐） -->
+    <string name="meal_breakfast">早餐</string>
+    <string name="meal_lunch">午餐</string>
+    <string name="meal_snack">加餐</string>
+    <string name="meal_dinner">晚餐</string>
+    <!-- 单餐摘要与操作 -->
+    <string name="label_meal_kcal">%1$d kcal · 蛋白 %2$dg</string>
+    <string name="action_delete_meal">移除这餐</string>
+    <string name="msg_meal_removed">已移除这餐</string>
+    <!-- 汇总条：已摄入 / 目标 -->
+    <string name="label_diet_intake_kcal">%1$d / %2$d kcal</string>
+    <string name="label_diet_intake_protein">%1$d / %2$d g 蛋白</string>
+
 </resources>

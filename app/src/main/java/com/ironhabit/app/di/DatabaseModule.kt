@@ -4,11 +4,13 @@ import android.content.Context
 import androidx.room.Room
 import com.ironhabit.app.data.local.AppDatabase
 import com.ironhabit.app.data.local.MIGRATION_1_2
+import com.ironhabit.app.data.local.MIGRATION_2_3
 import com.ironhabit.app.data.local.dao.BodyMetricDao
 import com.ironhabit.app.data.local.dao.CheckInDao
 import com.ironhabit.app.data.local.dao.ExerciseDao
 import com.ironhabit.app.data.local.dao.HabitDao
 import com.ironhabit.app.data.local.dao.HabitLogDao
+import com.ironhabit.app.data.local.dao.MealDao
 import com.ironhabit.app.data.local.dao.StatsDao
 import com.ironhabit.app.data.local.dao.WeekPlanDao
 import dagger.Module
@@ -22,7 +24,11 @@ import javax.inject.Singleton
  * Room 数据库与各 DAO 的 Hilt 装配。
  *
  * 数据库名称固定为 [DATABASE_NAME]，落盘于应用私有目录，杀进程不丢数据。
- * 仅在**降级**时允许破坏性迁移（架构 §7.6）；正式升级走显式 Migration（由 T02 提供）。
+ * 仅在**降级**时允许破坏性迁移（架构 §7.6）；正式升级走显式 Migration。
+ *
+ * ⚠️ **复数 API `.addMigrations(...)`**：Room 2.6.1 只有 `addMigrations`（复数），没有
+ * `addMigration`（单数）。v1 设备升级需要 `1→2` 路径、v2 设备需要 `2→3` 路径，
+ * **两个都必须注册** —— 只注册 `MIGRATION_2_3` 会让 v1 设备升级时找不到 `1→2` 而崩溃。
  */
 @Module
 @InstallIn(SingletonComponent::class)
@@ -40,7 +46,7 @@ object DatabaseModule {
         AppDatabase::class.java,
         DATABASE_NAME,
     )
-        .addMigrations(MIGRATION_1_2)
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
         .fallbackToDestructiveMigrationOnDowngrade()
         .build()
 
@@ -64,4 +70,7 @@ object DatabaseModule {
 
     @Provides
     fun provideStatsDao(db: AppDatabase): StatsDao = db.statsDao()
+
+    @Provides
+    fun provideMealDao(db: AppDatabase): MealDao = db.mealDao()
 }

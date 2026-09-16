@@ -10,6 +10,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -25,11 +26,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.TodayPlanItem
 import com.ironhabit.app.domain.util.DateUtils
+import com.ironhabit.app.ui.components.DietTotalsBar
 import com.ironhabit.app.ui.components.EmptyState
 import com.ironhabit.app.ui.components.ExerciseCheckCard
 import com.ironhabit.app.ui.components.HabitRow
 import com.ironhabit.app.ui.components.LoadingSkeleton
 import com.ironhabit.app.ui.components.LocalSnackbarHostState
+import com.ironhabit.app.ui.components.MealBlock
 import com.ironhabit.app.ui.components.PlanDateStrip
 import com.ironhabit.app.ui.components.ProgressRing
 import com.ironhabit.app.ui.components.SkeletonCard
@@ -174,6 +177,42 @@ fun TodayScreen(
                             onEditPlan = { onEditPlan(item.plan.id, item.plan.dayOfWeek) },
                             enabled = !isFutureDay,
                         )
+                    }
+                }
+
+                // ---- 今日饮食（v3）----
+                SectionTitle(text = stringResource(R.string.title_today_meals))
+                if (uiState.meals.isEmpty()) {
+                    EmptyState(
+                        text = stringResource(R.string.empty_today_meals),
+                        actionText = stringResource(R.string.action_generate_diet),
+                        onAction = viewModel::onGenerateDiet,
+                    )
+                } else {
+                    DietTotalsBar(
+                        totals = uiState.mealTotals,
+                        target = uiState.dietTarget,
+                    )
+                    uiState.meals.forEach { meal ->
+                        MealBlock(
+                            meal = meal,
+                            onToggle = { done -> viewModel.onToggleMeal(meal, done) },
+                            onDelete = { viewModel.onDeleteMeal(meal) },
+                            enabled = !isFutureDay,
+                        )
+                    }
+                    if (uiState.dietTarget.usedDefaults) {
+                        Text(
+                            text = stringResource(R.string.profile_incomplete_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.tertiary,
+                        )
+                    }
+                    TextButton(
+                        onClick = viewModel::onGenerateDiet,
+                        enabled = !isFutureDay,
+                    ) {
+                        Text(text = stringResource(R.string.action_regenerate_diet))
                     }
                 }
 

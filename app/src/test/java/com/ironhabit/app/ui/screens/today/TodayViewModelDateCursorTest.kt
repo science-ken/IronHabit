@@ -5,15 +5,20 @@ import com.ironhabit.app.domain.model.ExerciseCategory
 import com.ironhabit.app.domain.model.Habit
 import com.ironhabit.app.domain.model.HabitItem
 import com.ironhabit.app.domain.model.TodayOverview
+import com.ironhabit.app.domain.model.TodayMeals
 import com.ironhabit.app.domain.model.TodayPlanItem
 import com.ironhabit.app.domain.model.WeekPlan
 import com.ironhabit.app.domain.repository.CheckInRepository
 import com.ironhabit.app.domain.repository.PlanRepository
+import com.ironhabit.app.domain.usecase.DeleteMealUseCase
 import com.ironhabit.app.domain.usecase.DetailedCheckInUseCase
+import com.ironhabit.app.domain.usecase.GenerateDietPlanUseCase
+import com.ironhabit.app.domain.usecase.GetTodayMealsUseCase
 import com.ironhabit.app.domain.usecase.GetTodayOverviewUseCase
 import com.ironhabit.app.domain.usecase.QuickCheckInUseCase
 import com.ironhabit.app.domain.usecase.SetRpeUseCase
 import com.ironhabit.app.domain.usecase.ToggleHabitUseCase
+import com.ironhabit.app.domain.usecase.ToggleMealUseCase
 import com.ironhabit.app.domain.usecase.ToggleSetUseCase
 import com.ironhabit.app.domain.usecase.UndoCheckInUseCase
 import com.ironhabit.app.domain.util.DateUtils
@@ -50,6 +55,10 @@ class TodayViewModelDateCursorTest {
     private val toggleHabit = mockk<ToggleHabitUseCase>(relaxed = true)
     private val toggleSet = mockk<ToggleSetUseCase>(relaxed = true)
     private val setRpe = mockk<SetRpeUseCase>(relaxed = true)
+    private val getTodayMeals = mockk<GetTodayMealsUseCase>()
+    private val toggleMeal = mockk<ToggleMealUseCase>(relaxed = true)
+    private val generateDietPlan = mockk<GenerateDietPlanUseCase>(relaxed = true)
+    private val deleteMeal = mockk<DeleteMealUseCase>(relaxed = true)
     private val checkInRepository = mockk<CheckInRepository>(relaxed = true)
     private val planRepository = mockk<PlanRepository>(relaxed = true)
 
@@ -67,6 +76,8 @@ class TodayViewModelDateCursorTest {
         // 日期游标驱动聚合视图：overview.dateEpochDay 必须回显被请求的那一天。
         every { getTodayOverview.invoke(today) } returns flowOf(TodayOverview(dateEpochDay = today))
         every { getTodayOverview.invoke(futureDay) } returns flowOf(TodayOverview(dateEpochDay = futureDay))
+        every { getTodayMeals.invoke(today) } returns flowOf(TodayMeals())
+        every { getTodayMeals.invoke(futureDay) } returns flowOf(TodayMeals())
         every { planRepository.observePlannedWeekdays() } returns flowOf(emptyList())
         every { checkInRepository.observeActiveDaysSince(any()) } returns flowOf(emptyList())
 
@@ -78,6 +89,10 @@ class TodayViewModelDateCursorTest {
             toggleHabit = toggleHabit,
             toggleSet = toggleSet,
             setRpe = setRpe,
+            getTodayMeals = getTodayMeals,
+            toggleMeal = toggleMeal,
+            generateDietPlan = generateDietPlan,
+            deleteMeal = deleteMeal,
             checkInRepository = checkInRepository,
             planRepository = planRepository,
             clock = clock,
