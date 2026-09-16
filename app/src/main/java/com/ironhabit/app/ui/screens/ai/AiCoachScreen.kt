@@ -50,16 +50,21 @@ import com.ironhabit.app.ui.components.ProfileSummaryCard
 import com.ironhabit.app.ui.components.aiPlanGoalText
 
 /**
- * Tab「AI 教练」页面（**本地规则版 · 完全离线**）。
+ * Tab「AI 教练」页面（**联网可选 · 本地规则兜底**）。
  *
- * 4 个区块：
+ * 区块：
  * ① 我的身体档案（复用 [ProfileSummaryCard]，点击去设置页编辑）
  * ② 生成计划（写入本周计划；**用户手改行永不覆盖**）
- * ③ 教练解读（含"自由问答需要联网"的诚实禁用说明）
+ * ②B 饮食计划（数值全部本地算，联网时另附「为什么这样吃」）
+ * ②C 进度解读（数字来自本地聚合，联网时另附 AI 的下一步建议）
+ * ③ 教练解读（BMR 等本地解读；未联网时附带自由问答的诚实禁用说明）
  * ④ 补充动作（按档案与伤病筛出，一键收入动作库，幂等）
+ * ⑤ 问教练（AI 自由问答，联网可选）
  *
- * ⚠️ **诚实原则（硬要求）**：页首必须挂「本地规则版 · 完全离线」徽标；
- * 页内**禁止**出现"模型 / 智能生成 / AI 分析"等暗示联网或推理的措辞 —— **宁可朴素，勿误导**。
+ * ⚠️ **诚实原则（硬要求）**：
+ * 1. 页首徽标如实反映三态（本地规则 / 联网已开 / 未配 Key）；
+ * 2. **只有真的调用了 DeepSeek** 才显示「AI 分析」字样，来源由 UseCase 回传、UI 不猜；
+ * 3. 离线 / 无 Key / 调用失败一律回落本地规则并**明确标注**，绝不冒充 AI。
  *
  * @param onEditProfile 编辑完整档案（跳设置页「我的档案」区块）
  */
@@ -137,6 +142,11 @@ fun AiCoachScreen(
                     DietBlock(
                         uiState = uiState,
                         onGenerateDiet = viewModel::generateDiet,
+                    )
+                    // ②C 进度解读（子项 C）：数字来自本地聚合，联网时附 AI 的下一步建议。
+                    InsightBlock(
+                        uiState = uiState,
+                        onReload = viewModel::loadInsight,
                     )
                     ExplainBlock(bmr = viewModel.estimateBmr(), canAsk = uiState.canAskCoach)
                     // ⑤ 问教练（AI 自由问答）：离线显示诚实禁用说明，在线可用，发送中禁用。
@@ -666,6 +676,125 @@ private fun DietLocalBasisCard() {
             )
         }
     }
+}
+
+/**
+ * ②C 进度解读（子项 C）。
+ *
+ * **数字永远来自本地聚合**（打卡次数 / 平均 RPE / 体重变化 / 连续天数）：
+ * 联网成功时多一段 AI 文案（标题标注「AI 分析」），否则显示本地小结并标注「本地规则」——
+ * 两者都不会缺数字，所以离线也能看。
+ */
+@Composable
+private fun InsightBlock(
+    uiState: AiCoachUiState,
+    onReload: () -> Unit,
+) {
+    SectionTitle(text = stringResource(R.string.ai_insight_section))
+    Text(
+        text = stringResource(R.string.ai_insight_hint),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+
+    val insight = uiState.insightResult
+    when {
+        insight == null && uiState.isLoadingInsight -> LoadingSkeleton()
+
+        insight == null -> Text(
+            text = stringResource(R.string.ai_insight_empty),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        else -> {
+            val context = insight.context
+            val fromAi: Boolean = insight.source == AdviceSource.REMOTE_LLM
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = if (fromAi) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant
+                    },
+                    contentColor = if (fromAi) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                ),
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        text = stringResource(
+                            if (fromAi) R.string.ai_insight_remote_title else R.string.ai_insight_local_title,
+                        ),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    if (context.checkInCount > 0) {
+                        Text(
+                            text = stringResource(
+                                R.string.ai_insight_stats,
+                                context.checkInCount,
+                                insightRpeText(context.averageRpe),
+                                insightWeightDeltaText(context.weightDeltaKg),
+                                context.currentStreak,
+                            ),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    } else {
+                        Text(
+                            text = stringResource(R.string.ai_insight_empty),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+
+                    val analysis = insight.text
+                    if (fromAi && !analysis.isNullOrBlank()) {
+                        Text(text = analysis, style = MaterialTheme.typography.bodyMedium)
+                    } else {
+                        Text(
+                            text = stringResource(R.string.ai_insight_local_body),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        if (insight.fallbackReason == RemoteFallbackReason.REMOTE_ERROR) {
+                            Text(
+                                text = stringResource(R.string.ai_insight_fallback),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    TextButton(onClick = onReload) {
+        Text(text = stringResource(R.string.ai_insight_reload))
+    }
+}
+
+/** 平均 RPE 展示：四舍五入到一位小数；无记录显示「暂无」（文案在 strings.xml）。 */
+@Composable
+private fun insightRpeText(rpe: Double?): String {
+    if (rpe == null) return stringResource(R.string.ai_insight_unknown)
+    val rounded: Double = kotlin.math.round(rpe * 10.0) / 10.0
+    return rounded.toString()
+}
+
+/** 体重变化展示：带符号一位小数（如 `+0.4` / `-0.6`）；不足两条记录显示「暂无」。 */
+@Composable
+private fun insightWeightDeltaText(deltaKg: Float?): String {
+    if (deltaKg == null) return stringResource(R.string.ai_insight_unknown)
+    val rounded: Float = kotlin.math.round(deltaKg * 10f) / 10f
+    val sign: String = if (rounded > 0f) "+" else ""
+    return "$sign$rounded"
 }
 
 /**

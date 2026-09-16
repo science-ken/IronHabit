@@ -176,4 +176,29 @@ class RemoteChatPromptBuilderTest {
 
         assertTrue(json.contains("\"usedDefaults\":true"))
     }
+
+    // ---------------- 子项 C：进度解读 ----------------
+
+    @Test
+    fun insightSystemPrompt_forbidsChangingNumbers_andAsksForNextStep() {
+        val prompt = RemoteChatPromptBuilder.buildInsightSystemPrompt()
+
+        assertTrue("必须禁止模型改动数字", prompt.contains("不得改动"))
+        assertTrue("应要求给下一步建议", prompt.contains("下一步建议"))
+        assertTrue("应禁止医疗诊断并要求就医", prompt.contains("咨询医生"))
+        assertTrue("应限制在 200 字以内", prompt.contains("200 字"))
+        assertTrue("应要求 JSON 且字段名为 answer", prompt.contains("{\"answer\""))
+    }
+
+    @Test
+    fun insightUserPrompt_carriesLocalStats() {
+        val json = RemoteChatPromptBuilder.buildInsightUserPrompt(context())
+
+        assertTrue("打卡条数", json.contains("\"count\":5"))
+        assertTrue("统计窗口", json.contains("\"windowDays\":7"))
+        assertTrue("平均 RPE", json.contains("\"averageRpe\":7.5"))
+        assertTrue("连续天数", json.contains("\"currentStreak\":9"))
+        assertTrue("体重变化", json.contains("\"weightDeltaKg\":0.4"))
+        assertTrue("今日饮食", json.contains("\"intakeKcal\":1500"))
+    }
 }

@@ -21,6 +21,8 @@ import com.ironhabit.app.domain.repository.ExerciseRepository
 import com.ironhabit.app.domain.repository.SettingsRepository
 import com.ironhabit.app.domain.usecase.AskCoachUseCase
 import com.ironhabit.app.domain.usecase.CoachAnswer
+import com.ironhabit.app.domain.usecase.CoachInsightResult
+import com.ironhabit.app.domain.usecase.CoachInsightUseCase
 import com.ironhabit.app.domain.usecase.ExplainDietUseCase
 import com.ironhabit.app.domain.usecase.GenerateDietPlanUseCase
 import com.ironhabit.app.domain.usecase.GenerateTrainingPlanUseCase
@@ -102,6 +104,8 @@ data class DietSummaryUi(
  * @property dietSummary 最近一次「生成饮食」的本地结果（`null` = 本次会话尚未生成过）
  * @property isGeneratingDiet 生成饮食进行中
  * @property dietAnalysis 远端 AI 的「为什么这样吃」分析；`null` = 未联网 / 失败（此时 UI 显示本地依据卡）
+ * @property insightResult 进度解读（子项 C）：数字永远来自本地聚合，联网成功时多一段 AI 文案
+ * @property isLoadingInsight 进度解读加载中（离线时为本地计算，很快）
  * @property errorRes 页面级错误资源 id
  * @property snackbarRes 一次性提示资源 id
  * @property snackbarArgs 提示的格式化参数（**类型必须与资源占位符一致**：`%1$d` 传 Int、`%1$s` 传 String；
@@ -136,6 +140,10 @@ data class AiCoachUiState(
     val isGeneratingDiet: Boolean = false,
     /** 远端 AI 的「为什么这样吃」分析；`null` = 未联网 / 失败 → UI 显示本地依据卡。 */
     val dietAnalysis: String? = null,
+    /** 进度解读（子项 C）。`null` = 还没算过；数字来自本地聚合，AI 文案可选。 */
+    val insightResult: CoachInsightResult? = null,
+    /** 进度解读进行中（离线只算本地聚合，通常瞬间完成）。 */
+    val isLoadingInsight: Boolean = false,
     @StringRes val errorRes: Int? = null,
     @StringRes val snackbarRes: Int? = null,
     val snackbarArgs: List<Any> = emptyList(),
@@ -152,15 +160,20 @@ data class AiCoachUiState(
 }
 
 /**
- * 「AI 教练」ViewModel（**本地规则版 · 完全离线**）。
+ * 「AI 教练」ViewModel（联网可选 · 本地规则兜底）。
  *
  * 职责：
  * - 暴露档案流与最新体重（用于「教练解读」的 BMR / 建议摄入）；
  * - 调 [GenerateTrainingPlanUseCase] 生成计划（**手改行由 UseCase 保证不被覆盖**）；
- * - 调 [SuggestExercisesUseCase] 取补充动作建议并支持「一键收入」（幂等由 UseCase 保证）。
+ * - 调 [GenerateDietPlanUseCase] 生成饮食（数值全部本地算，见 [ExplainDietUseCase] 只补文字）；
+ * - 调 [SuggestExercisesUseCase] 取补充动作建议并支持「一键收入」（幂等由 UseCase 保证）；
+ * - 调 [AskCoachUseCase] 做自由问答、[CoachInsightUseCase] 做进度解读。
  *
- * ⚠️ **诚实原则**：本页一律使用本地规则，**不含任何联网调用**；文案不得出现
- * "模型 / 智能生成 / AI 分析"等暗示云端的措辞。
+ * ⚠️ **诚实原则（每条都必须成立）**：
+ * 1. 只有**真的调用了 DeepSeek** 才允许显示「AI 分析 / AI 生成」字样（来源由 UseCase 如实回传）；
+ * 2. 未联网 / 未配 Key / 调用失败时一律回落本地规则，并**明确标注**是本地规则；
+ * 3. 任何数值（热量 / 蛋白质 / 打卡统计）都由本地纯函数计算，远端只提供文字；
+ * 4. 自由问答**不落库**，只在内存里保留最近若干轮。
  */
 @HiltViewModel
 class AiCoachViewModel @Inject constructor(
@@ -173,6 +186,7 @@ class AiCoachViewModel @Inject constructor(
     private val askCoach: AskCoachUseCase,
     private val generateDietPlan: GenerateDietPlanUseCase,
     private val explainDiet: ExplainDietUseCase,
+    private val coachInsight: CoachInsightUseCase,
     private val clock: Clock,
     private val timeZone: TimeZone,
 ) : ViewModel() {
@@ -215,10 +229,36 @@ class AiCoachViewModel @Inject constructor(
             }
         }
         loadSuggestions()
+        loadInsight()
         viewModelScope.launch {
             exerciseRepository.observeActive().collect { exercises ->
                 _uiState.update { it.copy(exerciseNames = exercises.associate { e -> e.id to e.name }) }
             }
+        }
+    }
+
+    /**
+     * 进度解读（子项 C）。
+     *
+     * 页面打开时自动跑一次（与 [loadSuggestions] 同口径）：离线只做**本地聚合**（瞬间完成，不发网络），
+     * 联网且已配 Key 时额外取一段 AI 文案（[CoachInsightResult.source] 会如实标注来源）。
+     * 失败也会返回带本地数字的结果，因此这里**不会**写 [AiCoachUiState.errorRes]。
+     *
+     * @param windowDays 统计窗口，默认 [CoachInsightUseCase.WINDOW_DAYS]（近 14 天）
+     */
+    fun loadInsight(windowDays: Int = CoachInsightUseCase.WINDOW_DAYS) {
+        if (_uiState.value.isLoadingInsight) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingInsight = true) }
+            val result: CoachInsightResult = try {
+                coachInsight(windowDays)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (unexpected: Exception) {
+                // 兜底：用例内部已把失败转成本地结果，这里只兜住意外异常。
+                CoachInsightResult()
+            }
+            _uiState.update { it.copy(isLoadingInsight = false, insightResult = result) }
         }
     }
 

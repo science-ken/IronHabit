@@ -10,6 +10,8 @@ import com.ironhabit.app.domain.repository.ExerciseRepository
 import com.ironhabit.app.domain.repository.SettingsRepository
 import com.ironhabit.app.domain.usecase.AskCoachUseCase
 import com.ironhabit.app.domain.usecase.CoachAnswer
+import com.ironhabit.app.domain.usecase.CoachInsightResult
+import com.ironhabit.app.domain.usecase.CoachInsightUseCase
 import com.ironhabit.app.domain.usecase.ExplainDietUseCase
 import com.ironhabit.app.domain.usecase.GenerateDietPlanUseCase
 import com.ironhabit.app.domain.usecase.GenerateTrainingPlanUseCase
@@ -53,6 +55,7 @@ class AiCoachViewModelChatTest {
     private val askCoach = mockk<AskCoachUseCase>()
     private val generateDietPlan = mockk<GenerateDietPlanUseCase>(relaxed = true)
     private val explainDiet = mockk<ExplainDietUseCase>(relaxed = true)
+    private val coachInsight = mockk<CoachInsightUseCase>(relaxed = true)
 
     /** 固定时钟：让 `todayEpochDay()` 可复现（本类只关心问答，故取任意确定时刻）。 */
     private val utc = TimeZone.UTC
@@ -70,6 +73,8 @@ class AiCoachViewModelChatTest {
             suggestions = emptyList(),
             source = AdviceSource.LOCAL_RULES,
         )
+        // init 里会自动跑一次进度解读（子项 C），这里显式桩掉，避免依赖 relaxed 的默认值。
+        coEvery { coachInsight(any()) } returns CoachInsightResult()
         return AiCoachViewModel(
             settingsRepository = settingsRepository,
             bodyMetricRepository = bodyMetricRepository,
@@ -80,6 +85,7 @@ class AiCoachViewModelChatTest {
             askCoach = askCoach,
             generateDietPlan = generateDietPlan,
             explainDiet = explainDiet,
+            coachInsight = coachInsight,
             clock = clock,
             timeZone = utc,
         )

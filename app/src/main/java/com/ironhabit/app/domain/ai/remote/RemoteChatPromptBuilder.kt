@@ -102,6 +102,42 @@ internal object RemoteChatPromptBuilder {
     }
 
     /**
+     * 「进度解读」的 system 段（子项 C）：只解读数字、给下一步建议，不得改数字、不做医疗诊断。
+     */
+    fun buildInsightSystemPrompt(): String = INSIGHT_SYSTEM_PROMPT
+
+    /**
+     * 「进度解读」的 user 段：近 N 天的**本地聚合数字**（打卡次数 / 平均 RPE / 体重变化 /
+     * 连续天数 / 今日饮食）。模型只负责解读，**不得改数字**。
+     */
+    fun buildInsightUserPrompt(context: CoachContext): String {
+        val payload = InsightPayload(
+            profile = ChatProfilePayload(
+                gender = context.profile.gender?.name,
+                age = context.profile.age,
+                heightCm = context.profile.heightCm,
+                goal = context.profile.goal.name,
+                equipment = context.profile.equipment.map { it.name },
+                injuryAreas = context.profile.injuryAreas.map { it.name },
+                dietaryAvoid = context.profile.dietaryAvoid.map { it.name },
+                injuryNote = context.profile.injuryNote,
+            ),
+            recentCheckIn = ChatCheckInPayload(
+                windowDays = context.windowDays,
+                count = context.checkInCount,
+                averageRpe = context.averageRpe,
+                currentStreak = context.currentStreak,
+            ),
+            weightDeltaKg = context.weightDeltaKg,
+            todayDiet = ChatDietPayload(
+                intakeKcal = context.todayIntakeKcal,
+                planKcal = context.todayPlanKcal,
+            ),
+        )
+        return chatJson.encodeToString(InsightPayload.serializer(), payload)
+    }
+
+    /**
      * 从模型返回文本里取出回答正文（`{"answer": "..."}`）。
      *
      * 宽松策略：
@@ -193,6 +229,15 @@ internal object RemoteChatPromptBuilder {
         val usedDefaults: Boolean,
     )
 
+    /** 「进度解读」的载荷（子项 C）：档案 + 近 N 天数字 + 今日饮食。 */
+    @Serializable
+    private data class InsightPayload(
+        val profile: ChatProfilePayload,
+        val recentCheckIn: ChatCheckInPayload,
+        val weightDeltaKg: Float? = null,
+        val todayDiet: ChatDietPayload,
+    )
+
     @Serializable
     private data class ChatAnswer(
         val answer: String? = null,
@@ -229,5 +274,21 @@ internal object RemoteChatPromptBuilder {
 
 输出格式：
 {"answer":"你今天的目标是……"}
+"""
+
+    /** 「进度解读」的 system 段：先讲进展、再给 1~2 条可执行的下一步；数字不得改。 */
+    private const val INSIGHT_SYSTEM_PROMPT: String = """
+你是一名用户的私人健身教练，本次只做一件事：用简体中文写一段「最近进展 + 下一步建议」。
+
+硬性规则：
+1. 下面给出的数字（打卡次数、平均 RPE、体重变化、连续天数、今日饮食）**都是事实：不得改动、不得重新计算**。
+2. 先说最近做得怎么样（出勤、强度、体重趋势），再给 1~2 条**具体可执行**的下一步建议（加多少重量或组数、怎么吃、怎么恢复）。
+3. 不做医疗诊断：涉及伤病、疾病、用药、孕期等内容只给一般性建议并明确提示"请咨询医生"。
+4. 只聊训练 / 饮食 / 恢复 / 坚持；其它话题礼貌拒答。
+5. 用简体中文回答，200 字以内。
+6. 只输出一个 JSON 对象（不要使用 Markdown 代码块围栏），形如 {"answer":"你的解读"}，把分析正文放进 answer 字段。
+
+输出格式：
+{"answer":"最近两周你出勤……"}
 """
 }

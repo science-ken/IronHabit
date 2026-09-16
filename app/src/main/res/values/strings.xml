@@ -405,6 +405,18 @@
     <string name="ai_diet_basis_body">依据体重、性别、年龄、身高估算基础代谢，再按目标与「今天是否训练日」调整；忌口已在候选食物上过滤</string>
     <string name="ai_diet_analysis_title">AI 分析 · 为什么这样吃</string>
 
+    <!-- 区块②C：进度解读（子项 C）—— 数字始终来自本地聚合，联网时另附 AI 解读 -->
+    <string name="ai_insight_section">进度解读</string>
+    <string name="ai_insight_hint">基于最近两周的打卡、强度与体重变化；联网时由 AI 给出下一步建议，离线则为本地小结</string>
+    <string name="ai_insight_remote_title">AI 分析 · 最近进展与下一步</string>
+    <string name="ai_insight_local_title">本地规则 · 最近小结</string>
+    <string name="ai_insight_stats">打卡 %1$d 次 · 平均 RPE %2$s · 体重变化 %3$s kg · 连续 %4$d 天</string>
+    <string name="ai_insight_unknown">暂无</string>
+    <string name="ai_insight_local_body">坚持比强度更重要：按计划出勤、每次训练都记下来，连续天数自然会涨。下一步可以小幅加重或加一组，别一次加太多。</string>
+    <string name="ai_insight_fallback">联网失败，已改用本地小结</string>
+    <string name="ai_insight_empty">最近两周还没有打卡记录，先完成一次训练再来解读</string>
+    <string name="ai_insight_reload">重新解读</string>
+
     <!-- 区块③：教练解读（剩余条目） -->
     <string name="ai_explain_intake">建议每日摄入约 %1$d kcal，蛋白质约 %2$d g</string>
     <string name="ai_explain_injury_swap">已按你的伤病（%1$s）排除相关动作</string>
