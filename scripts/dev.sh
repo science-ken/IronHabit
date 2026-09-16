@@ -100,7 +100,10 @@ case "${1:-help}" in
   boot) boot ;;
 
   build) cd "$ROOT" && "$GRADLE" :app:assembleDebug --console=plain ;;
-  test)  cd "$ROOT" && "$GRADLE" :app:testDebugUnitTest --console=plain ;;
+  # `test` 强制真实执行（--rerun-tasks）：否则 Gradle 可能 UP-TO-DATE / 命中 build cache 而不真跑，
+  # 让"测试通过"变成假象（2026-09-16 QA 复验时踩到：首次命中了 FROM-CACHE）。
+  # 只想快速看编译是否过 → 用 check。
+  test)  cd "$ROOT" && "$GRADLE" :app:testDebugUnitTest --rerun-tasks --console=plain ;;
   check) cd "$ROOT" && "$GRADLE" :app:assembleDebug :app:testDebugUnitTest --console=plain ;;
 
   install)
