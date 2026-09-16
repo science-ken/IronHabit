@@ -1,0 +1,316 @@
+package com.ironhabit.app.domain.usecase
+
+import com.ironhabit.app.domain.model.BodyMetricType
+import com.ironhabit.app.domain.model.BodyReview
+import com.ironhabit.app.domain.model.CheckIn
+import com.ironhabit.app.domain.model.DietReview
+import com.ironhabit.app.domain.model.Exercise
+import com.ironhabit.app.domain.model.ExerciseTrend
+import com.ironhabit.app.domain.model.ReviewNote
+import com.ironhabit.app.domain.model.TrainingReview
+import com.ironhabit.app.domain.model.WeekDayDetail
+import com.ironhabit.app.domain.model.WeekItemDetail
+import com.ironhabit.app.domain.model.WeeklyReview
+import com.ironhabit.app.domain.repository.BodyMetricRepository
+import com.ironhabit.app.domain.repository.CheckInRepository
+import com.ironhabit.app.domain.repository.ExerciseRepository
+import com.ironhabit.app.domain.repository.MealRepository
+import com.ironhabit.app.domain.repository.PlanRepository
+import javax.inject.Inject
+import kotlin.math.roundToInt
+import kotlinx.coroutines.flow.first
+import kotlinx.datetime.Clock
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+
+/**
+ * **把一周的数据算成一张复盘表**（P2，零联网、零 token）。
+ *
+ * 输入全是既有仓库（打卡 / 动作库 / 体重 / 饮食 / 计划），输出 [WeeklyReview]（纯数据）。
+ * 界面（周复盘卡"AI 会看到什么"）与数据包导出都只消费它的结果 —— 所以"数字从哪来"只有这一处。
+ *
+ * ## 🔒 不变量
+ * 1. **只读**：本用例**没有任何写操作**（不写打卡、不写计划、不写体重）。
+ * 2. **不猜**：拿不到的数据一律 `null`（体重、RPE、饮食），**不用 0 冒充**
+ *    （`0f` 会被读成"没变化/没吃"，那是编出来的结论）。
+ * 3. **时间只能来自注入的 [clock]**：不许 `System.currentTimeMillis()` / `LocalDate.now()`，
+ *    否则没法在单测里固定"今天是哪天"。
+ * 4. **确定性**：同输入必同输出（集合遍历顺序固定：动作按 id、明细按日期+动作 id）。
+ * 5. **7 天齐全**：`days` 恒为 7 项（含没打卡的空天），界面与导出都不需要补空逻辑。
+ *
+ * ## 算法（冻结版，逐条都有单测）
+ * - **周一取整**：`weekStart = epochDay - ((epochDay + 3) % 7 + 7) % 7`
+ *   （epochDay `0` = 1970-01-01 周四 → 该周周一 = `-3`，公式给 `-3` ✅，负数也正确）；
+ * - **趋势**：取「本周 + 前 3 周」共 4 个周桶；每个动作每周的值 = 该周内 `weightKg` 的最大值
+ *   （整周都没重量 → 该周"无记录"，**不记 0**）。本周有记录的动作才进 [TrainingReview.progressed] /
+ *   [TrainingReview.stalled]；`stagnantWeeks` 只在**有记录的周**之间连数
+ *   （中间断档不算"停滞"，否则一个刚开始练的动作第一周就会被判停滞）；
+ * - **饮食**：只算 `isActive == true` 的餐；当天这些餐 `kcal` 之和 > 0 才算"有记录的一天"；
+ *   日均是**有记录的天**的平均，不是 7 天平均（没记录的天不该把均值拉低）。
+ *
+ * @param weekStartEpochDay 目标周的周一（epochDay 口径）；`null` = 今天所在的那一周
+ */
+class BuildWeeklyReviewUseCase @Inject constructor(
+    private val checkInRepository: CheckInRepository,
+    private val exerciseRepository: ExerciseRepository,
+    private val bodyMetricRepository: BodyMetricRepository,
+    private val mealRepository: MealRepository,
+    private val planRepository: PlanRepository,
+    private val clock: Clock,
+    private val timeZone: TimeZone,
+) {
+
+    suspend operator fun invoke(weekStartEpochDay: Long? = null): WeeklyReview {
+        // ⚠️ 本机 kotlinx-datetime 的 `toEpochDays()` 返回 `Int`（仓库层用 `Long`）→ 显式转。
+        val today: Long = clock.now().toLocalDateTime(timeZone).date.toEpochDays().toLong()
+        val weekStart: Long = weekStartOf(weekStartEpochDay ?: today)
+        val weekEnd: Long = weekStart + DAYS_IN_WEEK - 1L
+
+        val weekCheckIns: List<CheckIn> = checkInRepository.observeBetween(weekStart, weekEnd).first()
+        val trendCheckIns: List<CheckIn> = checkInRepository
+            .observeBetween(weekStart - TREND_PREVIOUS_WEEKS * DAYS_IN_WEEK, weekEnd)
+            .first()
+        val exercises: Map<Long, Exercise> = exerciseRepository.observeActive().first()
+            .associateBy { exercise -> exercise.id }
+
+        val training: TrainingReview = buildTraining(
+            weekStartEpochDay = weekStart,
+            weekCheckIns = weekCheckIns,
+            trendCheckIns = trendCheckIns,
+            exercises = exercises,
+            plannedDays = planRepository.observePlannedWeekdays().first().size,
+        )
+        // 只算一次：body / diet 都会做仓库查询，算两遍既慢又可能出现不一致的快照。
+        val body: BodyReview = buildBody(weekStart = weekStart, weekEnd = weekEnd)
+        val diet: DietReview = buildDiet(weekStart = weekStart, weekEnd = weekEnd)
+
+        return WeeklyReview(
+            weekStartEpochDay = weekStart,
+            weekEndEpochDay = weekEnd,
+            training = training,
+            body = body,
+            diet = diet,
+            days = buildDays(weekStart = weekStart, weekCheckIns = weekCheckIns, exercises = exercises),
+            notes = buildNotes(
+                training = training,
+                body = body,
+                diet = diet,
+                weekEndEpochDay = weekEnd,
+                today = today,
+            ),
+        )
+    }
+
+    // ---------------- 训练 ----------------
+
+    private fun buildTraining(
+        weekStartEpochDay: Long,
+        weekCheckIns: List<CheckIn>,
+        trendCheckIns: List<CheckIn>,
+        exercises: Map<Long, Exercise>,
+        plannedDays: Int,
+    ): TrainingReview {
+        val totalVolume: Float = weekCheckIns.sumOf { checkIn ->
+            val weight: Float = checkIn.weightKg ?: return@sumOf 0.0
+            (weight * checkIn.completedReps * checkIn.completedSets).toDouble()
+        }.toFloat()
+
+        val rpeValues: List<Int> = weekCheckIns.mapNotNull { checkIn -> checkIn.rpe }
+
+        val trends: List<ExerciseTrend> = buildTrends(
+            weekStartEpochDay = weekStartEpochDay,
+            trendCheckIns = trendCheckIns,
+            exercises = exercises,
+            weekCheckIns = weekCheckIns,
+        )
+
+        return TrainingReview(
+            plannedDays = plannedDays,
+            completedDays = weekCheckIns.map { it.dateEpochDay }.distinct().size,
+            totalVolumeKg = totalVolume,
+            totalSets = weekCheckIns.sumOf { it.completedSets },
+            avgRpe = if (rpeValues.isEmpty()) {
+                null
+            } else {
+                val average: Float = rpeValues.sum().toFloat() / rpeValues.size
+                (average * 10).roundToInt() / 10f
+            },
+            progressed = trends
+                .filter { it.latestWeightKg != null && it.previousWeightKg != null && it.latestWeightKg > it.previousWeightKg }
+                .sortedBy { it.exerciseName },
+            stalled = trends
+                .filter { it.stagnantWeeks >= TrainingReview.STALLED_WEEKS_THRESHOLD }
+                .sortedWith(compareByDescending<ExerciseTrend> { it.stagnantWeeks }.thenBy { it.exerciseName }),
+        )
+    }
+
+    /**
+     * 周对周趋势（4 个周桶）。
+     *
+     * 桶下标 `0..2` = 前 3 周（越早越小），`3` = 本周。
+     */
+    private fun buildTrends(
+        weekStartEpochDay: Long,
+        trendCheckIns: List<CheckIn>,
+        exercises: Map<Long, Exercise>,
+        weekCheckIns: List<CheckIn>,
+    ): List<ExerciseTrend> {
+        val currentIds: Set<Long> = weekCheckIns.mapTo(LinkedHashSet()) { it.exerciseId }
+        if (currentIds.isEmpty()) return emptyList()
+
+        val windowStart: Long = weekStartOf(weekStartEpochDay) - TREND_PREVIOUS_WEEKS * DAYS_IN_WEEK
+        val weightByExerciseByBucket: MutableMap<Long, MutableMap<Int, Float>> = HashMap()
+        for (checkIn in trendCheckIns) {
+            val weight: Float = checkIn.weightKg ?: continue
+            val bucket: Int = ((checkIn.dateEpochDay - windowStart) / DAYS_IN_WEEK).toInt()
+            if (bucket < 0 || bucket > TREND_PREVIOUS_WEEKS) continue
+            val perBucket: MutableMap<Int, Float> = weightByExerciseByBucket
+                .getOrPut(checkIn.exerciseId) { HashMap() }
+            val existing: Float? = perBucket[bucket]
+            if (existing == null || weight > existing) perBucket[bucket] = weight
+        }
+
+        return currentIds
+            .sorted()
+            .mapNotNull { exerciseId ->
+                val name: String = exercises[exerciseId]?.name?.trim()
+                    ?.takeIf { it.isNotEmpty() }
+                    ?: return@mapNotNull null   // 查不到名字的动作直接跳过（不写"未知动作"占位）
+                val buckets: Map<Int, Float> = weightByExerciseByBucket[exerciseId].orEmpty()
+                val latest: Float = buckets[CURRENT_BUCKET] ?: return@mapNotNull null
+                val previous: Float? = buckets[PREVIOUS_BUCKET]
+                ExerciseTrend(
+                    exerciseId = exerciseId,
+                    exerciseName = name,
+                    previousWeightKg = previous,
+                    latestWeightKg = latest,
+                    stagnantWeeks = stagnantWeeks(latest = latest, buckets = buckets),
+                )
+            }
+    }
+
+    /**
+     * 连续几周"有记录但没涨"。
+     *
+     * 只统计**有记录的周**：断档（该周没练这个动作）就停止计数 ——
+     * 否则一个刚开始练的动作第一周就会被判成"停滞 3 周"。
+     */
+    private fun stagnantWeeks(latest: Float, buckets: Map<Int, Float>): Int {
+        var stagnant: Int = 0
+        var bucket: Int = PREVIOUS_BUCKET
+        while (bucket >= 0) {
+            val value: Float = buckets[bucket] ?: break
+            if (latest > value) break
+            stagnant++
+            bucket--
+        }
+        return stagnant
+    }
+
+    // ---------------- 身体 ----------------
+
+    private suspend fun buildBody(weekStart: Long, weekEnd: Long): BodyReview {
+        val weights: List<Float> = bodyMetricRepository.observeByType(BodyMetricType.WEIGHT).first()
+            .filter { metric -> metric.dateEpochDay in weekStart..weekEnd }
+            .sortedBy { metric -> metric.dateEpochDay }
+            .map { metric -> metric.value }
+
+        return BodyReview(
+            startWeightKg = weights.firstOrNull(),
+            latestWeightKg = weights.lastOrNull(),
+        )
+    }
+
+    // ---------------- 饮食 ----------------
+
+    private suspend fun buildDiet(weekStart: Long, weekEnd: Long): DietReview {
+        var loggedDays: Int = 0
+        var kcalSum: Int = 0
+        var proteinSum: Double = 0.0
+
+        var day: Long = weekStart
+        while (day <= weekEnd) {
+            val meals = mealRepository.getMealsIncludingInactive(day).filter { meal -> meal.isActive }
+            val kcal: Int = meals.sumOf { meal -> meal.kcal }
+            if (kcal > 0) {
+                loggedDays++
+                kcalSum += kcal
+                proteinSum += meals.sumOf { meal -> meal.proteinG }
+            }
+            day++
+        }
+
+        return DietReview(
+            loggedDays = loggedDays,
+            avgKcal = if (loggedDays == 0) null else (kcalSum.toFloat() / loggedDays).roundToInt(),
+            avgProteinG = if (loggedDays == 0) null else (proteinSum / loggedDays).roundToInt(),
+        )
+    }
+
+    // ---------------- 明细 ----------------
+
+    private fun buildDays(
+        weekStart: Long,
+        weekCheckIns: List<CheckIn>,
+        exercises: Map<Long, Exercise>,
+    ): List<WeekDayDetail> {
+        val byDay: Map<Long, List<CheckIn>> = weekCheckIns.groupBy { checkIn -> checkIn.dateEpochDay }
+
+        return (0 until DAYS_IN_WEEK).map { offset ->
+            val day: Long = weekStart + offset
+            val items: List<WeekItemDetail> = byDay[day].orEmpty()
+                .sortedBy { checkIn -> checkIn.exerciseId }
+                .mapNotNull { checkIn ->
+                    val name: String = exercises[checkIn.exerciseId]?.name?.trim()
+                        ?.takeIf { it.isNotEmpty() }
+                        ?: return@mapNotNull null
+                    WeekItemDetail(
+                        exerciseId = checkIn.exerciseId,
+                        exerciseName = name,
+                        sets = checkIn.completedSets,
+                        reps = checkIn.completedReps,
+                        weightKg = checkIn.weightKg,
+                        rpe = checkIn.rpe,
+                        note = checkIn.notes,
+                    )
+                }
+            WeekDayDetail(dateEpochDay = day, items = items)
+        }
+    }
+
+    // ---------------- 诚实说明 ----------------
+
+    private fun buildNotes(
+        training: TrainingReview,
+        body: BodyReview,
+        diet: DietReview,
+        weekEndEpochDay: Long,
+        today: Long,
+    ): List<ReviewNote> = buildList {
+        if (training.completedDays == 0) add(ReviewNote.NO_CHECKIN)
+        if (training.completedDays > 0 && training.avgRpe == null) add(ReviewNote.NO_RPE)
+        if (body.startWeightKg == null) add(ReviewNote.NO_WEIGHT)
+        if (diet.loggedDays == 0) add(ReviewNote.NO_DIET)
+        if (weekEndEpochDay > today) add(ReviewNote.WEEK_IN_PROGRESS)
+    }
+
+    private companion object {
+        const val DAYS_IN_WEEK: Long = 7
+
+        /** 趋势窗口里"本周之前"还有几个周桶。 */
+        const val TREND_PREVIOUS_WEEKS: Int = 3
+
+        /** 本周所在的桶下标。 */
+        const val CURRENT_BUCKET: Int = TREND_PREVIOUS_WEEKS
+
+        /** 上周所在的桶下标。 */
+        const val PREVIOUS_BUCKET: Int = TREND_PREVIOUS_WEEKS - 1
+
+        /** epochDay `0`（1970-01-01，周四）距其所在周的周一（`-3`）的偏移。 */
+        const val MONDAY_ALIGN_OFFSET: Long = 3
+
+        /** 取某个 epochDay 所在周的周一。 */
+        fun weekStartOf(epochDay: Long): Long =
+            epochDay - (((epochDay + MONDAY_ALIGN_OFFSET) % DAYS_IN_WEEK + DAYS_IN_WEEK) % DAYS_IN_WEEK)
+    }
+}
