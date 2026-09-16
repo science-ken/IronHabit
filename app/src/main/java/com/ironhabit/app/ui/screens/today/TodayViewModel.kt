@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
@@ -85,6 +86,10 @@ class TodayViewModel @Inject constructor(
     /** 日期游标：默认今天；由日期栏 chip / `‹ ›` 跨周改写。 */
     private val selectedEpochDay = MutableStateFlow(todayEpochDay())
 
+    /** 「每周相同」那份计划是否存在（存在 = 已开启）。 */
+    private val repeatWeeklyFlow: Flow<Boolean> =
+        planRepository.observeRepeatPlan().map { plans -> plans.isNotEmpty() }
+
     /** 数据流（Room 触发 → 聚合视图 → UiState），按 `stateIn` 转为冷启动的 StateFlow；支持手动重试。 */
     private val overviewState: StateFlow<TodayUiState> =
         combine(retryTrigger, selectedEpochDay) { _, day -> day }
@@ -97,11 +102,13 @@ class TodayViewModel @Inject constructor(
                         combine(
                             getTodayOverview(day),
                             getTodayMeals(day),
-                        ) { overview, meals ->
+                            repeatWeeklyFlow,
+                        ) { overview, meals, repeatOn ->
                             overview.toUiState().copy(
                                 meals = meals.meals,
                                 mealTotals = meals.totals,
                                 dietTarget = meals.target,
+                                isRepeatWeeklyOn = repeatOn,
                             )
                         }
                     }
@@ -369,8 +376,44 @@ class TodayViewModel @Inject constructor(
         }
     }
 
-    /** 消费一次 Snackbar（弹完后由 UI 调用）。 */
-    fun onSnackbarShown() {
+    /**
+     * 切换「每周相同」。
+     *
+     * - **打开**：把**这一周**的计划复制成"以后每周都用这份"（该周没有自己的计划时是空操作）；
+     * - **关闭**：把那份额外的计划整体软停用 —— 之后没有单独排计划的周就是空的。
+     *
+     * 沿用 `PlanRepository.setRepeatWeekly`（只 upsert / 只软停用，**没有 DELETE**）。
+     */
+    fun onToggleRepeatWeekly(enabled: Boolean) {
+        if (_uiState.value.isTogglingRepeatWeekly) return
+        val targetWeek: Long = DateUtils.weekStartMon1(selectedEpochDay.value)
+
+        viewModelScope.launch {
+            _uiState.update { state -> state.copy(isTogglingRepeatWeekly = true) }
+            try {
+                planRepository.setRepeatWeekly(weekStartEpochDay = targetWeek, enabled = enabled)
+                _uiState.update { state ->
+                    state.copy(
+                        isTogglingRepeatWeekly = false,
+                        snackbarRes = if (enabled) {
+                            R.string.msg_repeat_weekly_on
+                        } else {
+                            R.string.msg_repeat_weekly_off
+                        },
+                        snackbarArgs = emptyList(),
+                    )
+                }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (throwable: Throwable) {
+                _uiState.update { state ->
+                    state.copy(isTogglingRepeatWeekly = false, errorRes = R.string.error_generic)
+                }
+            }
+        }
+    }
+
+    /** 消费一次 Snackbar（弹完后由 UI 调用）。 */    fun onSnackbarShown() {
         _uiState.update { state ->
             state.copy(snackbarRes = null, snackbarArgs = emptyList())
         }
@@ -452,6 +495,10 @@ class TodayViewModel @Inject constructor(
                 plannedWeekdays = data.plannedWeekdays,
                 selectedWeekStartEpochDay = DateUtils.weekStartMon1(data.dateEpochDay),
                 hasPlanThisWeek = data.plannedWeekdays.isNotEmpty(),
+                // ⚠️ 这个字段必须一起搬过来：`overviewState` 里算好的值如果不落到 `_uiState`，
+                // 「每周相同」开关就会永远显示"关"（真机上就是这么踩到的：点了、库里也写了，
+                // 但开关弹回去，看着像"点了没反应"）。
+                isRepeatWeeklyOn = data.isRepeatWeeklyOn,
                 todayEpochDay = todayEpochDay(),
                 errorRes = null,
                 snackbarRes = streakRes ?: state.snackbarRes,

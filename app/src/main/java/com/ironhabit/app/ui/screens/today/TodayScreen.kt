@@ -1,9 +1,10 @@
-package com.ironhabit.app.ui.screens.today
+﻿package com.ironhabit.app.ui.screens.today
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -11,6 +12,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -195,6 +197,15 @@ fun TodayScreen(
                                 enabled = !isFutureDay,
                             )
                         }
+                        // 「每周相同」开关（P3）：只在这一周**自己有**计划时出现
+                        //（正在显示"每周相同"那份时，开关已经开着，用来关掉它）。
+                        if (!isFutureDay) {
+                            RepeatWeeklyRow(
+                                checked = uiState.isRepeatWeeklyOn,
+                                enabled = !uiState.isTogglingRepeatWeekly,
+                                onCheckedChange = viewModel::onToggleRepeatWeekly,
+                            )
+                        }
                     }
                 }
 
@@ -363,5 +374,46 @@ private fun WeekPlanEmptyCard(
                 Text(text = stringResource(R.string.action_create_plan_manual))
             }
         }
+    }
+}
+
+/**
+ * 「每周相同」开关行（P3）。
+ *
+ * 语义：勾上之后，**没有单独排计划的周**都会用这一份（等于以前那个"模板"）；
+ * 取消之后，没排计划的周就是空的，只显示「创建训练计划」。
+ *
+ * 界面刻意用"人话"解释后果（[R.string.hint_repeat_weekly]），因为"模板 / 循环 / 专属"
+ * 这些词对用户没有意义 —— 他关心的是"下周会不会自动有课"。
+ */
+@Composable
+private fun RepeatWeeklyRow(
+    checked: Boolean,
+    enabled: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = stringResource(R.string.action_repeat_weekly),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = stringResource(R.string.hint_repeat_weekly),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            enabled = enabled,
+        )
     }
 }

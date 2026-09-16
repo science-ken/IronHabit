@@ -65,6 +65,14 @@ data class TodayUiState(
     val hasPlanThisWeek: Boolean = false,
     /** 正在为这一周生成训练计划（按钮禁用 + 文案更换）。 */
     val isCreatingPlan: Boolean = false,
+    /**
+     * 「每周相同」是否已开启（= 存在那份"以后每周都用这份"的计划）。
+     *
+     * 语义：没有单独排计划的周，都会显示这一份。
+     */
+    val isRepeatWeeklyOn: Boolean = false,
+    /** 正在切换「每周相同」（开关禁用，避免连点）。 */
+    val isTogglingRepeatWeekly: Boolean = false,
     val todayEpochDay: Long = 0L,
     val errorRes: Int? = null,
     val snackbarRes: Int? = null,

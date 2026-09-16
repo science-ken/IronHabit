@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
+import kotlinx.datetime.TimeZone
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Rule
@@ -47,6 +48,8 @@ class AddEditPlanViewModelInputLimitsTest {
             exerciseRepository = exerciseRepository,
             planRepository = planRepository,
             clock = Clock.System,
+            // P3：手动新增计划要落到"当前这一周"，所以 VM 多了一个 timeZone 参数。
+            timeZone = TimeZone.UTC,
         )
     }
 

@@ -82,6 +82,8 @@ class TodayViewModelDateCursorTest {
         every { getTodayMeals.invoke(today) } returns flowOf(TodayMeals())
         every { getTodayMeals.invoke(futureDay) } returns flowOf(TodayMeals())
         every { planRepository.observePlannedWeekdays() } returns flowOf(emptyList())
+        // P3：今日页会读「每周相同」那份是否存在（开关状态）。
+        every { planRepository.observeRepeatPlan() } returns flowOf(emptyList())
         every { checkInRepository.observeActiveDaysSince(any()) } returns flowOf(emptyList())
 
         return TodayViewModel(
