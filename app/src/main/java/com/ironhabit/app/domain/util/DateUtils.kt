@@ -30,4 +30,24 @@ object DateUtils {
     /** 由 epochDay 计算星期：`1` = 周一 … `7` = 周日（`LocalDate.dayOfWeek.value` 天然满足）。 */
     fun weekdayMon1(epochDay: Long): Int =
         LocalDate.fromEpochDays(epochDay.toInt()).dayOfWeek.value
+
+    /**
+     * 取该 epochDay **所在周的周一**（P3：计划按周存放，处处要这一维）。
+     *
+     * `weekStart = epochDay − (((epochDay + 3) % 7 + 7) % 7)`：
+     * epochDay `0` = 1970-01-01 是**周四**，故它所在周的周一是 `-3`；
+     * 外层再补一次 `+7 % 7` 是因为 Kotlin 的 `%` 对负数取余仍为负数。
+     *
+     * ⚠️ 全工程**只有这一处**实现这个换算：`PlanRepositoryImpl`、`GetTodayOverviewUseCase`、
+     * `BuildWeeklyReviewUseCase.weekStartOf` 都转发到这里（数据库迁移 `MIGRATION_4_5` 里那份
+     * 是 SQL 侧的一次性副本，注释里互相点名）。
+     */
+    fun weekStartMon1(epochDay: Long): Long =
+        epochDay - (((epochDay + MONDAY_ALIGN_OFFSET) % DAYS_IN_WEEK + DAYS_IN_WEEK) % DAYS_IN_WEEK)
+
+    /** 一周的天数。 */
+    const val DAYS_IN_WEEK: Long = 7
+
+    /** epochDay `0`（周四）距其所在周周一的偏移。 */
+    private const val MONDAY_ALIGN_OFFSET: Long = 3
 }

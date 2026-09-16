@@ -16,6 +16,7 @@ import com.ironhabit.app.domain.util.DateUtils
 import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 
 /**
  * 组装「今日」聚合视图（架构 §3.2 / §4.2）。
@@ -35,15 +36,19 @@ class GetTodayOverviewUseCase @Inject constructor(
 
     operator fun invoke(epochDay: Long): Flow<TodayOverview> {
         val weekday: Int = DateUtils.weekdayMon1(epochDay)
+        // P3：计划按周存放 —— 看哪天就取**那一天所在周**的计划。
+        // 翻到下一周且那一周还没排计划时，这里会拿到空列表 → 界面显示「创建训练计划」。
+        val weekStart: Long = DateUtils.weekStartMon1(epochDay)
 
-        val plansFlow = planRepository.observePlansForDay(weekday)
+        val plansFlow = planRepository.observeEffectivePlanForDay(weekday, weekStart)
         val todayCheckInsFlow = checkInRepository.observeByDate(epochDay)
         val exercisesFlow = exerciseRepository.observeActive()
         val activeDaysFlow = checkInRepository.observeActiveDaysSince(SINCE_EPOCH_DAY)
         val habitsFlow = habitRepository.observeActiveHabits()
         val habitLogsFlow = habitRepository.observeLogsBetween(SINCE_EPOCH_DAY, epochDay)
-        // 「应做日」来源：已排计划里的星期（休息日不打断连续训练记录）。
-        val plannedWeekdaysFlow = planRepository.observePlannedWeekdays()
+        // 「应做日」来源：**那一周**已排计划里的星期（休息日不打断连续训练记录）。
+        val plannedWeekdaysFlow = planRepository.observeEffectivePlanForWeek(weekStart)
+            .map { plans -> plans.map { plan -> plan.dayOfWeek }.distinct().sorted() }
 
         val coreFlow: Flow<OverviewCore> = combine(
             plansFlow,

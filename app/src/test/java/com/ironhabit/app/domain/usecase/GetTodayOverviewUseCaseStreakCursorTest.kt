@@ -54,13 +54,14 @@ class GetTodayOverviewUseCaseStreakCursorTest {
     )
 
     private fun stubEmptyExceptActiveDays(activeDays: List<Long>) {
-        every { planRepository.observePlansForDay(any()) } returns flowOf(emptyList())
+        // P3：计划按周取 —— 用例现在调的是带 `weekStartEpochDay` 的那两个方法。
+        every { planRepository.observeEffectivePlanForDay(any(), any()) } returns flowOf(emptyList())
         every { checkInRepository.observeByDate(any()) } returns flowOf(emptyList<CheckIn>())
         every { exerciseRepository.observeActive() } returns flowOf(emptyList<Exercise>())
         every { checkInRepository.observeActiveDaysSince(any()) } returns flowOf(activeDays)
         every { habitRepository.observeActiveHabits() } returns flowOf(emptyList<Habit>())
         every { habitRepository.observeLogsBetween(any(), any()) } returns flowOf(emptyList<HabitLog>())
-        every { planRepository.observePlannedWeekdays() } returns flowOf(emptyList())
+        every { planRepository.observeEffectivePlanForWeek(any()) } returns flowOf(emptyList())
     }
 
     @Test

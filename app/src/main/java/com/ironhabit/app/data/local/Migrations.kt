@@ -2,6 +2,9 @@ package com.ironhabit.app.data.local
 
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import kotlinx.datetime.Clock
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 
 /**
  * v1 → v2：支持逐组打卡 / RPE / 动作三态来源 / 多肌群 / 备注 / 习惯目标值 / 计划用户改动标记。
@@ -160,3 +163,47 @@ val MIGRATION_3_4: Migration = object : Migration(3, 4) {
         )
     }
 }
+
+/**
+ * v4 → v5：把"每周循环"变成**每一周各自一份计划**（用户 2026-09-16 拍板）。
+ *
+ * ## 为什么要有这一步
+ * v4 及以前，`week_plans` 里那份计划是**模板**：它自动套用到每一周，所以"下一周"永远和这一周
+ * 一模一样，用户既看不到"下周没排计划"的状态，也没法只给某一周换安排。
+ * 从 v5 起：**计划按周存放**，某一周没有计划就是没有 —— 界面只给一个「创建训练计划」入口
+ * （自己创建 / 让 AI 生成）；想让某一份计划一直重复，用户显式勾「每周相同」。
+ *
+ * ## 这一步做什么
+ * 把现有的"模板行"（`week_start_epoch_day = 0`）**落到当前这一周**（本周一）。
+ * 于是：**你今天看到的还是同一份计划**（它变成"本周的计划"），而**从下周开始是空的**，
+ * 需要你创建、让 AI 生成，或者勾「每周相同」让它一直重复 —— 正是用户要的行为。
+ *
+ * ⚠️ 迁移里读了一次**设备当前时间**（唯一一处这么做的地方）：这是一次性数据搬家，
+ * 必须知道"现在是哪一周"。全新安装不会跑这条迁移（直接按实体建表）。
+ *
+ * 约束（与其它迁移同）：只 `UPDATE`，**没有任何 `DELETE` / `DROP COLUMN` / `RENAME COLUMN`**。
+ */
+val MIGRATION_4_5: Migration = object : Migration(4, 5) {
+
+    override fun migrate(db: SupportSQLiteDatabase) {
+        val todayEpochDay: Long = Clock.System.now()
+            .toLocalDateTime(TimeZone.currentSystemDefault())
+            .date
+            .toEpochDays()
+            .toLong()
+        // 周一取整：epochDay 0 = 1970-01-01（周四）→ 该周周一 = -3（公式与 BuildWeeklyReviewUseCase 同）。
+        val weekStartEpochDay: Long =
+            todayEpochDay - (((todayEpochDay + MONDAY_ALIGN_OFFSET) % DAYS_IN_WEEK + DAYS_IN_WEEK) % DAYS_IN_WEEK)
+
+        db.execSQL(
+            "UPDATE week_plans SET week_start_epoch_day = $weekStartEpochDay " +
+                "WHERE week_start_epoch_day = 0"
+        )
+    }
+}
+
+/** 周一取整用的常量（与 `BuildWeeklyReviewUseCase` 同一套规则）。 */
+private const val DAYS_IN_WEEK: Long = 7
+
+/** epochDay `0`（周四）距其所在周周一的偏移。 */
+private const val MONDAY_ALIGN_OFFSET: Long = 3

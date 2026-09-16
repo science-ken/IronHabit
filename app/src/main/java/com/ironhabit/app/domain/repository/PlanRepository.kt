@@ -11,6 +11,29 @@ interface PlanRepository {
     /** 观察某星期（`1..7`）的启用计划条目；联表过滤已停用动作。 */
     fun observePlansForDay(dayOfWeek: Int): Flow<List<WeekPlan>>
 
+    // ---------------- P3：按周取计划（默认路径）----------------
+
+    /**
+     * **这一天的生效计划**（P3 主入口）：`weekStartEpochDay` 那一周有专属计划就用它，
+     * 否则用「每周相同」那份，两份都没有 → **空列表**（界面显示「创建训练计划」）。
+     *
+     * 判定逻辑在 [com.ironhabit.app.domain.usecase.WeekPlanWeekResolver]（纯函数，有单测）。
+     */
+    fun observeEffectivePlanForDay(dayOfWeek: Int, weekStartEpochDay: Long): Flow<List<WeekPlan>>
+
+    /** **某一周的生效计划**（不分星期；用于"下周计划"预览与周计划页）。 */
+    fun observeEffectivePlanForWeek(weekStartEpochDay: Long): Flow<List<WeekPlan>>
+
+    /** 「每周相同」的那份计划（`weekStartEpochDay = 0`）。 */
+    fun observeRepeatPlan(): Flow<List<WeekPlan>>
+
+    /**
+     * 勾选 / 取消「每周相同」（把某一周的计划变成"以后每周都用这份"/取消它）。
+     *
+     * @return 复制 / 停用的行数（`0` = 该周本来没有自己的计划，勾选无意义）
+     */
+    suspend fun setRepeatWeekly(weekStartEpochDay: Long, enabled: Boolean): Int
+
     /** 观察全部启用计划条目（按 `dayOfWeek`、`sortOrder` 升序）。 */
     fun observeAll(): Flow<List<WeekPlan>>
 

@@ -6,6 +6,7 @@ import com.ironhabit.app.data.local.AppDatabase
 import com.ironhabit.app.data.local.MIGRATION_1_2
 import com.ironhabit.app.data.local.MIGRATION_2_3
 import com.ironhabit.app.data.local.MIGRATION_3_4
+import com.ironhabit.app.data.local.MIGRATION_4_5
 import com.ironhabit.app.data.local.dao.BodyMetricDao
 import com.ironhabit.app.data.local.dao.CheckInDao
 import com.ironhabit.app.data.local.dao.ExerciseDao
@@ -49,7 +50,7 @@ object DatabaseModule {
         AppDatabase::class.java,
         DATABASE_NAME,
     )
-        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
         .build()
 
     @Provides
