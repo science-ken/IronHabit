@@ -164,28 +164,12 @@ object LocalRuleAdvisor : PlanAdvisor {
     )
 
     /**
-     * 伤病部位 → **安全的邻近肌群**（P1：「伤病从排除改为替代」的数据表）。
+     * 训练重点 → 该重点对应的肌群标签（`internal` 便于单测直接断言"相邻两天重点不相交"）。
      *
-     * 语义：当某伤病把 [INJURY_AGGRAVATED_TAGS] 里的肌群挡掉之后，**改用这里的肌群**继续练同一天，
-     * 而不是让那天变空 / 整周少一个部位。
-     *
-     * ⚠️ **诚实登记**：实体层只有"肌群标签"这一层粒度，**没有**"关节角度 / 动作风险"字段，
-     * 所以这是**粗粒度避让**（例如膝伤时用臀部/核心替代腿部），**不是医学建议**。
-     * 真正个性化的避让必须由用户自己确认（`isUserEdited` 手改行永远优先）。
+     * ⚠️ P1 早期还有一张 `SAFE_SUBSTITUTION_TAGS`（"伤病 → 安全邻近肌群"白名单），
+     * **已删除**：替代的判定改成"去掉伤病后这一天还会不会有这个动作"（见 `buildDay`），
+     * 不再按肌群白名单挑。留着那张表会让下一个读代码的人以为规则还是白名单式的。
      */
-    private val SAFE_SUBSTITUTION_TAGS: Map<InjuryArea, Set<String>> = mapOf(
-        InjuryArea.KNEE to setOf(MuscleTag.GLUTE, MuscleTag.CORE, MuscleTag.ABS),
-        InjuryArea.ANKLE to setOf(MuscleTag.GLUTE, MuscleTag.CORE, MuscleTag.ABS),
-        InjuryArea.HIP to setOf(MuscleTag.CORE, MuscleTag.ABS, MuscleTag.BACK),
-        InjuryArea.LOWER_BACK to setOf(MuscleTag.LEG, MuscleTag.GLUTE, MuscleTag.CORE),
-        InjuryArea.SHOULDER to setOf(MuscleTag.BACK, MuscleTag.BICEPS, MuscleTag.CORE),
-        InjuryArea.NECK to setOf(MuscleTag.BACK, MuscleTag.BICEPS, MuscleTag.CORE),
-        InjuryArea.WRIST to setOf(MuscleTag.LEG, MuscleTag.GLUTE, MuscleTag.CORE),
-        InjuryArea.ELBOW to setOf(MuscleTag.LEG, MuscleTag.GLUTE, MuscleTag.CORE, MuscleTag.ABS),
-        InjuryArea.CARDIO to setOf(MuscleTag.CORE, MuscleTag.ABS),
-    )
-
-    /** 训练重点 → 该重点对应的肌群标签（`internal` 便于单测直接断言"相邻两天重点不相交"）。 */
     internal val FOCUS_TAGS: Map<TrainingFocus, Set<String>> = mapOf(
         TrainingFocus.FULL_BODY to setOf(MuscleTag.FULL_BODY, MuscleTag.CORE, MuscleTag.CARDIO),
         TrainingFocus.LOWER_BODY to setOf(
@@ -236,16 +220,17 @@ object LocalRuleAdvisor : PlanAdvisor {
 
         // 2) 器械 / 伤病过滤后的可用动作池。
         val forbidden: Set<String> = aggravatedTagsFor(profile.injuryAreas)
-        val eligible: List<Exercise> = library
+        val eligibleWithoutInjury: List<Exercise> = library
             .filter { it.id != 0L }
             .filter { it.isActive }
-            .filter { !it.aggravates(forbidden) }
             .filter { equipmentAllowed(profile, it) }
             .sortedBy { it.id }
+        val eligible: List<Exercise> = eligibleWithoutInjury.filter { !it.aggravates(forbidden) }
 
-        // 2b) P1：伤病"替代"用的**安全邻近肌群**标签（已剔除被任何一条伤病挡掉的标签）。
-        //     它有两个用途：① 标注这一天里"避让伤病之后实际练的"动作；② 写进生成依据。
-        val substitutionTagsHere: Set<String> = substitutionTags(profile.injuryAreas, forbidden)
+        // 2b) P1：被伤病挡掉的动作 → 用"替代"补位（见 buildDay 里的定义级判据）。
+        //     ⚠️ 诚实登记：实体层只有"肌群标签"这一层粒度（没有关节角度 / 动作风险字段），
+        //     所以避让是**粗粒度**的（例如膝伤时用臀部 / 核心替代腿部），**不是医学建议**；
+        //     真正个性化的避让由用户手改（`isUserEdited` 行永远优先）。
 
         val historyByExercise: Map<Long, ExerciseProgress> = history.associateBy { it.exerciseId }
 
@@ -264,12 +249,12 @@ object LocalRuleAdvisor : PlanAdvisor {
                 dayOfWeek = dayOfWeek,
                 focus = schedule[index % schedule.size],
                 eligible = eligible,
+                eligibleWithoutInjury = eligibleWithoutInjury,
                 blockedIds = occupiedByDay[dayOfWeek].orEmpty(),
                 historyByExercise = historyByExercise,
                 policy = policy,
                 bannedGroups = previousDayGroups,
                 forbiddenTags = forbidden,
-                substitutionTagsHere = substitutionTagsHere,
                 // P1：有氧配额 —— 前 `cardioPerWeek` 天各保证 1 个有氧动作（每天至多 1 个，
                 // 这样既满足"每周至少 N 个有氧"，又不会同一天里出现两个同肌群的有氧）。
                 cardioQuotaForThisDay = if (index < policy.cardioPerWeek) 1 else 0,
@@ -281,8 +266,9 @@ object LocalRuleAdvisor : PlanAdvisor {
         val notes: List<PlanNote> = drafts.flatMap { draft -> draft.notesOf() }
         val overloadCount: Int = notes.count { it.kind == PlanReason.PROGRESSIVE_OVERLOAD }
         val substitutedCount: Int = drafts.sumOf { draft -> draft.substitutedIds.size }
+        val narrowLibraryDays: Int = drafts.count { draft -> draft.repeatedGroupCount > 0 }
         val basisItems: List<PlanBasisItem> =
-            buildBasis(profile, policy, overloadCount, substitutedCount, history)
+            buildBasis(profile, policy, overloadCount, substitutedCount, narrowLibraryDays, history)
 
         return PlanProposal(
             days = drafts.map { draft -> draft.day },
@@ -315,6 +301,7 @@ object LocalRuleAdvisor : PlanAdvisor {
         policy: LoadPolicy,
         overloadCount: Int,
         substitutedCount: Int,
+        narrowLibraryDays: Int,
         history: List<ExerciseProgress>,
     ): List<PlanBasisItem> = buildList {
         add(PlanBasisItem(key = KEY_BASIS_FREQUENCY, args = listOf(policy.trainingDaysPerWeek)))
@@ -363,6 +350,11 @@ object LocalRuleAdvisor : PlanAdvisor {
         if (profile.equipment.isNotEmpty()) {
             add(PlanBasisItem(key = KEY_BASIS_EQUIPMENT))
         }
+        // 可用动作不够（伤病 + 器械过滤后主肌群种类 < 每天动作数）→ **如实说出来**：
+        // "这天不得不排两个同肌群动作"是用户该知道的事，不该让规则在这里静默。
+        if (narrowLibraryDays > 0) {
+            add(PlanBasisItem(key = KEY_BASIS_LIBRARY_TOO_NARROW, args = listOf(narrowLibraryDays)))
+        }
         if (overloadCount > 0) {
             add(PlanBasisItem(key = KEY_BASIS_OVERLOAD, args = listOf(overloadCount)))
         } else if (history.isEmpty()) {
@@ -375,12 +367,13 @@ object LocalRuleAdvisor : PlanAdvisor {
         dayOfWeek: Int,
         focus: TrainingFocus,
         eligible: List<Exercise>,
+        /** 同一批动作，但**没做伤病过滤**（只做器械过滤）：用来判断"哪些动作是因为伤病才进来的"。 */
+        eligibleWithoutInjury: List<Exercise>,
         blockedIds: Set<Long>,
         historyByExercise: Map<Long, ExerciseProgress>,
         policy: LoadPolicy,
         bannedGroups: Set<String>,
         forbiddenTags: Set<String>,
-        substitutionTagsHere: Set<String>,
         cardioQuotaForThisDay: Int,
     ): DayDraft {
         val focusTags: Set<String> = FOCUS_TAGS[focus].orEmpty()
@@ -389,51 +382,40 @@ object LocalRuleAdvisor : PlanAdvisor {
         // 优先命中该训练重点的肌群（[matching]）；若一个都没命中，则整批交由 [usable] 兜底补足。
         val matching: List<Exercise> = usable.filter { it.muscleGroups.any { tag -> tag in focusTags } }
 
-        // 修复 C1（单日去同质化）+ 修复 D2（跨重点补足）+ P1（不连排同肌群）：
-        // 先在 [matching] 里「一主肌群一个」，不足时在**当日全部可用动作** [usable] 里跨重点补足，
-        // 且同一主肌群每天至多出现一次 —— 详见 [selectForDay]。
-        val selected: MutableList<Exercise> = selectForDay(
-            primary = matching,
-            fallback = usable,
-            limit = policy.itemsPerDay,
+        // 修复 C1（单日去同质化）+ 修复 D2（跨重点补足）+ P1（不连排同肌群）+ P1 有氧配额：
+        // 抽成 [pickForDay] —— **替代判定的基线也必须走同一条路径**，
+        // 否则"有氧配额"这类后置步骤会让基线少一个动作，凭空多出一堆"替代"。
+        val selected: List<Exercise> = pickForDay(
+            usable = usable,
+            focusTags = focusTags,
+            policy = policy,
             bannedGroups = bannedGroups,
-        ).toMutableList()
+            cardioQuotaForThisDay = cardioQuotaForThisDay,
+        )
 
-        // P1-① 有氧配额：这一天若还没排到有氧，用有氧动作补/换一个（当天至多一个）。
-        // ⚠️ 这里是唯一**允许**"连续两天都有有氧"的地方：有氧不是需要 48 小时恢复的力量训练，
-        // 而"每周至少 N 个有氧"是档案推出来的硬配额 —— 配额优先于"不连排同肌群"。
-        if (cardioQuotaForThisDay > 0 && selected.none { it.category == ExerciseCategory.CARDIO }) {
-            val seenGroups: Set<String> = selected.mapTo(HashSet()) { groupKey(it) }
-            fun isUsableCardio(exercise: Exercise, avoidBanned: Boolean): Boolean =
-                exercise.category == ExerciseCategory.CARDIO &&
-                    groupKey(exercise) !in seenGroups &&
-                    (!avoidBanned || exercise.muscleGroups.none { tag -> tag in bannedGroups })
-
-            val candidate: Exercise? = usable.firstOrNull { isUsableCardio(it, avoidBanned = true) }
-                ?: usable.firstOrNull { isUsableCardio(it, avoidBanned = false) }
-            if (candidate != null) {
-                if (selected.size < policy.itemsPerDay) {
-                    selected += candidate
-                } else if (selected.isNotEmpty()) {
-                    // 满员：换掉最后一条（总数不变、仍不超上限）。
-                    selected[selected.lastIndex] = candidate
-                }
-            }
-        }
-
-        // P1-② 伤病替代：**当这一天的训练重点本身被伤病挡掉**（例：膝伤日的「腿部」），
-        // 这一天里来自"安全邻近肌群"（臀部 / 核心 …）的动作标成 [PlanReason.INJURY_SAFE] ——
-        // 它们就是避让伤病之后这一天**实际练的东西**。
-        // ⚠️ 不标注"没被挡掉的重点日"里的同类动作：那些是正常的训练重点安排，
-        // 标成"因伤病而替代"是**假理由**（宁可少标，也不编）。
-        val focusBlockedByInjury: Boolean =
-            substitutionTagsHere.isNotEmpty() && focusTags.any { tag -> tag in forbiddenTags }
-        val substitutedIds: Set<Long> = if (!focusBlockedByInjury) {
+        // P1-② 伤病替代：**"没有伤病时这一天会排什么"也算一遍，两次之差才是替代。**
+        //
+        // ⚠️ 旧实现用的是「这一天有**任意一个**重点标签被禁忌命中 → 就把所有安全肌群动作标成替代」。
+        // 那条判据会**编理由**：肩伤的禁忌里有"后肩"，而背日（UPPER_PULL）的标签是
+        // {背部, 后肩, 肱二头肌} —— 于是肩伤用户的背日里，正常的背部动作（如「超人式」）被标成
+        // "因避让肩伤而替换"，可它本来就是背日该练的东西。
+        //（这个缺陷由另一方 agent 的对抗性复核在 16 周 × 每周的样本上发现，见 REVIEW-p1p2.md F-1。）
+        //
+        // 现在的判据是**定义级**的：一个动作只有在"去掉伤病后就不会出现在这一天"时才算替代。
+        val substitutedIds: Set<Long> = if (forbiddenTags.isEmpty()) {
             emptySet()
         } else {
+            val baselineIds: Set<Long> = pickForDay(
+                usable = eligibleWithoutInjury.filter { it.id !in blockedIds },
+                focusTags = focusTags,
+                policy = policy,
+                bannedGroups = bannedGroups,
+                cardioQuotaForThisDay = cardioQuotaForThisDay,
+            ).mapTo(LinkedHashSet()) { exercise -> exercise.id }
             selected
-                .filter { exercise -> exercise.muscleGroups.any { tag -> tag in substitutionTagsHere } }
-                .mapTo(LinkedHashSet()) { exercise -> exercise.id }
+                .map { exercise -> exercise.id }
+                .filterNot { id -> id in baselineIds }
+                .toCollection(LinkedHashSet())
         }
 
         val items: List<Pair<PlanItemDraft, PlanNoteDetail>> =
@@ -469,7 +451,57 @@ object LocalRuleAdvisor : PlanAdvisor {
             day = PlannedDay(dayOfWeek = dayOfWeek, focus = focus, items = items.map { it.first }),
             notePairs = items.map { (item, detail) -> item to detail },
             substitutedIds = substitutedIds,
+            // 同一天里重复出现的"主肌群"个数（>0 = 可用动作不够，是被迫重复，不是规则想这样排）。
+            repeatedGroupCount = selected.size - selected.mapTo(HashSet()) { groupKey(it) }.size,
         )
+    }
+
+    /**
+     * 「这一天排哪些动作」的**唯一**实现（选动作 + 有氧配额）。
+     *
+     * 抽出来的原因：伤病替代的判定要"把同一天按不做伤病过滤再算一遍"，
+     * 而两边**必须走完全相同的路径** —— 否则后置步骤（有氧配额）会让基线少一个动作，
+     * 于是凭空多出一堆"替代"（真机回归：定义级断言在周1 多标了一个 id）。
+     */
+    private fun pickForDay(
+        usable: List<Exercise>,
+        focusTags: Set<String>,
+        policy: LoadPolicy,
+        bannedGroups: Set<String>,
+        cardioQuotaForThisDay: Int,
+    ): List<Exercise> {
+        val matching: List<Exercise> = usable.filter { exercise ->
+            exercise.muscleGroups.any { tag -> tag in focusTags }
+        }
+        val selected: MutableList<Exercise> = selectForDay(
+            primary = matching,
+            fallback = usable,
+            limit = policy.itemsPerDay,
+            bannedGroups = bannedGroups,
+        ).toMutableList()
+
+        // P1-① 有氧配额：这一天若还没排到有氧，用有氧动作补/换一个（当天至多一个）。
+        // ⚠️ 这里是唯一**允许**"连续两天都有有氧"的地方：有氧不是需要 48 小时恢复的力量训练，
+        // 而"每周至少 N 个有氧"是档案推出来的硬配额 —— 配额优先于"不连排同肌群"。
+        if (cardioQuotaForThisDay > 0 && selected.none { it.category == ExerciseCategory.CARDIO }) {
+            val seenGroups: Set<String> = selected.mapTo(HashSet()) { groupKey(it) }
+            fun isUsableCardio(exercise: Exercise, avoidBanned: Boolean): Boolean =
+                exercise.category == ExerciseCategory.CARDIO &&
+                    groupKey(exercise) !in seenGroups &&
+                    (!avoidBanned || exercise.muscleGroups.none { tag -> tag in bannedGroups })
+
+            val candidate: Exercise? = usable.firstOrNull { isUsableCardio(it, avoidBanned = true) }
+                ?: usable.firstOrNull { isUsableCardio(it, avoidBanned = false) }
+            if (candidate != null) {
+                if (selected.size < policy.itemsPerDay) {
+                    selected += candidate
+                } else if (selected.isNotEmpty()) {
+                    // 满员：换掉最后一条（总数不变、仍不超上限）。
+                    selected[selected.lastIndex] = candidate
+                }
+            }
+        }
+        return selected
     }
 
     /** 无历史数据时按位置给理由：首位 = 主项；力量动作 = 器械匹配；其余 = 辅助。 */
@@ -593,9 +625,18 @@ object LocalRuleAdvisor : PlanAdvisor {
     private fun focusSchedule(today: LocalDate, days: Int): List<TrainingFocus> {
         val pool: List<TrainingFocus> = FOCUS_ROTATION_POOL
         val start: Int = weekIndex(today) + ROTATION_PHASE
-        val rotating: List<TrainingFocus> = (0 until ROTATION_PER_WEEK).map { step ->
-            // Math.floorMod 保证负数周号也能安全落到 [0, size) 区间（不依赖 `%` 的符号）。
-            pool[Math.floorMod(start + step, pool.size)]
+        // ⚠️ 轮换池内部也要做相邻相交检查：池子顺序是
+        // [LOWER_BODY, UPPER_PUSH, FULL_BODY, CARDIO_CORE]，其中 **FULL_BODY 与 CARDIO_CORE 的标签相交**
+        // （都含"核心/有氧"）。旧实现只对"天数 > 3 追加的重点"查相交，前两个直接取相邻两项 ——
+        // 于是某些周号下会排出「周一 FULL_BODY / 周二 CARDIO_CORE」这种相邻两天同肌群的组合。
+        // （该缺陷由另一方 agent 的对抗性复核精确定位，见 REVIEW-p1p2.md F-4。）
+        val rotating: List<TrainingFocus> = buildList {
+            var step: Int = 0
+            while (size < ROTATION_PER_WEEK && step < FOCUS_SEARCH_GUARD) {
+                val candidate: TrainingFocus = pool[Math.floorMod(start + step, pool.size)]
+                if (isEmpty() || sharesNoMuscleTag(last(), candidate)) add(candidate)
+                step++
+            }
         }
         val base: List<TrainingFocus> = rotating + TrainingFocus.UPPER_PULL
         if (days <= base.size) return base.take(days)
@@ -644,10 +685,14 @@ object LocalRuleAdvisor : PlanAdvisor {
      *    例如背日只有「背 / 后肩 / 肱二头肌」3 个可匹配肌群时，第 4 个名额改由跨重点池里的
      *    （如「胸」）动作补上，而**不是**把「背」重复排第二次（旧实现正是在此同质化）；
      *    P1 起这一步还会**跳过 [bannedGroups]**（前一天刚练过的肌群）→ 不连排同肌群；
-     * 3. **退化兜底**：仅当 [fallback] 里的主肌群种类本就少于 [limit]（例如整个动作库只有一种肌群）时，
-     *    才按序补齐剩余名额（**允许重复肌群**）—— 否则会把一天排空。
-     *    真实内置库有 12–15 种主肌群，第 3 步**永不触发**
-     *    （见 `LocalRuleAdvisorTest.planWeek_overManyWeeks_neverDuplicatesPrimaryMuscleWithinADay`）。
+     * 3. **退化兜底**：仅当 [fallback] 里的主肌群种类本就少于 [limit] 时，才按序补齐剩余名额
+     *    （**允许重复肌群**）—— 否则会把一天排空。调用方会用
+     *    [DayDraft.repeatedGroupCount] 把这种情况**如实报出来**（生成依据 `basis_library_too_narrow`）。
+     *
+     *    ⚠️ 旧 KDoc 声称"真实内置库有 12–15 种主肌群，第 3 步**永不触发**"—— **这句是错的**：
+     *    可用动作池是**伤病 + 器械过滤之后**的池子，极端情况下（例如 9 处伤病全选）可能只剩
+     *    「核心 / 腹部」两个主肌群，第 3 步必然触发。该缺陷由另一方 agent 的对抗性复核发现
+     *    （见 REVIEW-p1p2.md F-2）。
      *
      * 主肌群为空的动作按**动作名**各自独立（不参与「同肌群去重」），避免误合并无标签动作。
      *
@@ -776,21 +821,6 @@ object LocalRuleAdvisor : PlanAdvisor {
     private fun aggravatedTagsFor(injuries: Set<InjuryArea>): Set<String> =
         injuries.flatMapTo(HashSet()) { injury -> INJURY_AGGRAVATED_TAGS[injury].orEmpty() }
 
-    /**
-     * 伤病集合 → **可用于替代**的肌群标签（已剔除被任何一条伤病挡掉的标签）。
-     *
-     * 剔除这一步很关键：多部位伤病时，"用来替代 A 的肌群"可能正好被 B 挡掉
-     * （例：膝 + 腰同时有伤 → 臀/核心仍安全，但腿后链不行）。
-     */
-    private fun substitutionTags(injuries: Set<InjuryArea>, forbidden: Set<String>): Set<String> {
-        if (injuries.isEmpty()) return emptySet()
-        val safe: MutableSet<String> = injuries.flatMapTo(HashSet()) { injury ->
-            SAFE_SUBSTITUTION_TAGS[injury].orEmpty()
-        }
-        safe.removeAll(forbidden)
-        return safe
-    }
-
     /** 动作是否会刺激到伤病？任意肌群标签命中即排除（机械判定）。 */
     private fun Exercise.aggravates(forbidden: Set<String>): Boolean =
         forbidden.isNotEmpty() && muscleGroups.any { tag -> tag in forbidden }
@@ -839,6 +869,7 @@ object LocalRuleAdvisor : PlanAdvisor {
     private const val KEY_BASIS_INJURY: String = "basis_injury"
     private const val KEY_BASIS_INJURY_SWAP: String = "basis_injury_swap"
     private const val KEY_BASIS_EQUIPMENT: String = "basis_equipment"
+    private const val KEY_BASIS_LIBRARY_TOO_NARROW: String = "basis_library_too_narrow"
     private const val KEY_BASIS_OVERLOAD: String = "basis_overload"
     private const val KEY_BASIS_HISTORY_NONE: String = "basis_history_none"
 
@@ -848,6 +879,13 @@ object LocalRuleAdvisor : PlanAdvisor {
         val notePairs: List<Pair<PlanItemDraft, PlanNoteDetail>>,
         /** P1：这一天里"因避让伤病而作为替代排入"的动作 id。 */
         val substitutedIds: Set<Long> = emptySet(),
+        /**
+         * 这一天里**被迫重复**的主肌群个数（>0 = 可用动作（伤病 + 器械过滤后）不够填满一天）。
+         *
+         * 用途：把"为什么今天只有这几个动作 / 怎么重复了"如实告诉用户（生成依据
+         * `basis_library_too_narrow`），而不是让规则在这里静默。
+         */
+        val repeatedGroupCount: Int = 0,
     )
 
     /** `decideLoad` 的输出：目标组数 / 重量 / 理由 / note 参数。 */

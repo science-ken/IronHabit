@@ -1,4 +1,4 @@
-package com.ironhabit.app.domain.ai
+﻿package com.ironhabit.app.domain.ai
 
 import com.ironhabit.app.data.preset.BuiltInExercises
 import com.ironhabit.app.domain.model.Equipment
@@ -872,7 +872,7 @@ class LocalRuleAdvisorTest {
     fun planWeek_consecutiveDays_haveDisjointTrainingFocuses() {
         // 规则层的硬保证（也是上面那条的"设计依据"）：相邻两天的**训练重点**肌群标签不相交。
         for (days in 3..6) {
-            for (offset in 0 until 14) {
+            for (offset in 0 until 56) {
                 val cursor = LocalDate.fromEpochDays(LocalDate(2026, 9, 14).toEpochDays() + offset)
                 val schedule = LocalRuleAdvisor.planWeek(
                     profile = UserProfile(trainingDaysPerWeek = days),
@@ -1063,49 +1063,101 @@ class LocalRuleAdvisorTest {
         )
     }
 
+    /**
+     * 伤病替代的**定义级**判据（P1 定稿；F-1 修复后重写）：
+     *
+     * 一个动作只有在「**去掉伤病后，这一天就不会有它**」时才算替代。
+     *
+     * ⚠️ 旧判据是"这一天有任意一个重点标签被禁忌命中 → 把所有安全肌群动作都标成替代"，
+     * 会**编理由**（肩伤的背日把正常背部动作标成"因伤替换"）——
+     * 由另一方 agent 的对抗性复核在 16 周样本上发现，见 `REVIEW-p1p2.md` F-1。
+     */
     @Test
-    fun planWeek_injury_substitutesSafeNeighbouringMuscle_andMarksInjurySafe() {
-        val profile = UserProfile(
-            injuryAreas = setOf(InjuryArea.KNEE),
-            equipment = setOf(Equipment.DUMBBELL),
-        )
-        var plansWithSubstitution = 0
-        var markedItems = 0
+    fun planWeek_injurySubstitutes_areExactlyTheItemsAbsentWithoutInjury() {
+        val library = realLibrary()
+        val injured = UserProfile(injuryAreas = setOf(InjuryArea.KNEE), equipment = Equipment.entries.toSet())
+        val healthy = UserProfile(equipment = Equipment.entries.toSet())
+        var substitutionSeen = 0
 
-        // 换 7 个不同的 today：训练重点按周轮换，一周样本覆盖不到所有重点组合。
-        for (offset in 0 until 7) {
+        for (offset in 0 until 7 * 8) {
             val cursor = LocalDate.fromEpochDays(LocalDate(2026, 9, 14).toEpochDays() + offset)
-            val proposal = LocalRuleAdvisor.planWeek(
-                profile = profile,
-                library = kneeSwapLibrary,
-                existing = emptyList(),
-                today = cursor,
-            )
+            val withInjury = LocalRuleAdvisor.planWeek(injured, library, emptyList(), today = cursor)
+            val withoutInjury = LocalRuleAdvisor.planWeek(healthy, library, emptyList(), today = cursor)
 
-            assertFalse(
-                "会刺激膝的「腿部」动作仍必须被排除（排除这一层没有放松）",
-                1L in proposal.usedExerciseIds(),
-            )
+            for (day in withInjury.days) {
+                val idsWithInjury: Set<Long> = day.items.map { it.exerciseId }.toSet()
+                val idsWithoutInjury: Set<Long> = withoutInjury.days
+                    .first { it.dayOfWeek == day.dayOfWeek }
+                    .items
+                    .map { it.exerciseId }
+                    .toSet()
+                val marked: Set<Long> = withInjury.notes
+                    .filter { it.kind == PlanReason.INJURY_SAFE }
+                    .map { it.exerciseId }
+                    .toSet()
+                    .intersect(idsWithInjury)
 
-            val marked = proposal.notes.filter { it.kind == PlanReason.INJURY_SAFE }
-            if (marked.isNotEmpty()) {
-                plansWithSubstitution++
-                markedItems += marked.size
                 assertTrue(
-                    "被标成「安全替代」的动作必须真的来自安全邻近肌群（臀部 2 / 核心 3）",
-                    marked.all { it.exerciseId == 2L || it.exerciseId == 3L },
+                    "被标成「因避让伤病而替换」的动作，必须在「没有伤病时不存在」：" +
+                        "周${day.dayOfWeek} 多标了 ${marked - (idsWithInjury - idsWithoutInjury)}",
+                    marked.all { it in (idsWithInjury - idsWithoutInjury) },
                 )
-                assertTrue(
-                    "有替代就要写进生成依据，且数量与标注一致",
-                    proposal.basis.any {
-                        it.key == "basis_injury_swap" && it.args.single() == marked.size
-                    },
-                )
+                substitutionSeen += (idsWithInjury - idsWithoutInjury).size
             }
         }
 
-        assertTrue("7 个样本里至少要有一次「重点被伤病挡掉 → 换成安全肌群」", plansWithSubstitution > 0)
-        assertTrue("替代标注不能是空跑", markedItems > 0)
+        assertTrue("样本里应当真的出现过替代（否则断言没意义）", substitutionSeen > 0)
+    }
+
+    /**
+     * F-1 回归：肩伤的禁忌是 {肩部, 后肩, 上胸, 胸部}，**不含背部**；
+     * 而背日（UPPER_PULL）的标签是 {背部, 后肩, 肱二头肌} —— 含"后肩"。
+     * 所以旧判据会把整个背日当"因伤病替换"，把「超人式」这种正常背部动作标成替代。
+     */
+    @Test
+    fun planWeek_shoulderInjury_neverMarksNormalBackWorkAsSubstitute() {
+        val library = realLibrary()
+        val backExerciseId: Long = library.first { it.name.contains("超人") }.id
+        val profile = UserProfile(
+            injuryAreas = setOf(InjuryArea.SHOULDER),
+            equipment = Equipment.entries.toSet(),
+        )
+        var samples = 0
+
+        for (offset in 0 until 7 * 16) {
+            val cursor = LocalDate.fromEpochDays(LocalDate(2026, 9, 14).toEpochDays() + offset)
+            val proposal = LocalRuleAdvisor.planWeek(profile, library, emptyList(), today = cursor)
+
+            assertFalse(
+                "肩伤不挡背部 → 正常背部动作（超人式 id=$backExerciseId）不该被标成「因避让伤病而替换」",
+                proposal.notes.any { note ->
+                    note.kind == PlanReason.INJURY_SAFE && note.exerciseId == backExerciseId
+                },
+            )
+            samples++
+        }
+        assertTrue(samples > 0)
+    }
+
+    /**
+     * F-2：可用动作（伤病 + 器械过滤后）不够填满一天时，**必须如实说明**，
+     * 而不是默默排两个同肌群动作（旧 KDoc 还错误地承诺"永不触发"）。
+     */
+    @Test
+    fun planWeek_whenFilteredLibraryIsTooNarrow_reportsItInsteadOfStayingSilent() {
+        val allInjuries = UserProfile(
+            injuryAreas = InjuryArea.entries.toSet(),
+            equipment = Equipment.entries.toSet(),
+        )
+
+        val proposal = LocalRuleAdvisor.planWeek(allInjuries, realLibrary(), emptyList(), today = today)
+
+        assertTrue(
+            "过滤后可用动作不够时必须给出 basis_library_too_narrow",
+            proposal.basis.any { it.key == "basis_library_too_narrow" },
+        )
+        val narrowDays: Any = proposal.basis.first { it.key == "basis_library_too_narrow" }.args.single()
+        assertTrue("参数是「受影响的天数」，应 >= 1（实际 $narrowDays）", (narrowDays as Int) >= 1)
     }
 
     @Test

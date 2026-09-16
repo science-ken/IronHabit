@@ -42,9 +42,8 @@ enum class TrainingFocus {
  *
  * UI 层按 `reason_*` 资源映射文案，**枚举本身不含中文**。
  *
- * - [INJURY_SAFE] 为**软性标记**：`planWeek` 的候选全部来自用户自己的动作库（已过伤病过滤），
- *   因此本版不产出它；它留给将来"显式安全替代"的场景（当前由
- *   [SuggestionReason.INJURY_SWAP] 承接同类语义）。
+ * - [INJURY_SAFE]：**P1 起真的会产出** —— 判据是"去掉伤病后这一天就不会有这个动作"
+ *   （见 `LocalRuleAdvisor.buildDay`）。旧注释说"本版不产出它"，已过期（复核报告 F-6）。
  */
 enum class PlanReason {
     /** 主项动作（按目标挑的大动作）。 */
@@ -56,7 +55,12 @@ enum class PlanReason {
     /** 因"用户有此器械"而可行。 */
     EQUIPMENT_MATCHED,
 
-    /** 因"避让伤病"而选出的安全替代。 */
+    /**
+     * 因"避让伤病"才排进来的动作。
+     *
+     * 判定（P1）：把同一天按**不做伤病过滤**再选一遍，两次之差就是这个标记 ——
+     * 也就是"没有伤病的话，这个动作不会出现在今天"。**不按肌群白名单挑**。
+     */
     INJURY_SAFE,
 
     /** 因"上次做满且 RPE 有余量"而加重。 */

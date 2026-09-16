@@ -1,4 +1,4 @@
-﻿package com.ironhabit.app.ui.screens.ai
+package com.ironhabit.app.ui.screens.ai
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -535,6 +535,7 @@ private fun basisKeyRes(key: String): Int = when (key) {
     "basis_injury" -> R.string.basis_injury
     "basis_injury_swap" -> R.string.basis_injury_swap
     "basis_equipment" -> R.string.basis_equipment
+    "basis_library_too_narrow" -> R.string.basis_library_too_narrow
     "basis_overload" -> R.string.basis_overload
     "basis_history_none" -> R.string.basis_history_none
     else -> R.string.basis_frequency

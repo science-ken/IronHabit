@@ -162,7 +162,10 @@ class BuildWeeklyReviewUseCase @Inject constructor(
         val weightByExerciseByBucket: MutableMap<Long, MutableMap<Int, Float>> = HashMap()
         for (checkIn in trendCheckIns) {
             val weight: Float = checkIn.weightKg ?: continue
-            val bucket: Int = ((checkIn.dateEpochDay - windowStart) / DAYS_IN_WEEK).toInt()
+            // ⚠️ 必须用 floorDiv：Kotlin 的 Long 除法**向零取整**，窗口开始前 1–6 天的记录会被
+            // 算成「桶 0（3 周前）」而不是被下面的 `< 0` 拦掉 —— 取数区间一改就会静默污染趋势
+            //（复核报告 F-7 指出；当前不可达只是因为没有触发条件）。
+            val bucket: Int = Math.floorDiv(checkIn.dateEpochDay - windowStart, DAYS_IN_WEEK).toInt()
             if (bucket < 0 || bucket > TREND_PREVIOUS_WEEKS) continue
             val perBucket: MutableMap<Int, Float> = weightByExerciseByBucket
                 .getOrPut(checkIn.exerciseId) { HashMap() }

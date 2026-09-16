@@ -498,6 +498,7 @@
     <string name="basis_injury">已按你的伤病部位自动避开相关肌群动作</string>
     <string name="basis_injury_swap">为避让伤病，%1$d 个动作换成了低冲击替代（同部位、更安全的邻近肌群）</string>
     <string name="basis_equipment">已按你拥有的器械适配动作，无需额外器材</string>
+    <string name="basis_library_too_narrow">按你的伤病与器械过滤后可用的动作不太够：有 %1$d 天不得不用两个相同部位的动作凑满，想更丰富可以补几个动作进动作库</string>
     <string name="basis_overload">检测到你上次 %1$d 个动作做满且强度有余量，已自动小幅加重</string>
     <string name="basis_history_none">暂无打卡记录，先用基础目标值，练几次后会自动进阶</string>
 

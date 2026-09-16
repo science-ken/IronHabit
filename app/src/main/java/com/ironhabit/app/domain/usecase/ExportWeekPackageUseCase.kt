@@ -122,7 +122,9 @@ class ExportWeekPackageUseCase @Inject constructor(
                 // ⚠️ 必须圆到 1 位小数：Float 减法会带精度噪声（74.2 − 74.6 = −0.40000153），
                 // 直接把噪声原样发给 AI，会让人以为数据坏了。
                 totalVolumeKg = review.training.totalVolumeKg.roundTo1(),
-                avgRpe = review.training.avgRpe,
+                // 同层三个浮点字段统一口径：`WeeklyReview` 是公开模型，任何调用方都能构造，
+                // 不能假设上游已经圆过（复核报告 F-3 指出的不一致）。
+                avgRpe = review.training.avgRpe?.roundTo1(),
                 weightDeltaKg = review.body.deltaKg?.roundTo1(),
                 dietAvgKcal = review.diet.avgKcal,
                 dietAvgProteinG = review.diet.avgProteinG,
