@@ -9,6 +9,10 @@ package com.ironhabit.app.domain.model
  * @property completedCount 已完成项数（训练 + 习惯）
  * @property totalCount 总项数（训练 + 习惯）
  * @property trainingStreak 训练连续打卡信息
+ * @property plannedWeekdays **所选日所在周**已排计划的星期（`1..7`，升序；P3 按周口径）。
+ *   日期栏 chip 与「这一周有没有计划」的判定都吃它 —— 回归修复：P3 重构时 ViewModel
+ *   退掉了独立的 `observePlannedWeekdays()` 流并指望这里带回，但本模型此前并没有这个字段，
+ *   导致日期条 chip 消失、休息日被误判成「这一周还没有训练计划」。
  */
 data class TodayOverview(
     val dateEpochDay: Long = 0L,
@@ -17,6 +21,7 @@ data class TodayOverview(
     val completedCount: Int = 0,
     val totalCount: Int = 0,
     val trainingStreak: StreakInfo = StreakInfo(),
+    val plannedWeekdays: List<Int> = emptyList(),
 )
 
 /**

@@ -29,10 +29,8 @@ class ExerciseRepositoryImpl @Inject constructor(
             .map { entities -> entities.map(ExerciseMapper::toDomain) }
             .flowOn(ioDispatcher)
 
-    override fun observeInactive(): Flow<List<Exercise>> =
-        exerciseDao.observeInactive()
-            .map { entities -> entities.map(ExerciseMapper::toDomain) }
-            .flowOn(ioDispatcher)
+    override suspend fun getAll(): List<Exercise> =
+        exerciseDao.getAll().map(ExerciseMapper::toDomain)
 
     override fun observeByCategory(category: ExerciseCategory): Flow<List<Exercise>> =
         exerciseDao.observeByCategory(category)
@@ -44,10 +42,6 @@ class ExerciseRepositoryImpl @Inject constructor(
 
     override suspend fun upsert(exercise: Exercise): Long =
         exerciseDao.upsert(ExerciseMapper.toEntity(exercise))
-
-    override suspend fun setActive(id: Long, active: Boolean) {
-        exerciseDao.setActive(id, active)
-    }
 
     override suspend fun nameExists(name: String, excludeId: Long): Boolean =
         exerciseDao.countByName(name, excludeId) > 0

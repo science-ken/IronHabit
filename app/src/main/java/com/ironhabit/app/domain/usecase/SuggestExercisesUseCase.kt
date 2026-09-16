@@ -99,11 +99,10 @@ class SuggestExercisesUseCase @Inject constructor(
     }
 
     /**
-     * 用户动作库（**含已停用**）：停用动作仍在库里、仍占 `name` 唯一槽位，
-     * 只看启用列表会导致"重复收入一个已停用动作"。
+     * 用户动作库（**全量快照**）：历史停用行（如老备份恢复带入）仍在库里、仍占 `name` 唯一槽位，
+     * 只看启用列表会导致"重复收入一个已存在动作"。
      */
-    private suspend fun library(): List<Exercise> =
-        exerciseRepository.observeActive().first() + exerciseRepository.observeInactive().first()
+    private suspend fun library(): List<Exercise> = exerciseRepository.getAll()
 }
 
 /**

@@ -30,6 +30,7 @@ import com.ironhabit.app.data.local.entity.WeekPlanEntity
  * - 版本 3：由 [MIGRATION_2_3] 从 v2 升级（新增 `meals` 表，饮食模块；**纯建表**）。
  *   **不启用破坏性迁移**（项目红线「禁破坏性迁移」）：`DatabaseModule` 未注册任何
  *   `fallbackToDestructiveMigration*`；遇到未注册的降级 schema 变化会**抛异常暴露**而非静默清库。
+ * - 版本 6：由 [MIGRATION_5_6] 从 v5 升级（动作停用入口下线，存量停用动作一次性全部置回启用）。
  */
 @Database(
     entities = [
@@ -68,6 +69,6 @@ abstract class AppDatabase : RoomDatabase() {
         const val DATABASE_NAME: String = "ironhabit.db"
 
         /** 当前 schema 版本。 */
-        const val VERSION: Int = 5
+        const val VERSION: Int = 6
     }
 }

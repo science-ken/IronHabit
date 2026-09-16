@@ -51,7 +51,7 @@ class SuggestExercisesUseCaseTest {
             id
         }
         every { exerciseRepository.observeActive() } returns libraryState
-        every { exerciseRepository.observeInactive() } returns flowOf(emptyList())
+        coEvery { exerciseRepository.getAll() } coAnswers { libraryState.value }
         every { settingsRepository.profile() } returns flowOf(profile)
         useCase = SuggestExercisesUseCase(
             exerciseRepository = exerciseRepository,

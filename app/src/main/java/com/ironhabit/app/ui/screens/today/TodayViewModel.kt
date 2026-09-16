@@ -533,4 +533,7 @@ private fun TodayOverview.toUiState(): TodayUiState = TodayUiState(
     totalCount = totalCount,
     trainingStreak = trainingStreak,
     isRestDay = plans.isEmpty() && habits.isEmpty(),
+    // 回归修复：必须把"那一周排了哪几天"搬进来，否则日期栏 chip 消失、
+    // hasPlanThisWeek 恒为 false（本周明明有课，休息日却显示「这一周还没有训练计划」）。
+    plannedWeekdays = plannedWeekdays,
 )

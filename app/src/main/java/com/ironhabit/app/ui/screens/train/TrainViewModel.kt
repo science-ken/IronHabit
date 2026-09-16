@@ -3,10 +3,12 @@ package com.ironhabit.app.ui.screens.train
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ironhabit.app.R
+import com.ironhabit.app.domain.model.Exercise
 import com.ironhabit.app.domain.model.WeekPlan
 import com.ironhabit.app.domain.repository.CheckInRepository
 import com.ironhabit.app.domain.repository.ExerciseRepository
 import com.ironhabit.app.domain.repository.PlanRepository
+import com.ironhabit.app.domain.usecase.AddExerciseToPlanUseCase
 import com.ironhabit.app.domain.usecase.ResetPlanItemUseCase
 import com.ironhabit.app.domain.util.DateUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -30,6 +32,9 @@ import kotlinx.datetime.TimeZone
 
 /**
  * 「训练」页 ViewModel（周计划 / 动作库 / 历史 三分段共用）。
+ *
+ * 动作库（v6）：动作不再有"启用 / 停用"开关 —— 行尾是「加入计划」的 `+` /
+ * 已加入的 `✓`，落库走 [AddExerciseToPlanUseCase]（用户显式路径）。
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -38,6 +43,7 @@ class TrainViewModel @Inject constructor(
     private val resetPlanItem: ResetPlanItemUseCase,
     private val exerciseRepository: ExerciseRepository,
     private val checkInRepository: CheckInRepository,
+    private val addToPlan: AddExerciseToPlanUseCase,
     private val clock: Clock,
     private val timeZone: TimeZone,
 ) : ViewModel() {
@@ -51,11 +57,24 @@ class TrainViewModel @Inject constructor(
     /** 数据流重订阅触发器（失败重试）：自增即让下面的聚合流整体重订阅一次。 */
     private val retryTrigger = MutableStateFlow(0L)
 
+    /** 本周的周一（P3：计划按周存放；动作库「+」默认写这一周）。 */
+    private val currentWeekStart: Long = DateUtils.weekStartMon1(todayEpochDay())
+
     /** 所选星期的计划（携带 day 以便区分新旧）。 */
     private val plansFlow: Flow<Pair<Int, List<WeekPlan>>> =
         selectedDay.flatMapLatest { day ->
             planRepository.observePlansForDay(day).map { plans -> day to plans }
         }
+
+    /** 本周生效计划（专属优先，回落「每周相同」）→ `exerciseId → 出现的星期集合`。 */
+    private val plannedDaysFlow: Flow<Map<Long, Set<Int>>> =
+        planRepository.observeEffectivePlanForWeek(currentWeekStart)
+            .map { plans -> plans.toDaysByExercise() }
+
+    /** 「每周相同」那份 → `exerciseId → 出现的星期集合`（弹层「每周都加」勾选初值参考）。 */
+    private val repeatDaysFlow: Flow<Map<Long, Set<Int>>> =
+        planRepository.observeRepeatPlan()
+            .map { plans -> plans.toDaysByExercise() }
 
     /** 近 30 天打卡历史（按日期倒序聚合为 [HistoryEntry]）。 */
     private val historyFlow: Flow<List<HistoryEntry>> =
@@ -72,17 +91,19 @@ class TrainViewModel @Inject constructor(
             combine(
                 plansFlow,
                 exerciseRepository.observeActive(),
-                exerciseRepository.observeInactive(),
                 historyFlow,
-            ) { dayPlans, exercises, disabledExercises, history ->
+                plannedDaysFlow,
+                repeatDaysFlow,
+            ) { dayPlans, exercises, history, plannedDays, repeatDays ->
                 TrainUiState(
                     isLoading = false,
                     selectedDay = dayPlans.first,
                     plans = dayPlans.second,
                     exercises = exercises,
-                    disabledExercises = disabledExercises,
                     exerciseNameById = exercises.associate { exercise -> exercise.id to exercise.name },
                     history = history,
+                    plannedDaysByExercise = plannedDays,
+                    repeatDaysByExercise = repeatDays,
                 )
             }
                 // 每次（重）订阅都先发一帧「加载中」：否则重试再次失败时，
@@ -119,9 +140,56 @@ class TrainViewModel @Inject constructor(
         persist(R.string.msg_saved) { resetPlanItem(planId) }
     }
 
-    /** 启用 / 停用动作。 */
-    fun onToggleExerciseActive(exerciseId: Long, active: Boolean) {
-        persist(R.string.msg_saved) { exerciseRepository.setActive(exerciseId, active) }
+    // ---------------- 动作库「加入计划」（v6）----------------
+
+    /** 打开某动作的「加入计划」弹层。 */
+    fun onOpenAddToPlanSheet(exercise: Exercise) {
+        _uiState.update { state -> state.copy(addToPlanSheetExercise = exercise) }
+    }
+
+    /** 关闭「加入计划」弹层（不写任何数据）。 */
+    fun onDismissAddToPlanSheet() {
+        _uiState.update { state -> state.copy(addToPlanSheetExercise = null) }
+    }
+
+    /**
+     * 提交「加入计划」：以勾选天为目标态落库（写入 / 取消），可选同步「每周相同」。
+     *
+     * 成功 → 关弹层 + Snackbar；失败 → 关弹层 + 页面级错误（与全局错误风格一致，可重开重试）。
+     * 写库期间 [TrainUiState.isSubmittingAdd] = true（确认按钮禁用，防连点）。
+     */
+    fun onSubmitAddToPlan(
+        exerciseId: Long,
+        selectedDays: Set<Int>,
+        targetSets: Int,
+        targetReps: Int,
+        alsoRepeatWeekly: Boolean,
+    ) {
+        if (_uiState.value.isSubmittingAdd) return
+        viewModelScope.launch {
+            _uiState.update { state -> state.copy(isSubmittingAdd = true) }
+            try {
+                addToPlan(
+                    exerciseId = exerciseId,
+                    weekStartEpochDay = currentWeekStart,
+                    selectedDays = selectedDays,
+                    targetSets = targetSets,
+                    targetReps = targetReps,
+                    alsoRepeatWeekly = alsoRepeatWeekly,
+                )
+                _uiState.update { state ->
+                    state.copy(
+                        isSubmittingAdd = false,
+                        addToPlanSheetExercise = null,
+                        snackbarRes = R.string.msg_plan_updated,
+                    )
+                }
+            } catch (throwable: Throwable) {
+                _uiState.update { state ->
+                    state.copy(isSubmittingAdd = false, errorRes = R.string.error_generic)
+                }
+            }
+        }
     }
 
     /** 消费一次 Snackbar。 */
@@ -150,13 +218,21 @@ class TrainViewModel @Inject constructor(
 
     private fun merge(local: TrainUiState, data: TrainUiState): TrainUiState = data.copy(
         snackbarRes = local.snackbarRes,
+        addToPlanSheetExercise = local.addToPlanSheetExercise ?: data.addToPlanSheetExercise,
+        isSubmittingAdd = local.isSubmittingAdd,
         errorRes = data.errorRes ?: local.errorRes,
     )
 
-    private fun todayWeekday(): Int =
-        DateUtils.weekdayMon1(DateUtils.todayEpochDay(clock, timeZone))
+    private fun List<WeekPlan>.toDaysByExercise(): Map<Long, Set<Int>> =
+        groupBy { it.exerciseId }
+            .mapValues { (_, rows) -> rows.map { plan -> plan.dayOfWeek }.toSet() }
 
-    private fun historyEndEpochDay(): Long = DateUtils.todayEpochDay(clock, timeZone)
+    private fun todayWeekday(): Int =
+        DateUtils.weekdayMon1(todayEpochDay())
+
+    private fun todayEpochDay(): Long = DateUtils.todayEpochDay(clock, timeZone)
+
+    private fun historyEndEpochDay(): Long = todayEpochDay()
 
     private fun historyStartEpochDay(): Long = historyEndEpochDay() - (HISTORY_DAYS - 1)
 

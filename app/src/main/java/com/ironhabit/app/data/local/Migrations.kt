@@ -207,3 +207,21 @@ private const val DAYS_IN_WEEK: Long = 7
 
 /** epochDay `0`（周四）距其所在周周一的偏移。 */
 private const val MONDAY_ALIGN_OFFSET: Long = 3
+
+/**
+ * v5 → v6：动作「启用 / 停用」入口下线（动作库的开关改成「加入计划」的 +）。
+ *
+ * 用户拍板**彻底砍掉停用功能**：界面上不再有停用入口，`exercises.is_active` 退化为
+ * 永真标记（列保留，不做 `DROP COLUMN` —— 红线：minSdk 24 禁 DROP COLUMN；
+ * 备份合同 `BackupPayload` 的字段也原样保留，老备份照常恢复）。
+ *
+ * 本次迁移是**一次性数据正本清源**：把历史上被停用过的动作全部置回 `is_active = 1` ——
+ * 否则那些动作会因"无 UI 入口恢复"而永久消失（AI 排不出、计划里也不显示）。
+ * `UPDATE` 无 SQLite 版本要求，红线安全。
+ */
+val MIGRATION_5_6: Migration = object : Migration(5, 6) {
+
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("UPDATE exercises SET is_active = 1")
+    }
+}

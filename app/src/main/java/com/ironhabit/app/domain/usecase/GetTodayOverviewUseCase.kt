@@ -129,6 +129,9 @@ class GetTodayOverviewUseCase @Inject constructor(
                 expectedWeekdays = core.plannedWeekdays.toExpectedWeekdaysOrNull(),
                 asOfEpochDay = core.epochDay,
             ),
+            // 回归修复：把「那一周排了哪几天」随视图带出去 —— ViewModel P3 起不再单独
+            // combine `observePlannedWeekdays()`，日期栏 chip 与 hasPlanThisWeek 全靠这里。
+            plannedWeekdays = core.plannedWeekdays,
         )
     }
 

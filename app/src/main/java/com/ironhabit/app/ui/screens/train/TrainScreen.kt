@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Add
@@ -27,7 +28,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -142,9 +142,9 @@ fun TrainScreen(
 
             selectedTab == TrainTab.LIBRARY -> LibrarySection(
                 uiState = uiState,
-                onToggleActive = viewModel::onToggleExerciseActive,
                 onAddExercise = onAddExercise,
                 onOpenExercise = onOpenExercise,
+                onOpenAddToPlan = viewModel::onOpenAddToPlanSheet,
             )
 
             else -> HistorySection(
@@ -152,6 +152,29 @@ fun TrainScreen(
                 onOpenHistory = onOpenHistory,
             )
         }
+    }
+
+    // 「加入每周训练计划」弹层（动作库行尾 + / ✓ 打开；写结果由页面级 Snackbar / 错误态承载）。
+    val sheetExercise: Exercise? = uiState.addToPlanSheetExercise
+    if (sheetExercise != null) {
+        AddToPlanSheet(
+            exercise = sheetExercise,
+            initialDays = uiState.plannedDaysByExercise[sheetExercise.id].orEmpty() +
+                uiState.repeatDaysByExercise[sheetExercise.id].orEmpty(),
+            initialRepeatWeekly =
+                uiState.repeatDaysByExercise[sheetExercise.id]?.isNotEmpty() == true,
+            isSubmitting = uiState.isSubmittingAdd,
+            onDismissRequest = viewModel::onDismissAddToPlanSheet,
+            onSubmit = { days, sets, reps, alsoRepeat ->
+                viewModel.onSubmitAddToPlan(
+                    exerciseId = sheetExercise.id,
+                    selectedDays = days,
+                    targetSets = sets,
+                    targetReps = reps,
+                    alsoRepeatWeekly = alsoRepeat,
+                )
+            },
+        )
     }
 }
 
@@ -305,12 +328,12 @@ private fun PlanRow(
 @Composable
 private fun LibrarySection(
     uiState: TrainUiState,
-    onToggleActive: (Long, Boolean) -> Unit,
     onAddExercise: () -> Unit,
     onOpenExercise: (Long) -> Unit,
+    onOpenAddToPlan: (Exercise) -> Unit,
 ) {
-    // 启用与已停用都为空才显示空态；否则即便启用列表为空，也要让「已停用」分组可见（可恢复）。
-    if (uiState.exercises.isEmpty() && uiState.disabledExercises.isEmpty()) {
+    // v6 起动作无"停用"概念（开关已下线，数据库列退化为永真标记），动作库即全量动作。
+    if (uiState.exercises.isEmpty()) {
         EmptyState(
             text = stringResource(R.string.empty_exercise),
             actionText = stringResource(R.string.action_create),
@@ -319,7 +342,7 @@ private fun LibrarySection(
         return
     }
 
-    // 来源筛选：全部 / 内置 / 自建 / AI 推荐（仅影响启用列表，已停用分组始终可见以便恢复）
+    // 来源筛选：全部 / 内置 / 自建 / AI 推荐
     var sourceFilter by rememberSaveable { mutableStateOf(ExerciseSource.BUILT_IN) }
     var showAll by rememberSaveable { mutableStateOf(true) }
     val visibleExercises = remember(uiState.exercises, sourceFilter, showAll) {
@@ -370,24 +393,16 @@ private fun LibrarySection(
             if (exercises.isNotEmpty()) {
                 CategoryHeader(text = stringResource(categoryLabelRes(category)))
                 exercises.forEach { exercise ->
+                    val plannedDays: Set<Int> =
+                        uiState.plannedDaysByExercise[exercise.id].orEmpty() +
+                            uiState.repeatDaysByExercise[exercise.id].orEmpty()
                     ExerciseRow(
                         exercise = exercise,
+                        isInPlan = plannedDays.isNotEmpty(),
                         onClick = { onOpenExercise(exercise.id) },
-                        onToggleActive = { active -> onToggleActive(exercise.id, active) },
+                        onAddToPlan = { onOpenAddToPlan(exercise) },
                     )
                 }
-            }
-        }
-
-        // 「已停用」分组：误关动作后在此把 Switch 打开即可恢复（无需重装 App）。
-        if (uiState.disabledExercises.isNotEmpty()) {
-            CategoryHeader(text = stringResource(R.string.label_disabled_exercises))
-            uiState.disabledExercises.forEach { exercise ->
-                ExerciseRow(
-                    exercise = exercise,
-                    onClick = { onOpenExercise(exercise.id) },
-                    onToggleActive = { active -> onToggleActive(exercise.id, active) },
-                )
             }
         }
     }
@@ -434,11 +449,17 @@ private fun CategoryHeader(text: String) {
     }
 }
 
+/**
+ * 动作库行（v6）：行尾不再是「启用 / 停用」开关，而是「加入计划」入口 ——
+ * 未加入显示 `+`，已加入（本周生效计划或「每周相同」里有它）显示对勾 `✓`；
+ * 两者点击都打开 [AddToPlanSheet]（`✓` = 查看并增减已排的天）。
+ */
 @Composable
 private fun ExerciseRow(
     exercise: Exercise,
+    isInPlan: Boolean,
     onClick: () -> Unit,
-    onToggleActive: (Boolean) -> Unit,
+    onAddToPlan: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -468,10 +489,19 @@ private fun ExerciseRow(
                 )
             }
         }
-        Switch(
-            checked = exercise.isActive,
-            onCheckedChange = onToggleActive,
-        )
+        IconButton(onClick = onAddToPlan) {
+            Icon(
+                imageVector = if (isInPlan) Icons.Filled.Check else Icons.Filled.Add,
+                contentDescription = stringResource(
+                    if (isInPlan) R.string.cd_already_in_plan else R.string.cd_add_to_plan,
+                ),
+                tint = if (isInPlan) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+        }
     }
 }
 

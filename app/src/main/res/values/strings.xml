@@ -575,4 +575,13 @@
     <string name="label_diet_intake_kcal">%1$d / %2$d kcal</string>
     <string name="label_diet_intake_protein">%1$d / %2$d g 蛋白</string>
 
+    <!-- ===== 动作库「加入计划」（v6）===== -->
+    <string name="title_add_to_plan">加入每周训练计划</string>
+    <string name="label_pick_days">练哪几天（可多选）</string>
+    <string name="label_also_repeat_weekly">每周都加（每周相同）</string>
+    <string name="hint_also_repeat_weekly">勾上后，以后没单独排计划的周也会练到它</string>
+    <string name="msg_plan_updated">训练计划已更新</string>
+    <string name="cd_add_to_plan">加入每周训练计划</string>
+    <string name="cd_already_in_plan">已在训练计划中，点击调整</string>
+
 </resources>
