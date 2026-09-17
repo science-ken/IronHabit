@@ -73,7 +73,15 @@ jobs:
           fi
           echo "权限白名单校验：$MERGED_MANIFEST"
           ALLOWED='android.permission.schedule_exact_alarm|android.permission.use_exact_alarm|android.permission.post_notifications|android.permission.receive_boot_completed|android.permission.vibrate|android.permission.internet'
-          BAD=$(grep -oiE 'android\.permission\.[a-z_.]+' "$MERGED_MANIFEST" | tr 'A-Z' 'a-z' | sort -u \
+          # 只统计 `<uses-permission>`（App 真正「申请」的权限）。
+          # 刻意**不**统计组件上的 `android:permission=` 属性——那是访问守卫（声明
+          # 「谁才有资格调用我」），不赋予 App 任何能力，语义与 uses-permission 相反。
+          # 例：androidx.profileinstaller 的 ProfileInstallReceiver 带
+          # android:permission="android.permission.DUMP"，属于依赖库自我保护，
+          # 曾被旧写法误判成 App 申请了 DUMP（假阳性，见 run 35219108251）。
+          BAD=$(grep -oiE '<uses-permission[^>]*>' "$MERGED_MANIFEST" \
+                | grep -oiE 'android:name[[:space:]]*=[[:space:]]*"android\.permission\.[A-Za-z_.]+"' \
+                | grep -oiE 'android\.permission\.[A-Za-z_.]+' | tr 'A-Z' 'a-z' | sort -u \
                 | grep -Ev "^($ALLOWED)$" || true)
           if [ -n "$BAD" ]; then
             echo "::error::发现白名单之外的权限：$BAD"
