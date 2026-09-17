@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -55,6 +57,7 @@ import com.ironhabit.app.ui.components.EmptyState
 import com.ironhabit.app.ui.components.LoadingSkeleton
 import com.ironhabit.app.ui.components.LocalSnackbarHostState
 import com.ironhabit.app.ui.components.planGoalText
+import com.ironhabit.app.ui.theme.IronHabitSpacing
 import kotlinx.datetime.LocalDate
 
 /** 训练页三个分段。 */
@@ -102,8 +105,8 @@ fun TrainScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .padding(IronHabitSpacing.lg),
+        verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.md),
     ) {
         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
             TrainTab.entries.forEachIndexed { index, tab ->
@@ -193,7 +196,7 @@ private fun PlanSection(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.md),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -204,7 +207,7 @@ private fun PlanSection(
                 modifier = Modifier
                     .weight(1f)
                     .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
             ) {
                 WEEKDAY_SHORT_RES.forEachIndexed { index, labelRes ->
                     val day = index + 1
@@ -263,8 +266,8 @@ private fun PlanRow(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+                .padding(horizontal = IronHabitSpacing.lg, vertical = IronHabitSpacing.md),
+            verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.xs),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -286,7 +289,7 @@ private fun PlanRow(
                             text = stringResource(R.string.label_user_edited),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(start = 8.dp),
+                            modifier = Modifier.padding(start = IronHabitSpacing.sm),
                         )
                     }
                 }
@@ -345,54 +348,73 @@ private fun LibrarySection(
     // 来源筛选：全部 / 内置 / 自建 / AI 推荐
     var sourceFilter by rememberSaveable { mutableStateOf(ExerciseSource.BUILT_IN) }
     var showAll by rememberSaveable { mutableStateOf(true) }
+    // 肌群筛选（方案 A）：空串 = 全部；chips 数据驱动自动作的主肌群，不动数据库
+    var muscleFilter by rememberSaveable { mutableStateOf("") }
     val visibleExercises = remember(uiState.exercises, sourceFilter, showAll) {
         if (showAll) uiState.exercises else uiState.exercises.filter { it.source == sourceFilter }
     }
+    val muscleOptions = remember(visibleExercises) { distinctMuscleGroups(visibleExercises) }
+    val filteredExercises = remember(visibleExercises, muscleFilter) {
+        filterExercisesByMuscle(visibleExercises, muscleFilter)
+    }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+    // LazyColumn：40+ 动作不再全量组合，滚动/重组只处理可见项
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(
-                text = stringResource(R.string.section_exercise_library),
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.weight(1f),
-            )
-            TextButton(onClick = onAddExercise) {
-                Icon(
-                    imageVector = Icons.Filled.Add,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                )
+        item(key = "library-header") {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
                 Text(
-                    text = stringResource(R.string.action_add_exercise),
-                    modifier = Modifier.padding(start = 4.dp),
+                    text = stringResource(R.string.section_exercise_library),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = onAddExercise) {
+                    Icon(
+                        imageVector = Icons.Filled.Add,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text(
+                        text = stringResource(R.string.action_add_exercise),
+                        modifier = Modifier.padding(start = IronHabitSpacing.xs),
+                    )
+                }
+            }
+        }
+        item(key = "source-filter") {
+            SourceFilterRow(
+                showAll = showAll,
+                selected = sourceFilter,
+                onSelectAll = { showAll = true },
+                onSelect = { source ->
+                    showAll = false
+                    sourceFilter = source
+                },
+            )
+        }
+        if (muscleOptions.isNotEmpty()) {
+            item(key = "muscle-filter") {
+                MuscleFilterRow(
+                    selected = muscleFilter,
+                    options = muscleOptions,
+                    onSelect = { muscleFilter = it },
                 )
             }
         }
-        SourceFilterRow(
-            showAll = showAll,
-            selected = sourceFilter,
-            onSelectAll = { showAll = true },
-            onSelect = { source ->
-                showAll = false
-                sourceFilter = source
-            },
-        )
-
         ExerciseCategory.entries.forEach { category ->
-            val exercises = visibleExercises.filter { it.category == category }
+            val exercises = filteredExercises.filter { it.category == category }
             if (exercises.isNotEmpty()) {
-                CategoryHeader(text = stringResource(categoryLabelRes(category)))
-                exercises.forEach { exercise ->
+                item(key = "category-${category.name}") {
+                    CategoryHeader(text = stringResource(categoryLabelRes(category)))
+                }
+                items(exercises, key = { it.id }) { exercise ->
                     val plannedDays: Set<Int> =
                         uiState.plannedDaysByExercise[exercise.id].orEmpty() +
                             uiState.repeatDaysByExercise[exercise.id].orEmpty()
@@ -420,7 +442,7 @@ private fun SourceFilterRow(
     onSelectAll: () -> Unit,
     onSelect: (ExerciseSource) -> Unit,
 ) {
-    Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+    Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(IronHabitSpacing.sm)) {
         FilterChip(
             selected = showAll,
             onClick = onSelectAll,
@@ -444,8 +466,42 @@ private fun CategoryHeader(text: String) {
             text = text,
             style = MaterialTheme.typography.titleSmall,
             color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
+            modifier = Modifier.padding(top = IronHabitSpacing.sm, bottom = IronHabitSpacing.xs),
         )
+    }
+}
+
+/**
+ * 肌群筛选条（方案 A）：`全部 / 腿部 / 胸部 / …`。
+ *
+ * chips 数据驱动自动作的**主肌群**（[Exercise.primaryMuscleGroup]，数据库现成字段），
+ * 不是硬编码枚举——新增动作带新肌群时 chips 自动出现；选中后列表只剩该肌群的动作，
+ * 「加动作到计划」从滚 5 屏变成两步直达。
+ */
+@Composable
+private fun MuscleFilterRow(
+    selected: String,
+    options: List<String>,
+    onSelect: (String) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
+    ) {
+        FilterChip(
+            selected = selected.isBlank(),
+            onClick = { onSelect("") },
+            label = { Text(text = stringResource(R.string.label_filter_all)) },
+        )
+        options.forEach { muscle ->
+            FilterChip(
+                selected = selected == muscle,
+                onClick = { onSelect(muscle) },
+                label = { Text(text = muscle) },
+            )
+        }
     }
 }
 
@@ -465,7 +521,7 @@ private fun ExerciseRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(vertical = 2.dp),
+            .padding(vertical = IronHabitSpacing.xxs),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
@@ -516,7 +572,7 @@ private fun HistorySection(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.xs),
     ) {
         TextButton(onClick = onOpenHistory) {
             Text(text = stringResource(R.string.section_history))
@@ -531,7 +587,7 @@ private fun HistorySection(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 6.dp),
+                    .padding(vertical = IronHabitSpacing.sm),
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text(

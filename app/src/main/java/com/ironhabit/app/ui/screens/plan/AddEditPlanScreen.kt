@@ -19,6 +19,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
@@ -30,6 +34,9 @@ import com.ironhabit.app.domain.model.Exercise
 import com.ironhabit.app.ui.components.EmptyState
 import com.ironhabit.app.ui.components.LoadingSkeleton
 import com.ironhabit.app.ui.components.LocalSnackbarHostState
+import com.ironhabit.app.ui.screens.train.distinctMuscleGroups
+import com.ironhabit.app.ui.screens.train.filterExercisesByMuscle
+import com.ironhabit.app.ui.theme.IronHabitSpacing
 
 /**
  * 「新增 / 编辑计划条目」表单页。
@@ -66,8 +73,8 @@ fun AddEditPlanScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .padding(IronHabitSpacing.lg),
+        verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.md),
     ) {
         Text(
             text = stringResource(
@@ -165,7 +172,7 @@ fun AddEditPlanScreen(
                     }
                     Button(
                         onClick = viewModel::onSave,
-                        modifier = Modifier.padding(start = 8.dp),
+                        modifier = Modifier.padding(start = IronHabitSpacing.sm),
                     ) {
                         Text(text = stringResource(R.string.action_save))
                     }
@@ -175,7 +182,7 @@ fun AddEditPlanScreen(
     }
 }
 
-/** 动作选择：标题 + 可选动作 chips。 */
+/** 动作选择：肌群筛选 chips（与动作库同语义）+ 可选动作 chips。 */
 @Composable
 private fun ExercisePicker(
     exercises: List<Exercise>,
@@ -187,8 +194,38 @@ private fun ExercisePicker(
         style = MaterialTheme.typography.titleSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        exercises.forEach { exercise ->
+
+    // 肌群筛选（方案 A，复用动作库纯函数）：空串 = 全部；只按主肌群严格匹配。
+    // 51 个动作全量竖排要滚很久，先选肌群把候选缩到个位数再点动作。
+    var muscleFilter by rememberSaveable { mutableStateOf("") }
+    val muscleOptions = remember(exercises) { distinctMuscleGroups(exercises) }
+    val visibleExercises = remember(exercises, muscleFilter) {
+        filterExercisesByMuscle(exercises, muscleFilter)
+    }
+
+    if (muscleOptions.isNotEmpty()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
+        ) {
+            FilterChip(
+                selected = muscleFilter.isBlank(),
+                onClick = { muscleFilter = "" },
+                label = { Text(text = stringResource(R.string.label_filter_all)) },
+            )
+            muscleOptions.forEach { muscle ->
+                FilterChip(
+                    selected = muscleFilter == muscle,
+                    onClick = { muscleFilter = muscle },
+                    label = { Text(text = muscle) },
+                )
+            }
+        }
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm)) {
+        visibleExercises.forEach { exercise ->
             FilterChip(
                 selected = selectedId == exercise.id,
                 onClick = { onSelect(exercise.id) },
@@ -208,7 +245,7 @@ private fun DayOfWeekPicker(
         modifier = Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
     ) {
         WEEKDAY_RES.forEachIndexed { index, labelRes ->
             val day = index + 1

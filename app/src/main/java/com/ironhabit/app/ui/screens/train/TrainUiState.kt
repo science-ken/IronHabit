@@ -2,6 +2,8 @@ package com.ironhabit.app.ui.screens.train
 
 import com.ironhabit.app.domain.model.Exercise
 import com.ironhabit.app.domain.model.WeekPlan
+import java.text.Collator
+import java.util.Locale
 
 /**
  * 训练页历史列表项：某天的打卡条数。
@@ -44,3 +46,24 @@ data class TrainUiState(
     val errorRes: Int? = null,
     val snackbarRes: Int? = null,
 )
+
+/**
+ * 动作库肌群筛选 chips 的选项（方案 A，数据驱动）。
+ *
+ * 取动作的**主肌群**（[Exercise.primaryMuscleGroup]，=`muscleGroups` 第一个）去重，按中文拼音序排列
+ * （[Collator]+[Locale.CHINA]，JVM/Android 一致，chips 顺序对中文用户可预期）；
+ * 主肌群为空的动作不产生选项（只出现在「全部」里）。
+ */
+fun distinctMuscleGroups(exercises: List<Exercise>): List<String> =
+    exercises.mapNotNull { it.primaryMuscleGroup }
+        .distinct()
+        .sortedWith(compareBy(Collator.getInstance(Locale.CHINA)) { it })
+
+/**
+ * 按主肌群过滤动作库（方案 A）。
+ *
+ * `muscle` 空白 = 不过滤（全部）；非空 = 只留主肌群严格相等（区分大小写）的动作。
+ * 纯函数抽取便于 JVM 单测锁定「全部 ⇄ 单肌群」往返语义。
+ */
+fun filterExercisesByMuscle(exercises: List<Exercise>, muscle: String): List<Exercise> =
+    if (muscle.isBlank()) exercises else exercises.filter { it.primaryMuscleGroup == muscle }
