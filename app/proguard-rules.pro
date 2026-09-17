@@ -54,6 +54,20 @@
 -dontwarn androidx.room.paging.**
 
 # =============================================================================
+# 安全存储（androidx.security:security-crypto → com.google.crypto.tink）
+# =============================================================================
+# tink 的类上标注了 Google Error Prone 的注解（@CanIgnoreReturnValue /
+# @CheckReturnValue / @Immutable / @RestrictedApi）。这些注解是 compile-only
+# （仅编译期存在，运行时不加载），但 R8 在 release 压缩时会因「引用了找不到的类」
+# 直接中止构建：
+#   > Task :app:minifyReleaseWithR8 FAILED
+#   ERROR: R8: Missing class com.google.errorprone.annotations.CanIgnoreReturnValue
+#          (referenced from: com.google.crypto.tink...)
+# debug 不开压缩（isMinifyEnabled=false）故不触发，只有 release 才会踩到。
+# 注解缺失不影响运行逻辑，忽略该注解包即可。
+-dontwarn com.google.errorprone.annotations.**
+
+# =============================================================================
 # Compose / Kotlin 元数据
 # =============================================================================
 -dontwarn org.jetbrains.annotations.**
