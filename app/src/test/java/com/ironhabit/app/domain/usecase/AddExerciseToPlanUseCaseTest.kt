@@ -5,7 +5,6 @@ import com.ironhabit.app.domain.repository.PlanRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
-import io.mockk.verify
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -16,7 +15,8 @@ import org.junit.Test
  *
  * 重点守住四条不变量：
  * 1. 写入**必带** `weekStartEpochDay`（坑 1：不带会串进「每周相同」那份）；
- * 2. 全程无 `DELETE` / `REPLACE` —— 取消天走 `PlanRepository.delete`（软删，红线 3）；
+ * 2. 全程无 `DELETE` / `REPLACE` —— 取消天走软删（红线 3），批量提交走
+ *    `PlanRepository.applyWeeklyChanges`（B-17：单事务，不留半套状态）；
  * 3. 用户路径所有写入 `isUserEdited = true`（AI 生成时整行跳过，红线 4）；
  * 4. 空周 + 「每周相同」有课 → 先复制整份再写目标天（防"加一个动作挤没整周课"）。
  */
@@ -45,28 +45,23 @@ class AddExerciseToPlanUseCaseTest {
         weekStartEpochDay = weekStart,
     )
 
-    /** 收集所有经 `PlanRepository.upsert` 写入的行。 */
-    private fun captureUpserts(): MutableList<WeekPlan> {
-        val list = mutableListOf<WeekPlan>()
-        coEvery { planRepository.upsert(any()) } answers {
-            list.add(firstArg())
-            1L
+    /** 捕获「单事务批量提交」里的全部 upsert 行与软删 id（B-17 后的提交方式）。 */
+    private fun captureTx(): Pair<MutableList<WeekPlan>, MutableList<Long>> {
+        val upserts = mutableListOf<WeekPlan>()
+        val deletes = mutableListOf<Long>()
+        coEvery { planRepository.applyWeeklyChanges(any(), any()) } answers {
+            @Suppress("UNCHECKED_CAST")
+            upserts += firstArg<List<WeekPlan>>()
+            @Suppress("UNCHECKED_CAST")
+            deletes += secondArg<List<Long>>()
+            deletes.size
         }
-        return list
-    }
-
-    private fun captureDeletes(): MutableList<Long> {
-        val list = mutableListOf<Long>()
-        coEvery { planRepository.delete(any()) } answers {
-            list.add(firstArg())
-            Unit
-        }
-        return list
+        return upserts to deletes
     }
 
     @Test
     fun `adds selected days with userEdited flag and target week`() = runTest {
-        val upserts = captureUpserts()
+        val (upserts, deletes) = captureTx()
         coEvery { planRepository.getRowsForWeek(week) } returns emptyList()
         coEvery { planRepository.getRowsForWeek(WeekPlan.TEMPLATE_WEEK_START) } returns emptyList()
 
@@ -92,21 +87,21 @@ class AddExerciseToPlanUseCaseTest {
             assertEquals(10, row.targetReps)
         }
         assertEquals(setOf(2, 5), upserts.map { it.dayOfWeek }.toSet())
-        coVerify(exactly = 0) { planRepository.delete(any()) }
+        assertTrue("没有取消天 → 事务里不得有软删 id", deletes.isEmpty())
+        coVerify(exactly = 1) { planRepository.applyWeeklyChanges(any(), any()) }
     }
 
     @Test
     fun `deselecting a currently active day soft-deletes it instead of hard delete`() = runTest {
         val activeMonday = plan(id = 11L, day = 1)
-        val upserts = captureUpserts()
-        val deletes = captureDeletes()
+        val (upserts, deletes) = captureTx()
         coEvery { planRepository.getRowsForWeek(week) } returns listOf(activeMonday)
         coEvery { planRepository.getRowsForWeek(WeekPlan.TEMPLATE_WEEK_START) } returns emptyList()
 
         val result = useCase(1L, week, selectedDays = setOf(3), targetSets = 3, targetReps = 12, alsoRepeatWeekly = false)
 
         assertEquals(listOf(1), result.removedDays)
-        assertEquals("取消 = 软删除（红线 3：绝无 DELETE 语义的直接抹行）", listOf(11L), deletes)
+        assertEquals("取消 = 软删除（红线 3：软删 id 进入事务，绝无物理删行）", listOf(11L), deletes)
         assertEquals(listOf(3), result.writtenDays)
         assertEquals(3, upserts.single().dayOfWeek)
     }
@@ -115,8 +110,7 @@ class AddExerciseToPlanUseCaseTest {
     fun `re-selecting a user-deleted day revives the same row via upsert`() = runTest {
         // 用户先前删掉（软删）周一槽位；现在重新勾上 = 用户反悔，允许复活（用户显式路径）。
         val softDeleted = plan(id = 21L, day = 1, isActive = false, isUserEdited = true)
-        val upserts = captureUpserts()
-        val deletes = captureDeletes()
+        val (upserts, deletes) = captureTx()
         coEvery { planRepository.getRowsForWeek(week) } returns listOf(softDeleted)
         coEvery { planRepository.getRowsForWeek(WeekPlan.TEMPLATE_WEEK_START) } returns emptyList()
 
@@ -134,7 +128,7 @@ class AddExerciseToPlanUseCaseTest {
         // 该周无启用专属行 + 模板里有别的课 → 先复制整份（含本动作），再写目标天。
         val repeatPush = plan(id = 31L, exerciseId = 9L, day = 2, weekStart = WeekPlan.TEMPLATE_WEEK_START)
         val repeatSquat = plan(id = 32L, exerciseId = 1L, day = 4, weekStart = WeekPlan.TEMPLATE_WEEK_START)
-        val upserts = captureUpserts()
+        val (upserts, _) = captureTx()
         coEvery { planRepository.getRowsForWeek(week) } returns emptyList()
         coEvery { planRepository.getRowsForWeek(WeekPlan.TEMPLATE_WEEK_START) } returns listOf(repeatPush, repeatSquat)
 
@@ -155,7 +149,7 @@ class AddExerciseToPlanUseCaseTest {
     @Test
     fun `week that already has active rows does not trigger copy`() = runTest {
         val existing = plan(id = 41L, exerciseId = 8L, day = 3)
-        val upserts = captureUpserts()
+        val (upserts, _) = captureTx()
         coEvery { planRepository.getRowsForWeek(week) } returns listOf(existing)
         coEvery { planRepository.getRowsForWeek(WeekPlan.TEMPLATE_WEEK_START) } returns listOf(
             plan(id = 42L, exerciseId = 9L, day = 2, weekStart = WeekPlan.TEMPLATE_WEEK_START),
@@ -170,7 +164,7 @@ class AddExerciseToPlanUseCaseTest {
 
     @Test
     fun `alsoRepeatWeekly mirrors target state onto template sheet`() = runTest {
-        val upserts = captureUpserts()
+        val (upserts, _) = captureTx()
         coEvery { planRepository.getRowsForWeek(week) } returns emptyList()
         coEvery { planRepository.getRowsForWeek(WeekPlan.TEMPLATE_WEEK_START) } returns emptyList()
 
@@ -184,7 +178,7 @@ class AddExerciseToPlanUseCaseTest {
     @Test
     fun `alsoRepeatWeekly keeps template untouched when off`() = runTest {
         // 空周预处理允许"查询"模板份（判断是否要复制），但关闭开关时绝不允许"写入"模板份。
-        val upserts = captureUpserts()
+        val (upserts, _) = captureTx()
         coEvery { planRepository.getRowsForWeek(week) } returns emptyList()
         coEvery { planRepository.getRowsForWeek(WeekPlan.TEMPLATE_WEEK_START) } returns emptyList()
 
@@ -198,7 +192,7 @@ class AddExerciseToPlanUseCaseTest {
 
     @Test
     fun `clamps sets and reps to InputLimits and filters invalid days`() = runTest {
-        val upserts = captureUpserts()
+        val (upserts, _) = captureTx()
         coEvery { planRepository.getRowsForWeek(week) } returns emptyList()
         coEvery { planRepository.getRowsForWeek(WeekPlan.TEMPLATE_WEEK_START) } returns emptyList()
 
@@ -214,7 +208,7 @@ class AddExerciseToPlanUseCaseTest {
     fun `overwrites existing ai row keeping its id`() = runTest {
         // 槽位上是 AI 行（isUserEdited=false）：用户显式加入 → 覆盖组次并置用户标记。
         val aiRow = plan(id = 51L, day = 2, isUserEdited = false)
-        val upserts = captureUpserts()
+        val (upserts, _) = captureTx()
         coEvery { planRepository.getRowsForWeek(week) } returns listOf(aiRow)
         coEvery { planRepository.getRowsForWeek(WeekPlan.TEMPLATE_WEEK_START) } returns emptyList()
 
@@ -232,7 +226,7 @@ class AddExerciseToPlanUseCaseTest {
         val monday = plan(id = 61L, day = 1)
         val friday = plan(id = 62L, day = 5)
         val otherExercise = plan(id = 63L, exerciseId = 99L, day = 2)
-        val deletes = captureDeletes()
+        val (_, deletes) = captureTx()
         coEvery { planRepository.getRowsForWeek(week) } returns listOf(monday, friday, otherExercise)
         coEvery { planRepository.getRowsForWeek(WeekPlan.TEMPLATE_WEEK_START) } returns emptyList()
 

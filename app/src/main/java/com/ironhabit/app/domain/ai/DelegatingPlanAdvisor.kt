@@ -10,6 +10,7 @@ import com.ironhabit.app.domain.model.RemoteFallbackReason
 import com.ironhabit.app.domain.model.UserProfile
 import com.ironhabit.app.domain.model.WeekPlan
 import com.ironhabit.app.domain.repository.SettingsRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.LocalDate
@@ -95,8 +96,19 @@ class DelegatingPlanAdvisor(
 
         return try {
             val result: T = remoteCall()
-            record(source = AdviceSource.REMOTE_LLM, reason = null)
-            result
+            if (isUsableRemoteResult(result)) {
+                record(source = AdviceSource.REMOTE_LLM, reason = null)
+                result
+            } else {
+                // B-3：远端"成功返回"了空/幻觉结果（如臆造的动作 id 被库校验全部丢弃 → 一条不剩）
+                // ≠ 有效建议。按失败回落本地，绝不把空结果交给上层 —— 否则生成链路会把
+                // 「整周计划」当成"本次没排任何条目"而回收掉用户全部现有 AI 行。
+                record(source = AdviceSource.LOCAL_RULES, reason = RemoteFallbackReason.REMOTE_ERROR)
+                localCall()
+            }
+        } catch (cancellation: CancellationException) {
+            // B-8：协程取消必须原样放行 —— 吞掉它会破坏结构化并发（调用方以为还在跑）。
+            throw cancellation
         } catch (t: Throwable) {
             // 领域层零 Android 依赖（不打 android.util.Log，JVM 单测也不被它拖累）；
             // 失败细节统一由 RemoteAdvisorException / IOException 的 message 承载，
@@ -104,6 +116,19 @@ class DelegatingPlanAdvisor(
             record(source = AdviceSource.LOCAL_RULES, reason = RemoteFallbackReason.REMOTE_ERROR)
             localCall()
         }
+    }
+
+    /**
+     * 远端结果是否**可用**（B-3）：空结果按失败处理，回落本地。
+     *
+     * - [PlanProposal]：至少要有一条「天 × 动作」草案（`days` 全空 / 每天条目全空 = 不可用）；
+     * - 动作建议列表：非空才算可用；
+     * - 其他类型（未来扩展）：视为可用。
+     */
+    private fun <T> isUsableRemoteResult(result: T): Boolean = when (result) {
+        is PlanProposal -> result.days.any { day -> day.items.isNotEmpty() }
+        is List<*> -> result.isNotEmpty()
+        else -> true
     }
 
     /** 读「是否启用远端」开关（见类注释的线程说明）。 */

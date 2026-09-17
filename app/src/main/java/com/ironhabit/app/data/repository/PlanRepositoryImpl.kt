@@ -1,5 +1,7 @@
 package com.ironhabit.app.data.repository
 
+import androidx.room.withTransaction
+import com.ironhabit.app.data.local.AppDatabase
 import com.ironhabit.app.data.local.dao.WeekPlanDao
 import com.ironhabit.app.data.mapper.PlanMapper
 import com.ironhabit.app.di.IoDispatcher
@@ -25,6 +27,7 @@ import kotlinx.datetime.TimeZone
  */
 @Singleton
 class PlanRepositoryImpl @Inject constructor(
+    private val database: AppDatabase,
     private val weekPlanDao: WeekPlanDao,
     private val clock: Clock,
     private val timeZone: TimeZone,
@@ -78,28 +81,34 @@ class PlanRepositoryImpl @Inject constructor(
      *
      * @return 复制/停用的行数（`0` = 该周本来就没有自己的计划，勾选无意义）
      */
-    override suspend fun setRepeatWeekly(weekStartEpochDay: Long, enabled: Boolean): Int {
-        if (!enabled) return weekPlanDao.deactivateRepeatRows()
-
-        val weekRows: List<WeekPlan> = weekPlanDao.getRowsForWeek(weekStartEpochDay)
-            .map(PlanMapper::toDomain)
-            .filter { plan -> plan.isActive }
-        if (weekRows.isEmpty()) return 0
-
-        for (plan in weekRows) {
-            weekPlanDao.upsertExplicit(
-                PlanMapper.toEntity(
-                    plan.copy(
-                        id = 0L,
-                        weekStartEpochDay = WeekPlan.TEMPLATE_WEEK_START,
-                        isActive = true,
-                        isUserEdited = false,
-                    ),
-                ),
-            )
+    override suspend fun setRepeatWeekly(weekStartEpochDay: Long, enabled: Boolean): Int =
+        // B-17：整份复制/停用是**多行**操作 —— 包进单事务，中途失败不留"半套模板"。
+        database.withTransaction {
+            if (!enabled) {
+                weekPlanDao.deactivateRepeatRows()
+            } else {
+                val weekRows: List<WeekPlan> = weekPlanDao.getRowsForWeek(weekStartEpochDay)
+                    .map(PlanMapper::toDomain)
+                    .filter { plan -> plan.isActive }
+                if (weekRows.isEmpty()) {
+                    0
+                } else {
+                    for (plan in weekRows) {
+                        weekPlanDao.upsertExplicit(
+                            PlanMapper.toEntity(
+                                plan.copy(
+                                    id = 0L,
+                                    weekStartEpochDay = WeekPlan.TEMPLATE_WEEK_START,
+                                    isActive = true,
+                                    isUserEdited = false,
+                                ),
+                            ),
+                        )
+                    }
+                    weekRows.size
+                }
+            }
         }
-        return weekRows.size
-    }
 
     override fun observeAll(): Flow<List<WeekPlan>> =
         weekPlanDao.observeAll()
@@ -113,10 +122,14 @@ class PlanRepositoryImpl @Inject constructor(
 
     override suspend fun upsertGenerated(plans: List<WeekPlan>): Int {
         // 只 upsert，绝不 DELETE（含"先删本周再重建"）—— 见接口文档。
-        for (plan in plans) {
-            weekPlanDao.upsertExplicit(PlanMapper.toEntity(plan).copy(isUserEdited = false))
+        // B-17：批量写入包进单事务 —— 中途失败整体回滚，不留"半套 AI 计划"。
+        if (plans.isEmpty()) return 0
+        return database.withTransaction {
+            for (plan in plans) {
+                weekPlanDao.upsertExplicit(PlanMapper.toEntity(plan).copy(isUserEdited = false))
+            }
+            plans.size
         }
-        return plans.size
     }
 
     /**
@@ -132,7 +145,10 @@ class PlanRepositoryImpl @Inject constructor(
     }
 
     override fun observePlannedWeekdays(): Flow<List<Int>> =
-        observeEffectivePlanForWeek(currentWeekStart())
+        observePlannedWeekdays(currentWeekStart())
+
+    override fun observePlannedWeekdays(weekStartEpochDay: Long): Flow<List<Int>> =
+        observeEffectivePlanForWeek(weekStartEpochDay)
             .map { plans -> plans.map { plan -> plan.dayOfWeek }.distinct().sorted() }
             .flowOn(ioDispatcher)
 
@@ -153,5 +169,21 @@ class PlanRepositoryImpl @Inject constructor(
     override suspend fun delete(id: Long) {
         // 软删除：保留唯一索引槽位 + 阻止 AI 复活；不影响历史打卡记录。
         weekPlanDao.softDelete(id)
+    }
+
+    override suspend fun applyWeeklyChanges(
+        upserts: List<WeekPlan>,
+        softDeleteIds: List<Long>,
+    ): Int = database.withTransaction {
+        // B-17：目标态提交的原子性 —— 全部 upsert + 软删要么都成，要么都不成。
+        for (plan in upserts) {
+            weekPlanDao.upsertExplicit(PlanMapper.toEntity(plan).copy(isUserEdited = true))
+        }
+        var removed: Int = 0
+        for (id in softDeleteIds) {
+            weekPlanDao.softDelete(id)
+            removed++
+        }
+        removed
     }
 }

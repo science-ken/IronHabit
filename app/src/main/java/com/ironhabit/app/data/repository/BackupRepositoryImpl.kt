@@ -7,12 +7,14 @@ import com.ironhabit.app.data.local.dao.CheckInDao
 import com.ironhabit.app.data.local.dao.ExerciseDao
 import com.ironhabit.app.data.local.dao.HabitDao
 import com.ironhabit.app.data.local.dao.HabitLogDao
+import com.ironhabit.app.data.local.dao.MealDao
 import com.ironhabit.app.data.local.dao.WeekPlanDao
 import com.ironhabit.app.data.local.entity.BodyMetricEntity
 import com.ironhabit.app.data.local.entity.CheckInEntity
 import com.ironhabit.app.data.local.entity.ExerciseEntity
 import com.ironhabit.app.data.local.entity.HabitEntity
 import com.ironhabit.app.data.local.entity.HabitLogEntity
+import com.ironhabit.app.data.local.entity.MealEntity
 import com.ironhabit.app.data.local.entity.WeekPlanEntity
 import com.ironhabit.app.data.preferences.SettingsDataStore
 import com.ironhabit.app.di.AppVersion
@@ -33,6 +35,8 @@ import com.ironhabit.app.domain.model.HabitBackup
 import com.ironhabit.app.domain.model.HabitFrequency
 import com.ironhabit.app.domain.model.HabitLogBackup
 import com.ironhabit.app.domain.model.InjuryArea
+import com.ironhabit.app.domain.model.MealBackup
+import com.ironhabit.app.domain.model.ProfileLimits
 import com.ironhabit.app.domain.model.SettingsBackup
 import com.ironhabit.app.domain.model.ThemeMode
 import com.ironhabit.app.domain.model.UnitSystem
@@ -42,6 +46,7 @@ import com.ironhabit.app.domain.model.decodeEnum
 import com.ironhabit.app.domain.model.decodeEnumSet
 import com.ironhabit.app.domain.model.encodeEnumSet
 import com.ironhabit.app.domain.repository.BackupRepository
+import com.ironhabit.app.domain.repository.ReminderScheduler
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.first
@@ -52,11 +57,15 @@ import kotlinx.serialization.json.Json
  * [BackupRepository] 的 data 层实现。
  *
  * 纯本地文件 JSON 导出 / 导入（kotlinx.serialization），**绝不引入任何网络库**。
- * 导入为「整体替换」：在单个 Room 事务内清空 6 张表并保留原 `id` 重建，失败整体回滚。
+ * 导入为「整体替换」：在单个 Room 事务内清空 7 张表并保留原 `id` 重建，失败整体回滚。
  *
  * v3 修复：① 备份快照带上**用户档案 + AI 联网开关**（此前恢复会静默抹掉档案）；
  * ② 6 张表全部导出 / 还原真实 `createdAt`（老备份缺失 → 回落导入时刻，不再硬编码 `0L`）；
  * ③ `appVersion` 由 [AppVersion] 注入真实版本名（此前硬编码 `"1.0"`）。
+ *
+ * v4 修复：④ `meals` 表纳入备份（B-2：此前换机丢全部饮食记录）；
+ * ⑤ `settings.trainingDaysPerWeek` 恢复（B-6：v4+ 备份才写回，老备份不动本地值）；
+ * ⑥ 恢复成功后**重排全部提醒**（B-7：AlarmManager 仍按旧时间响）。
  */
 @Singleton
 class BackupRepositoryImpl @Inject constructor(
@@ -67,7 +76,9 @@ class BackupRepositoryImpl @Inject constructor(
     private val habitDao: HabitDao,
     private val habitLogDao: HabitLogDao,
     private val bodyMetricDao: BodyMetricDao,
+    private val mealDao: MealDao,
     private val settingsDataStore: SettingsDataStore,
+    private val reminderScheduler: ReminderScheduler,
     @AppVersion private val appVersion: String,
     private val clock: Clock,
 ) : BackupRepository {
@@ -94,6 +105,7 @@ class BackupRepositoryImpl @Inject constructor(
             habits = habitDao.getAll().map { it.toBackup() },
             habitLogs = habitLogDao.getAll().map { it.toBackup() },
             bodyMetrics = bodyMetricDao.getAll().map { it.toBackup() },
+            meals = mealDao.getAll().map { it.toBackup() },
             settings = settings.toBackup(profile, aiRemoteEnabled),
         )
         return jsonCodec.encodeToString(BackupPayload.serializer(), payload)
@@ -116,6 +128,7 @@ class BackupRepositoryImpl @Inject constructor(
             habitDao.clearAll()
             habitLogDao.clearAll()
             bodyMetricDao.clearAll()
+            mealDao.clearAll()
 
             exerciseDao.insertAll(payload.exercises.map { it.toEntity(importMillis) })
             weekPlanDao.insertAll(payload.weekPlans.map { it.toEntity(importMillis) })
@@ -123,10 +136,15 @@ class BackupRepositoryImpl @Inject constructor(
             habitDao.insertAll(payload.habits.map { it.toEntity(importMillis) })
             habitLogDao.insertAll(payload.habitLogs.map { it.toEntity(importMillis) })
             bodyMetricDao.insertAll(payload.bodyMetrics.map { it.toEntity(importMillis) })
+            mealDao.insertAll(payload.meals.map { it.toEntity(importMillis) })
         }
 
         // 数据库导入成功后同步设置快照（DataStore 不参与 Room 事务）。
         applySettings(payload.settings, payload.schemaVersion)
+
+        // B-7：设置（提醒时间/开关）与习惯提醒可能都变了 → 重排全部 AlarmManager 闹钟。
+        // 必须放在事务与设置写回**都成功之后**：此时 DataStore 里才是最终生效的提醒配置。
+        reminderScheduler.rescheduleAll()
     }
 
     /**
@@ -183,6 +201,10 @@ class BackupRepositoryImpl @Inject constructor(
         if (carriesProfile) {
             settingsDataStore.setAiRemoteEnabled(settings.aiRemoteEnabled)
         }
+        // B-6：v4+ 备份才显式携带「每周训练天数」（v1–v3 解码即默认 3，写回会覆盖本地已选值）。
+        if (BackupRestoreRules.carriesTrainingDaysPerWeek(schemaVersion)) {
+            settingsDataStore.setProfileTrainingDaysPerWeek(settings.trainingDaysPerWeek)
+        }
     }
 }
 
@@ -199,6 +221,9 @@ internal object BackupRestoreRules {
     /** 备份自 v3 起携带用户档案快照（`settings` 新增 11 项）。 */
     const val PROFILE_SNAPSHOT_SCHEMA_VERSION: Int = 3
 
+    /** 备份自 v4 起携带「每周训练天数」（`settings.trainingDaysPerWeek`，B-6）。 */
+    const val TRAINING_DAYS_SCHEMA_VERSION: Int = 4
+
     /**
      * 备份是否携带档案快照。
      *
@@ -207,6 +232,15 @@ internal object BackupRestoreRules {
      */
     fun carriesProfileSnapshot(schemaVersion: Int): Boolean =
         schemaVersion >= PROFILE_SNAPSHOT_SCHEMA_VERSION
+
+    /**
+     * 备份是否显式携带「每周训练天数」。
+     *
+     * v4+ 一定显式编码（`encodeDefaults = true`）→ 照写；v1–v3 无该键（解码即默认 3）
+     * → **不写回**，避免把用户本地选的 4/5/6 天覆盖回默认 3 天（B-6）。
+     */
+    fun carriesTrainingDaysPerWeek(schemaVersion: Int): Boolean =
+        schemaVersion >= TRAINING_DAYS_SCHEMA_VERSION
 
     /**
      * 备份 `createdAt` → 实体 `createdAt`。
@@ -420,6 +454,34 @@ private fun BodyMetricBackup.toEntity(importMillis: Long): BodyMetricEntity = Bo
     createdAt = BackupRestoreRules.resolveCreatedAt(createdAt, importMillis),
 )
 
+private fun MealEntity.toBackup(): MealBackup = MealBackup(
+    id = id,
+    dateEpochDay = dateEpochDay,
+    mealType = mealType,
+    itemsText = itemsText,
+    kcal = kcal,
+    proteinG = proteinG,
+    isCompleted = isCompleted,
+    sortOrder = sortOrder,
+    isActive = isActive,
+    isUserEdited = isUserEdited,
+    createdAt = createdAt,
+)
+
+private fun MealBackup.toEntity(importMillis: Long): MealEntity = MealEntity(
+    id = id,
+    dateEpochDay = dateEpochDay,
+    mealType = mealType,
+    itemsText = itemsText,
+    kcal = kcal,
+    proteinG = proteinG,
+    isCompleted = isCompleted,
+    sortOrder = sortOrder,
+    isActive = isActive,
+    isUserEdited = isUserEdited,
+    createdAt = BackupRestoreRules.resolveCreatedAt(createdAt, importMillis),
+)
+
 /** 设置 + 用户档案 + AI 联网开关 → 备份快照（枚举一律存 `name`，与 [SettingsDataStore] 同口径）。 */
 private fun AppSettings.toBackup(
     profile: UserProfile,
@@ -441,6 +503,7 @@ private fun AppSettings.toBackup(
     injuryNote = profile.injuryNote,
     dietaryAvoid = encodeEnumSet(profile.dietaryAvoid),
     aiRemoteEnabled = aiRemoteEnabled,
+    trainingDaysPerWeek = ProfileLimits.coerceTrainingDaysPerWeek(profile.trainingDaysPerWeek),
 )
 
 private fun parseCategory(value: String): ExerciseCategory =

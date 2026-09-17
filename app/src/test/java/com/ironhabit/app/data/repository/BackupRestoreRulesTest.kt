@@ -1,6 +1,5 @@
 package com.ironhabit.app.data.repository
 
-import com.ironhabit.app.domain.model.BackupPayload
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -68,10 +67,16 @@ class BackupRestoreRulesTest {
             "更高版本沿用同一契约（导入前已被 require 拦住，这里只保证判定单调）",
             BackupRestoreRules.carriesProfileSnapshot(4),
         )
+        // 每个快照字段各自的起始版本是独立契约（CURRENT 会随版本演进，不能与它强绑）：
+        assertEquals("档案快照自 v3 起", 3, BackupRestoreRules.PROFILE_SNAPSHOT_SCHEMA_VERSION)
         assertEquals(
-            "档案快照的起始版本必须与 BackupPayload.CURRENT_SCHEMA_VERSION 一致",
-            BackupPayload.CURRENT_SCHEMA_VERSION,
-            BackupRestoreRules.PROFILE_SNAPSHOT_SCHEMA_VERSION,
+            "训练天数快照自 v4 起（v4 才引入 trainingDaysPerWeek）",
+            4,
+            BackupRestoreRules.TRAINING_DAYS_SCHEMA_VERSION,
+        )
+        assertTrue(
+            "训练天数起始版本不得早于档案快照（否则老备份会被误判携带天数）",
+            BackupRestoreRules.TRAINING_DAYS_SCHEMA_VERSION >= BackupRestoreRules.PROFILE_SNAPSHOT_SCHEMA_VERSION,
         )
     }
 

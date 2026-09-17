@@ -78,7 +78,9 @@ class BuildWeeklyReviewUseCase @Inject constructor(
             weekCheckIns = weekCheckIns,
             trendCheckIns = trendCheckIns,
             exercises = exercises,
-            plannedDays = planRepository.observePlannedWeekdays().first().size,
+            // B-9：「计划天数」必须是**复盘目标周**实际排课的天数 —— 本用例可翻到上周复盘，
+            // 不能拿「当前周」的天数冒充（observePlannedWeekdays 无参版恒取当前周）。
+            plannedDays = planRepository.observePlannedWeekdays(weekStart).first().size,
         )
         // 只算一次：body / diet 都会做仓库查询，算两遍既慢又可能出现不一致的快照。
         val body: BodyReview = buildBody(weekStart = weekStart, weekEnd = weekEnd)

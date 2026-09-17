@@ -54,9 +54,15 @@ object AppModule {
     @Singleton
     fun provideClock(): Clock = Clock.System
 
-    /** 系统时区（测试可替换）。 */
+    /**
+     * 系统时区（测试可替换）。
+     *
+     * B-5：**不做 `@Singleton`** —— 单例会把"App 启动那一刻"的时区快照住，
+     * 用户旅行跨时区后「今天」仍然按旧时区算。每次注入点求值一次，
+     * 保证长时间驻留（前台服务/常驻通知）后日期口径跟随系统变化。
+     * `TimeZone` 是不可变值类型，重复求值无副作用。
+     */
     @Provides
-    @Singleton
     fun provideTimeZone(): TimeZone = TimeZone.currentSystemDefault()
 
     /**

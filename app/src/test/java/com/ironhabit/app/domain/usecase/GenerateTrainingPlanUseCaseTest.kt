@@ -1,9 +1,12 @@
 package com.ironhabit.app.domain.usecase
 
 import com.ironhabit.app.domain.ai.LocalRuleAdvisor
+import com.ironhabit.app.domain.ai.PlanAdvisor
+import com.ironhabit.app.domain.model.AdviceSource
 import com.ironhabit.app.domain.model.Exercise
 import com.ironhabit.app.domain.model.ExerciseCategory
 import com.ironhabit.app.domain.model.ExerciseProgress
+import com.ironhabit.app.domain.model.PlanProposal
 import com.ironhabit.app.domain.model.UserProfile
 import com.ironhabit.app.domain.model.WeekPlan
 import com.ironhabit.app.domain.repository.BodyMetricRepository
@@ -221,6 +224,46 @@ class GenerateTrainingPlanUseCaseTest {
         val summary = useCase()
 
         assertEquals("没有陈旧行 → retiredCount = 0", 0, summary.retiredCount)
+    }
+
+    // ---------------- B-3：空草案绝不写入、更绝不回收 ----------------
+
+    @Test
+    fun generateTrainingPlan_emptyDrafts_skipsWriteAndRetire() = runTest {
+        // 一次幻觉/空结果让 advisor 返回空提案 —— 若照旧走回收，
+        // 全部启用非手改行都会被停用 = 用户整周计划凭空消失。
+        val existing = listOf(
+            WeekPlan(id = 100L, exerciseId = 1L, dayOfWeek = 1, isActive = true, isUserEdited = false),
+            WeekPlan(id = 200L, exerciseId = 2L, dayOfWeek = 3, isActive = true, isUserEdited = false),
+        )
+        stubDefaults(existing)
+
+        val emptyAdvisor = mockk<PlanAdvisor> {
+            every { source } returns AdviceSource.LOCAL_RULES
+            every { lastFallbackReason } returns null
+            every {
+                planWeek(any(), any(), any(), any(), any(), any())
+            } returns PlanProposal(source = AdviceSource.LOCAL_RULES)
+            every { suggestExercises(any(), any(), any()) } returns emptyList()
+        }
+        val isolated = GenerateTrainingPlanUseCase(
+            planRepository = planRepository,
+            exerciseRepository = exerciseRepository,
+            checkInRepository = checkInRepository,
+            bodyMetricRepository = bodyMetricRepository,
+            settingsRepository = settingsRepository,
+            advisor = emptyAdvisor,
+            clock = fixedClock,
+            timeZone = TimeZone.UTC,
+            ioDispatcher = UnconfinedTestDispatcher(),
+        )
+
+        val summary = isolated()
+
+        coVerify(exactly = 0) { planRepository.upsertGenerated(any()) }
+        coVerify(exactly = 0) { planRepository.deactivateGenerated(any()) }
+        assertEquals("空草案 → writtenCount = 0", 0, summary.writtenCount)
+        assertEquals("空草案 → 绝不回收现有行", 0, summary.retiredCount)
     }
 
     // ---------------- C3：有氧时长贯通到「写入的周计划」----------------

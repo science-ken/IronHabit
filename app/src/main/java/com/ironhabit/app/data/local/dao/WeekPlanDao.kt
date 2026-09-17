@@ -130,7 +130,14 @@ interface WeekPlanDao {
     @Update
     suspend fun update(entity: WeekPlanEntity)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    /**
+     * 批量插入，**仅供备份恢复使用**（`BackupRepositoryImpl` 在同一事务内先 `clearAll` 再重灌）。
+     *
+     * B-11：此前是 `OnConflictStrategy.REPLACE` —— 违反「计划行禁 REPLACE」红线（REPLACE 会
+     * 重建整行、冲掉 `is_active` / `is_user_edited`）。改为 `ABORT`：清空后插入本无冲突，
+     * 若真撞了唯一槽位说明备份与清空状态不一致，应当**报错回滚**而不是静默替换。
+     */
+    @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertAll(entities: List<WeekPlanEntity>): List<Long>
 
     /**
@@ -215,9 +222,13 @@ interface WeekPlanDao {
         weekStartEpochDay: Long,
     ): Boolean
 
-    @Query("DELETE FROM week_plans WHERE id = :id")
-    suspend fun deleteById(id: Long)
-
+    /**
+     * **仅供备份恢复使用**（`BackupRepositoryImpl` 的「整体替换」事务：清空 → 按备份重灌）。
+     *
+     * 红线说明：日常路径的计划行**永远软删**（[softDelete]），物理 `DELETE` 只出现在
+     * 用户明确「用备份覆盖本机数据」的恢复事务里 —— 此时整表重灌正是用户要求的语义，
+     * 且旧数据已由用户导出的备份完整持有。
+     */
     @Query("DELETE FROM week_plans")
     suspend fun clearAll()
 }

@@ -48,18 +48,16 @@ class HabitRepositoryImpl @Inject constructor(
 
     override suspend fun setLog(habitId: Long, epochDay: Long, done: Boolean, note: String?) {
         val nowMillis = clock.now().toEpochMilliseconds()
-        val existing = habitLogDao.getOn(habitId, epochDay)
-        val log = HabitLog(
-            id = existing?.id ?: 0L,
+        // B-18：读改写合并进 DAO 的单事务（upsertLogAtomic）—— 此前"先 getOn 再 upsert"
+        // 两步之间存在间隙，并发勾选会互相覆盖（丢 note / 丢 createdAt）。
+        habitLogDao.upsertLogAtomic(
             habitId = habitId,
-            dateEpochDay = epochDay,
+            epochDay = epochDay,
             dateStartMillis = startOfDayMillis(epochDay),
-            isCompleted = done,
-            note = note ?: existing?.note,
+            done = done,
+            note = note,
             loggedAtMillis = nowMillis,
-            createdAt = existing?.createdAt ?: nowMillis,
         )
-        habitLogDao.upsert(HabitMapper.toEntity(log))
     }
 
     /** 把 epochDay 换算为当天本地 00:00 的 UTC 毫秒时间戳（架构 §7.3）。 */

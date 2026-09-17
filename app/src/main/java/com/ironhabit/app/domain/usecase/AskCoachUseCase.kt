@@ -7,6 +7,7 @@ import com.ironhabit.app.domain.ai.remote.RemoteChatPromptBuilder
 import com.ironhabit.app.domain.model.RemoteFallbackReason
 import com.ironhabit.app.domain.repository.SettingsRepository
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -78,6 +79,9 @@ class AskCoachUseCase @Inject constructor(
             RemoteChatPromptBuilder.parseChatAnswer(raw)
                 ?.let { text -> CoachAnswer.Ok(text) }
                 ?: CoachAnswer.Failed(RemoteFallbackReason.REMOTE_ERROR)
+        } catch (cancellation: CancellationException) {
+            // B-8：协程取消必须原样放行 —— 吞掉它会破坏结构化并发（用户离开页面后协程"死不透"）。
+            throw cancellation
         } catch (e: Exception) {
             // 网络 / 超时 / HTTP / 解析 / 上下文取数异常，一律转成可识别的失败，不冒泡到 UI。
             CoachAnswer.Failed(RemoteFallbackReason.REMOTE_ERROR)

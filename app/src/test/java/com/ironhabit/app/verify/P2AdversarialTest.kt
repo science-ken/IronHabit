@@ -132,7 +132,7 @@ class P2AdversarialTest {
         every { exerciseRepository.observeActive() } returns flowOf(exercises)
         every { bodyMetricRepository.observeByType(BodyMetricType.WEIGHT) } returns flowOf(weights)
         coEvery { mealRepository.getMealsIncludingInactive(any()) } returns emptyList()
-        every { planRepository.observePlannedWeekdays() } returns flowOf(plannedWeekdays)
+        every { planRepository.observePlannedWeekdays(any()) } returns flowOf(plannedWeekdays)
     }
 
     private fun reviewUseCase(

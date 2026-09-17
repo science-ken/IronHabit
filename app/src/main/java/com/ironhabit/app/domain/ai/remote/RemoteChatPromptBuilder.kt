@@ -153,6 +153,10 @@ internal object RemoteChatPromptBuilder {
         }.getOrNull()
         val text: String = when {
             parsed != null -> parsed.answer?.trim().orEmpty()
+            // B-10：「看起来是 JSON 对象但解析失败」（如 answer 字段类型非法）→ 无效回答，
+            // 返回空串让调用方转成可识别失败 —— 绝不把 JSON 原文当回答显示给用户；
+            // 只有「不是 JSON 的纯文本正文」（模型偶尔直接输出）才退回原文。
+            cleaned.startsWith("{") -> ""
             else -> cleaned
         }
         return text.takeIf { it.isNotEmpty() }

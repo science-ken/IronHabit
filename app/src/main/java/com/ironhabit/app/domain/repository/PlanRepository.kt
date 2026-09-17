@@ -14,10 +14,11 @@ interface PlanRepository {
     // ---------------- P3：按周取计划（默认路径）----------------
 
     /**
-     * **这一天的生效计划**（P3 主入口）：`weekStartEpochDay` 那一周有专属计划就用它，
-     * 否则用「每周相同」那份，两份都没有 → **空列表**（界面显示「创建训练计划」）。
+     * **这一天的生效计划**（P3 主入口，**逐天覆盖**语义）：这一天在该周（`weekStartEpochDay`）
+     * 有专属启用行就用它，否则回落「每周相同」那份，两份都没有 → **空列表**（休息日）。
      *
-     * 判定逻辑在 [com.ironhabit.app.domain.usecase.WeekPlanWeekResolver]（纯函数，有单测）。
+     * 判定逻辑在 [com.ironhabit.app.domain.usecase.WeekPlanWeekResolver]（纯函数，有单测；
+     * 与 [observeEffectivePlanForWeek] 同一判定规则，日/周视图结论恒一致）。
      */
     fun observeEffectivePlanForDay(dayOfWeek: Int, weekStartEpochDay: Long): Flow<List<WeekPlan>>
 
@@ -82,8 +83,14 @@ interface PlanRepository {
      */
     suspend fun deactivateGenerated(plans: List<WeekPlan>): Int
 
-    /** 观察「有计划的日子」（`1..7`，升序）→ 预览里的 chip 行。 */
+    /** 观察「有计划的日子」（`1..7`，升序）→ 预览里的 chip 行。默认取当前周。 */
     fun observePlannedWeekdays(): Flow<List<Int>>
+
+    /**
+     * 同 [observePlannedWeekdays]，但**按指定周**取（修复 B-9：周复盘可翻到上周，
+     * 「计划天数」必须是那一周实际排课的天数，不能拿当前周冒充）。
+     */
+    fun observePlannedWeekdays(weekStartEpochDay: Long): Flow<List<Int>>
 
     /**
      * 新增或更新计划条目（用户操作入口），返回行 id。
@@ -98,4 +105,16 @@ interface PlanRepository {
 
     /** 软删除计划条目（`isActive = false` + `isUserEdited = true`），**不影响历史打卡记录**。 */
     suspend fun delete(id: Long)
+
+    /**
+     * **单事务批量提交**一组计划变更（B-17）：
+     * [upserts] 逐条走显式 upsert（语义同 [upsert]，强制 `isUserEdited = true`），
+     * [softDeleteIds] 逐条走软删除（语义同 [delete]）。
+     *
+     * 中途任何一步失败 → **整体回滚**，绝不留下"复制了模板却没写上目标天"之类的半套状态。
+     * 调用方（如 `AddExerciseToPlanUseCase`）先在内存里算好完整目标态，再一次性提交。
+     *
+     * @return 本次软删除的行数
+     */
+    suspend fun applyWeeklyChanges(upserts: List<WeekPlan>, softDeleteIds: List<Long>): Int
 }

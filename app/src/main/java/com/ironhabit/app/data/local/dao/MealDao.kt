@@ -75,6 +75,20 @@ interface MealDao {
     @Update
     suspend fun update(entity: MealEntity)
 
+    // ---------------- 备份 / 恢复专用（B-2：meals 表此前完全漏出备份）----------------
+
+    /** 全量读取（**含软删行**）—— 备份导出必须带走用户的「不吃这餐」记录，与其它 6 张表同口径。 */
+    @Query("SELECT * FROM meals ORDER BY date_epoch_day, sort_order")
+    suspend fun getAll(): List<MealEntity>
+
+    /** 恢复 = 整体替换：先物理清空再按备份重灌（仅在 `BackupRepositoryImpl` 的事务内调用）。 */
+    @Query("DELETE FROM meals")
+    suspend fun clearAll()
+
+    /** 恢复批量写入（清空后插入，`ABORT` 保证撞唯一槽位即报错回滚，绝不静默 REPLACE）。 */
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertAll(entities: List<MealEntity>): List<Long>
+
     /**
      * AI 生成时的显式 upsert（**禁用 `OnConflictStrategy.REPLACE`**）。
      *

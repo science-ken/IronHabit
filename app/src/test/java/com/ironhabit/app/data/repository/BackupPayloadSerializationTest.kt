@@ -14,12 +14,14 @@ import com.ironhabit.app.domain.model.HabitBackup
 import com.ironhabit.app.domain.model.HabitFrequency
 import com.ironhabit.app.domain.model.HabitLogBackup
 import com.ironhabit.app.domain.model.InjuryArea
+import com.ironhabit.app.domain.model.MealBackup
 import com.ironhabit.app.domain.model.SettingsBackup
 import com.ironhabit.app.domain.model.ThemeMode
 import com.ironhabit.app.domain.model.UnitSystem
 import com.ironhabit.app.domain.model.WeekPlanBackup
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -82,6 +84,22 @@ class BackupPayloadSerializationTest {
         assertEquals(1_690_000_000_004L, restored.habits.single().createdAt)
         assertEquals(1_690_000_000_005L, restored.habitLogs.single().createdAt)
         assertEquals(1_690_000_000_006L, restored.bodyMetrics.single().createdAt)
+
+        // B-2：meals 表纳入备份后必须无损往返（换机不再丢饮食记录）。
+        val meal = restored.meals.single()
+        assertEquals(1L, meal.id)
+        assertEquals(19_000L, meal.dateEpochDay)
+        assertEquals("LUNCH", meal.mealType)
+        assertEquals("鸡胸肉 200g\n米饭 150g", meal.itemsText)
+        assertEquals(520, meal.kcal)
+        assertEquals(45.0, meal.proteinG, 0.001)
+        assertTrue(meal.isCompleted)
+        assertFalse("软删行也要原样带走（否则恢复后 AI 会把用户删的餐复活）", meal.isActive)
+        assertTrue(meal.isUserEdited)
+        assertEquals(1_690_000_000_007L, meal.createdAt)
+
+        // B-6：trainingDaysPerWeek 必须随备份往返。
+        assertEquals(5, restored.settings.trainingDaysPerWeek)
     }
 
     @Test
@@ -102,10 +120,12 @@ class BackupPayloadSerializationTest {
             "\"dietaryAvoid\"",
             "\"aiRemoteEnabled\"",
             "\"createdAt\"",
+            "\"meals\"",
+            "\"trainingDaysPerWeek\"",
         ).forEach { key ->
-            assertTrue("v3 导出 JSON 必须显式包含 $key（encodeDefaults 已开）", json.contains(key))
+            assertTrue("导出 JSON 必须显式包含 $key（encodeDefaults 已开）", json.contains(key))
         }
-        assertTrue("导出的 schemaVersion 必须是 3", json.contains("\"schemaVersion\": 3"))
+        assertTrue("导出的 schemaVersion 必须是 4", json.contains("\"schemaVersion\": 4"))
     }
 
     // ---------------- 2. 向后兼容（v2 老备份） ----------------
@@ -144,6 +164,11 @@ class BackupPayloadSerializationTest {
         assertEquals(0L, payload.habits.single().createdAt)
         assertEquals(0L, payload.habitLogs.single().createdAt)
         assertEquals(0L, payload.bodyMetrics.single().createdAt)
+
+        // B-2：老备份无 meals 键 → 解码为空列表（不抛异常，恢复后饮食为空 = 旧版行为）。
+        assertEquals(emptyList<MealBackup>(), payload.meals)
+        // B-6：老备份无 trainingDaysPerWeek 键 → 解码为默认 3（data 层按版本判定不写回）。
+        assertEquals(3, settings.trainingDaysPerWeek)
     }
 
     /**
@@ -158,10 +183,14 @@ class BackupPayloadSerializationTest {
             "v2 备份必须仍被接受（require(schemaVersion <= CURRENT_SCHEMA_VERSION)）",
             payload.schemaVersion <= BackupPayload.CURRENT_SCHEMA_VERSION,
         )
-        assertEquals(3, BackupPayload.CURRENT_SCHEMA_VERSION)
+        assertEquals(4, BackupPayload.CURRENT_SCHEMA_VERSION)
         assertTrue(
             "v2 备份不携带档案快照 → 恢复时必须整体跳过档案字段，避免覆盖本地档案",
             !BackupRestoreRules.carriesProfileSnapshot(payload.schemaVersion),
+        )
+        assertFalse(
+            "v2/v3 备份不携带 trainingDaysPerWeek → 恢复时不得写回（B-6：避免覆盖本地已选值）",
+            BackupRestoreRules.carriesTrainingDaysPerWeek(payload.schemaVersion),
         )
     }
 
@@ -216,6 +245,20 @@ class BackupPayloadSerializationTest {
                 createdAt = 1_690_000_000_006L,
             ),
         ),
+        meals = listOf(
+            MealBackup(
+                id = 1L,
+                dateEpochDay = 19_000L,
+                mealType = "LUNCH",
+                itemsText = "鸡胸肉 200g\n米饭 150g",
+                kcal = 520,
+                proteinG = 45.0,
+                isCompleted = true,
+                isActive = false,
+                isUserEdited = true,
+                createdAt = 1_690_000_000_007L,
+            ),
+        ),
         settings = SettingsBackup(
             themeMode = ThemeMode.DARK.name,
             unitSystem = UnitSystem.IMPERIAL.name,
@@ -233,6 +276,7 @@ class BackupPayloadSerializationTest {
             injuryNote = "左膝旧伤，避免深蹲",
             dietaryAvoid = setOf(DietRestriction.PEANUT.name),
             aiRemoteEnabled = true,
+            trainingDaysPerWeek = 5,
         ),
     )
 

@@ -66,6 +66,12 @@ class AddExerciseToPlanUseCase @Inject constructor(
         val removed = mutableSetOf<Int>()
         var copied = 0
 
+        // B-17：先在内存里算出**完整目标态**（复制行 + upsert 行 + 待软删行），
+        // 再通过 [PlanRepository.applyWeeklyChanges] **单事务**一次提交 ——
+        // 中途失败整体回滚，绝不留下"复制了模板却没写上目标天"的半套状态。
+        val upserts = mutableListOf<WeekPlan>()
+        val softDeleteIds = mutableListOf<Long>()
+
         for (week in buildList {
             add(weekStartEpochDay)
             if (alsoRepeatWeekly && weekStartEpochDay != WeekPlan.TEMPLATE_WEEK_START) {
@@ -83,17 +89,18 @@ class AddExerciseToPlanUseCase @Inject constructor(
                     WeekPlan.TEMPLATE_WEEK_START,
                 ).filter { it.isActive }
                 for (row in repeatRows) {
-                    planRepository.upsert(
-                        row.copy(
-                            id = 0L,
-                            weekStartEpochDay = weekStartEpochDay,
-                            isActive = true,
-                        ),
+                    upserts += row.copy(
+                        id = 0L,
+                        weekStartEpochDay = weekStartEpochDay,
+                        isActive = true,
                     )
                 }
                 copied += repeatRows.size
-                // 复制完重取一次：本动作在模板里的行可能也搬进来了，下面的写入按最新状态判定。
-                weekRows = planRepository.getRowsForWeek(week)
+                // 复制行**本地推演**进周状态（与事务提交后的真实状态一致），
+                // 下面的目标态判定按推演后的最新状态进行，无需真实重取。
+                weekRows = weekRows + upserts.filter {
+                    it.weekStartEpochDay == weekStartEpochDay
+                }
             }
 
             for (day in MIN_DAY..MAX_DAY) {
@@ -101,29 +108,29 @@ class AddExerciseToPlanUseCase @Inject constructor(
                     it.dayOfWeek == day && it.exerciseId == exerciseId
                 }
                 if (day in days) {
-                    planRepository.upsert(
-                        WeekPlan(
-                            id = existing?.id ?: 0L,
-                            exerciseId = exerciseId,
-                            dayOfWeek = day,
-                            targetSets = sets,
-                            targetReps = reps,
-                            targetWeightKg = existing?.targetWeightKg,
-                            targetDurationMin = existing?.targetDurationMin,
-                            sortOrder = existing?.sortOrder ?: nextSortOrder(weekRows, day),
-                            isActive = true,
-                            isUserEdited = true, // 由 PlanRepository.upsert 强制，这里显式写出意图
-                            weekStartEpochDay = week,
-                        ),
+                    upserts += WeekPlan(
+                        id = existing?.id ?: 0L,
+                        exerciseId = exerciseId,
+                        dayOfWeek = day,
+                        targetSets = sets,
+                        targetReps = reps,
+                        targetWeightKg = existing?.targetWeightKg,
+                        targetDurationMin = existing?.targetDurationMin,
+                        sortOrder = existing?.sortOrder ?: nextSortOrder(weekRows, day),
+                        isActive = true,
+                        isUserEdited = true, // 由 applyWeeklyChanges 统一强制，这里显式写出意图
+                        weekStartEpochDay = week,
                     )
                     written += day
                 } else if (existing != null && existing.isActive) {
                     // 未勾选但当前启用 → 用户取消了这一天 → 软删除（不 DELETE）。
-                    planRepository.delete(existing.id)
+                    softDeleteIds += existing.id
                     removed += day
                 }
             }
         }
+
+        planRepository.applyWeeklyChanges(upserts = upserts, softDeleteIds = softDeleteIds)
 
         return Result(
             writtenDays = written.sorted(),

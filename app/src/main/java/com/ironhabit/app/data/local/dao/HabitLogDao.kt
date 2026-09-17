@@ -64,6 +64,43 @@ interface HabitLogDao {
     }
 
     /**
+     * **原子勾选/记录**（B-18，照 `CheckInDao.toggleSetBit` 的读改写一体化模式）：
+     * 「读旧行 → 合并 note/createdAt → 写回」三步必须在**同一个事务**内完成。
+     * 此前 repository 层先 `getOn` 再 `upsert`，两步之间的间隙里并发写会互相覆盖
+     * （如双端同时勾选，后写方读到的旧行丢掉先写方的备注）。
+     *
+     * @param note 新备注；`null` = 保留原备注（不改写）
+     * @return 该行主键 id
+     */
+    @Transaction
+    suspend fun upsertLogAtomic(
+        habitId: Long,
+        epochDay: Long,
+        dateStartMillis: Long,
+        done: Boolean,
+        note: String?,
+        loggedAtMillis: Long,
+    ): Long {
+        val existing: HabitLogEntity? = getOn(habitId, epochDay)
+        val entity = HabitLogEntity(
+            id = existing?.id ?: 0L,
+            habitId = habitId,
+            dateEpochDay = epochDay,
+            dateStartMillis = dateStartMillis,
+            isCompleted = done,
+            note = note ?: existing?.note,
+            loggedAtMillis = loggedAtMillis,
+            createdAt = existing?.createdAt ?: loggedAtMillis,
+        )
+        return if (existing == null) {
+            insert(entity)
+        } else {
+            update(entity.copy(id = existing.id))
+            existing.id
+        }
+    }
+
+    /**
      * 备份导入用：批量重建（调用方在导入事务内**已先 `clearAll()`**，
      * 此路径**有意**用 `REPLACE` 以保留原 id）。
      */

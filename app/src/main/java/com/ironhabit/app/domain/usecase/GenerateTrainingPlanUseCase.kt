@@ -148,21 +148,33 @@ class GenerateTrainingPlanUseCase @Inject constructor(
                 }
             }
         }
-        planRepository.upsertGenerated(drafts)
+        // B-3：草案为空（远端 AI 幻觉被全部过滤 / 本地无可排内容）→ **绝不回收现有行**。
+        // 空草案只说明"本次没有可写入的内容"，绝不是"用户这周什么都不练"；
+        // 若照旧走回收，staleRows 会包含全部启用非手改行 → 一次空结果清空用户整周计划。
+        val writtenCount: Int
+        val retiredCount: Int
+        if (drafts.isNotEmpty()) {
+            planRepository.upsertGenerated(drafts)
+            // writtenCount 语义 = 本次写出的草案条数（以本地 drafts 为准，不依赖仓库返回值）。
+            writtenCount = drafts.size
 
-        // ③ 修复 C2：回收**上版生成、本次不再出现**的陈旧 AI 行（只停用，不删除）。
-        //    过滤：已启用 + 非用户手改 + 本次未写入；用户手改行（含软删除行）永不淘汰。
-        val writtenSlots: Set<Pair<Int, Long>> =
-            drafts.map { it.dayOfWeek to it.exerciseId }.toSet()
-        val staleRows: List<WeekPlan> = existing.filter { row ->
-            row.isActive &&
-                !row.isUserEdited &&
-                (row.dayOfWeek to row.exerciseId) !in writtenSlots
+            // ③ 修复 C2：回收**上版生成、本次不再出现**的陈旧 AI 行（只停用，不删除）。
+            //    过滤：已启用 + 非用户手改 + 本次未写入；用户手改行（含软删除行）永不淘汰。
+            val writtenSlots: Set<Pair<Int, Long>> =
+                drafts.map { it.dayOfWeek to it.exerciseId }.toSet()
+            val staleRows: List<WeekPlan> = existing.filter { row ->
+                row.isActive &&
+                    !row.isUserEdited &&
+                    (row.dayOfWeek to row.exerciseId) !in writtenSlots
+            }
+            retiredCount = planRepository.deactivateGenerated(staleRows)
+        } else {
+            writtenCount = 0
+            retiredCount = 0
         }
-        val retiredCount: Int = planRepository.deactivateGenerated(staleRows)
 
         return GeneratedPlanSummary(
-            writtenCount = drafts.size,
+            writtenCount = writtenCount,
             preservedCount = proposal.preservedUserEditedIds.size,
             retiredCount = retiredCount,
             notes = proposal.notes,

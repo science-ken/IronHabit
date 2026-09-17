@@ -113,7 +113,8 @@ class BuildWeeklyReviewUseCaseTest {
             val epochDay = firstArg<Long>()
             meals.filter { it.dateEpochDay == epochDay }
         }
-        every { planRepository.observePlannedWeekdays() } returns flowOf(plannedWeekdays)
+        // B-9 后复盘按目标周取口径（useCase 传 weekStart）→ 用 any() 匹配任意周参数
+        every { planRepository.observePlannedWeekdays(any()) } returns flowOf(plannedWeekdays)
     }
 
     private fun useCase(): BuildWeeklyReviewUseCase = BuildWeeklyReviewUseCase(

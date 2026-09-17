@@ -6,13 +6,16 @@ import kotlinx.serialization.Serializable
  * 导出 / 导入根模型（JSON Schema 见架构 §3.4）。
  *
  * 使用 kotlinx.serialization 做纯本地文件 JSON 序列化，**不涉及任何网络**。
- * 导入策略为「整体替换」：清空 6 张表后按 JSON 重建，`id` 保留原值以便外键自洽。
+ * 导入策略为「整体替换」：清空 7 张表后按 JSON 重建，`id` 保留原值以便外键自洽。
  *
- * **向后兼容契约（v3）**：新增字段一律带默认值，因此「旧备份缺字段 → 解码即默认值」不会抛异常。
+ * **向后兼容契约（v4）**：新增字段一律带默认值，因此「旧备份缺字段 → 解码即默认值」不会抛异常。
  * - 6 张表的备份行自 v3 起携带 `createdAt`；v1/v2 老备份无该字段（解码为 `0`），
  *   导入时由 data 层回落到**导入时刻**，避免 `created_at = 0` 破坏 `ORDER BY created_at DESC` 的历史排序。
  * - `settings` 自 v3 起携带用户档案快照；可空字段 `null` = 「未携带 / 用户未填」，
  *   导入时**跳过而不覆盖**本地已有值（详见 [SettingsBackup]）。
+ * - `meals` 表自 **v4** 起纳入备份（B-2 修复：此前换机丢全部饮食记录）；
+ *   老备份无该字段（解码为空列表）→ 恢复后饮食为空，与旧版行为一致。
+ * - `settings.trainingDaysPerWeek` 自 **v4** 起携带（B-6 修复：此前恢复后训练日数回默认 3）。
  *
  * @property schemaVersion 结构版本号
  * @property exportedAt 导出时刻（UTC 毫秒）
@@ -23,6 +26,7 @@ import kotlinx.serialization.Serializable
  * @property habits 习惯列表
  * @property habitLogs 习惯日志列表
  * @property bodyMetrics 身体数据列表
+ * @property meals 饮食记录列表（v4 新增）
  * @property settings 设置快照
  */
 @Serializable
@@ -36,6 +40,7 @@ data class BackupPayload(
     val habits: List<HabitBackup> = emptyList(),
     val habitLogs: List<HabitLogBackup> = emptyList(),
     val bodyMetrics: List<BodyMetricBackup> = emptyList(),
+    val meals: List<MealBackup> = emptyList(),
     val settings: SettingsBackup = SettingsBackup(),
 ) {
     companion object {
@@ -44,8 +49,9 @@ data class BackupPayload(
          *
          * - v2：逐组 mask / RPE / 三态来源 / 多肌群 / 计划用户改动标记 / 习惯目标值。
          * - v3：备份携带**用户档案快照**（`settings` 内新增 11 项）+ 6 张表全部携带 `createdAt`。
+         * - v4：`meals` 表纳入备份（B-2）+ `settings.trainingDaysPerWeek`（B-6）。
          */
-        const val CURRENT_SCHEMA_VERSION: Int = 3
+        const val CURRENT_SCHEMA_VERSION: Int = 4
     }
 }
 
@@ -179,6 +185,31 @@ data class BodyMetricBackup(
 )
 
 /**
+ * 饮食记录备份行（v4 新增，B-2 修复）。
+ *
+ * 字段与 [com.ironhabit.app.data.local.entity.MealEntity] 一一对应；含软删行
+ * （`isActive = false` 的「不吃这餐」）与用户手改标记 —— 恢复后 AI 重新生成才不会
+ * 把用户删掉的餐「复活」。
+ */
+@Serializable
+data class MealBackup(
+    val id: Long = 0L,
+    val dateEpochDay: Long = 0L,
+    /** 餐次（[MealType.name]）。 */
+    val mealType: String = "",
+    /** 多条食物条目（`\n` 分隔）。 */
+    val itemsText: String = "",
+    val kcal: Int = 0,
+    val proteinG: Double = 0.0,
+    val isCompleted: Boolean = false,
+    val sortOrder: Int = 0,
+    val isActive: Boolean = true,
+    val isUserEdited: Boolean = false,
+    /** 创建时刻（UTC 毫秒）；`0` = 未携带 → 导入时回落到导入时刻。 */
+    val createdAt: Long = 0L,
+)
+
+/**
  * 设置快照（v3 起含**用户档案** + AI 联网开关）。
  *
  * 档案同处 `SettingsDataStore`（不落 Room、不需 schema 迁移），但 AI 教练与本地规则引擎都要消费它，
@@ -208,6 +239,8 @@ data class BodyMetricBackup(
  * @property injuryNote 伤病备注（自由文本，v3 新增）
  * @property dietaryAvoid 饮食忌口（[DietRestriction.name] 集合，v3 新增）
  * @property aiRemoteEnabled 是否启用「AI 联网生成」（v3 新增；默认 `false` = 纯本地规则）
+ * @property trainingDaysPerWeek 每周训练天数（`3..6`，v4 新增；默认 `3` = 与 [UserProfile] 同默认。
+ *   v1–v3 备份无该键 → 解码即默认值，data 层按结构版本判定**不写回**，避免覆盖本地已选值）
  */
 @Serializable
 data class SettingsBackup(
@@ -227,4 +260,5 @@ data class SettingsBackup(
     val injuryNote: String? = null,
     val dietaryAvoid: Set<String> = emptySet(),
     val aiRemoteEnabled: Boolean = false,
+    val trainingDaysPerWeek: Int = 3,
 )

@@ -3,8 +3,12 @@ package com.ironhabit.app.domain.ai
 import com.ironhabit.app.data.preferences.AiCredentialsStore
 import com.ironhabit.app.domain.model.AdviceSource
 import com.ironhabit.app.domain.model.Exercise
+import com.ironhabit.app.domain.model.PlanItemDraft
+import com.ironhabit.app.domain.model.PlannedDay
 import com.ironhabit.app.domain.model.PlanProposal
+import com.ironhabit.app.domain.model.PlanReason
 import com.ironhabit.app.domain.model.RemoteFallbackReason
+import com.ironhabit.app.domain.model.TrainingFocus
 import com.ironhabit.app.domain.model.UserProfile
 import com.ironhabit.app.domain.model.WeekPlan
 import com.ironhabit.app.domain.repository.SettingsRepository
@@ -63,7 +67,18 @@ class DelegatingPlanAdvisorTest {
 
     private val today: LocalDate = LocalDate(2026, 9, 14)
     private val localProposal: PlanProposal = PlanProposal(source = AdviceSource.LOCAL_RULES)
-    private val remoteProposal: PlanProposal = PlanProposal(source = AdviceSource.REMOTE_LLM)
+
+    /** 远端"有效"提案必须至少有一条草案（B-3：空提案 = 不可用，会被判失败回落本地）。 */
+    private val remoteProposal: PlanProposal = PlanProposal(
+        days = listOf(
+            PlannedDay(
+                dayOfWeek = 1,
+                focus = TrainingFocus.LOWER_BODY,
+                items = listOf(PlanItemDraft(exerciseId = 1L, targetSets = 3, targetReps = 12, targetWeightKg = null, reason = PlanReason.PRIMARY_LIFT)),
+            ),
+        ),
+        source = AdviceSource.REMOTE_LLM,
+    )
 
     private fun settings(remoteEnabled: Boolean): SettingsRepository = mockk {
         every { aiRemoteEnabled() } returns kotlinx.coroutines.flow.flowOf(remoteEnabled)
@@ -159,6 +174,64 @@ class DelegatingPlanAdvisorTest {
         assertEquals(1, remote.planWeekCalls)
         assertEquals(1, local.planWeekCalls)
         assertEquals("回落时来源必须标回 LOCAL_RULES（诚实原则）", AdviceSource.LOCAL_RULES, delegating.source)
+        assertEquals(RemoteFallbackReason.REMOTE_ERROR, delegating.lastFallbackReason)
+    }
+
+    // ---------------- ④′ 远端空/幻觉结果 → 按失败回落本地（B-3）----------------
+
+    @Test
+    fun remoteEmptyProposal_fallsBackToLocal() {
+        val local = FakeAdvisor(AdviceSource.LOCAL_RULES) { localProposal }
+        // 模拟"幻觉 id 全被库校验过滤"后的空提案：调用没抛异常，但没有一条可用草案。
+        val remote = FakeAdvisor(AdviceSource.REMOTE_LLM) { PlanProposal(source = AdviceSource.REMOTE_LLM) }
+        val delegating = delegating(remoteEnabled = true, keyConfigured = true, local, remote)
+
+        val proposal = delegating.planWeek(
+            UserProfile(), emptyList(), emptyList(), emptyList(), today,
+        )
+
+        assertEquals("空提案 ≠ 有效计划 → 回落本地，绝不把空结果交给上层清空整周", localProposal, proposal)
+        assertEquals(1, remote.planWeekCalls)
+        assertEquals(1, local.planWeekCalls)
+        assertEquals(AdviceSource.LOCAL_RULES, delegating.source)
+        assertEquals(RemoteFallbackReason.REMOTE_ERROR, delegating.lastFallbackReason)
+    }
+
+    @Test
+    fun remoteProposalWithAllEmptyDays_fallsBackToLocal() {
+        val local = FakeAdvisor(AdviceSource.LOCAL_RULES) { localProposal }
+        // days 非空但每天 items 全空 —— 同样是"一条可写草案都没有"，按失败处理。
+        val remote = FakeAdvisor(AdviceSource.REMOTE_LLM) {
+            PlanProposal(
+                days = listOf(
+                    PlannedDay(dayOfWeek = 1, focus = TrainingFocus.FULL_BODY, items = emptyList()),
+                    PlannedDay(dayOfWeek = 3, focus = TrainingFocus.CARDIO_CORE, items = emptyList()),
+                ),
+                source = AdviceSource.REMOTE_LLM,
+            )
+        }
+        val delegating = delegating(remoteEnabled = true, keyConfigured = true, local, remote)
+
+        val proposal = delegating.planWeek(
+            UserProfile(), emptyList(), emptyList(), emptyList(), today,
+        )
+
+        assertEquals(localProposal, proposal)
+        assertEquals(RemoteFallbackReason.REMOTE_ERROR, delegating.lastFallbackReason)
+    }
+
+    @Test
+    fun remoteEmptySuggestionList_fallsBackToLocal() {
+        val localSuggestions: List<com.ironhabit.app.domain.model.ExerciseSuggestion> = emptyList()
+        val local = FakeAdvisor(AdviceSource.LOCAL_RULES) { localSuggestions }
+        val remote = FakeAdvisor(AdviceSource.REMOTE_LLM) { localSuggestions } // 远端返回空列表
+        val delegating = delegating(remoteEnabled = true, keyConfigured = true, local, remote)
+
+        val suggestions = delegating.suggestExercises(UserProfile(), emptyList(), emptyList())
+
+        assertTrue(suggestions.isEmpty())
+        assertEquals(1, remote.suggestCalls)
+        assertEquals("空建议列表 → 回落本地（一致语义）", 1, local.suggestCalls)
         assertEquals(RemoteFallbackReason.REMOTE_ERROR, delegating.lastFallbackReason)
     }
 

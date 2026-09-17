@@ -31,29 +31,56 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
-      - name: 网络红线校验（白名单制 · 联网一期口径）
-        run: |
-          if grep -RE "retrofit|okhttp|ktor|firebase|play-services|volley" \
-               app/build.gradle.kts gradle/libs.versions.toml; then
-            echo "::error::检测到网络/云服务依赖，违反约束"
-            exit 1
-          fi
-          # 权限白名单：白名单之外一律失败（封死账号/云同步/广告类权限扩张）。
-          # INTERNET 仅限 AI 教练一期使用（docs/ai-coach-local.md §6 / ARCHITECTURE.md §7.7）。
-          ALLOWED='android.permission.SCHEDULE_EXACT_ALARM|android.permission.USE_EXACT_ALARM|android.permission.POST_NOTIFICATIONS|android.permission.RECEIVE_BOOT_COMPLETED|android.permission.VIBRATE|android.permission.INTERNET'
-          BAD=$(grep -oE 'android\.permission\.[A-Z_]+' app/src/main/AndroidManifest.xml | sort -u \
-                | grep -Ev "^($ALLOWED)$" || true)
-          if [ -n "$BAD" ]; then
-            echo "::error::发现白名单之外的权限：$BAD"
-            exit 1
-          fi
-          echo "网络约束校验通过（白名单制）✅"
-
       - name: Run unit tests
         run: ./gradlew testDebugUnitTest --stacktrace
 
       - name: Build debug APK
         run: ./gradlew assembleDebug --stacktrace
+
+      # 红线校验放在 assembleDebug 之后：权限白名单改为解析**合并后** manifest，
+      # 依赖库（如广告/统计 SDK）向 manifest 注入的权限同样逃不过白名单。
+      - name: 网络红线校验（白名单制 · 联网一期口径 · 基于合并后 manifest）
+        run: |
+          set -euo pipefail
+
+          # ① 依赖红线：扫描**全部**构建脚本（find 现扫，不硬编码清单，防新增文件绕过）
+          BUILD_FILES=$(find . -path ./.git -prune -o -type f \( -name '*.gradle' -o -name '*.gradle.kts' -o -name '*.toml' \) -print)
+          if [ -z "$BUILD_FILES" ]; then
+            echo "::error::未找到任何构建脚本——工程结构已变，红线校验脚本必须同步更新"
+            exit 1
+          fi
+          echo "依赖红线扫描文件："
+          echo "$BUILD_FILES"
+          # -i：大小写不敏感（Retrofit2/OKHTTP 等变体同样命中）。
+          # grep 退出码语义：0=命中（违规）、1=未命中（放行）、2+=文件消失/正则错——**一律按违规处理**。
+          set +e
+          grep -iHE 'retrofit|okhttp|ktor|firebase|play-services|volley' $BUILD_FILES
+          GREP_RC=$?
+          set -e
+          if [ "$GREP_RC" -eq 0 ]; then
+            echo "::error::检测到网络/云服务依赖，违反约束"
+            exit 1
+          elif [ "$GREP_RC" -ne 1 ]; then
+            echo "::error::依赖红线 grep 执行异常（退出码 $GREP_RC）——按违规处理"
+            exit 1
+          fi
+
+          # ② 权限白名单：解析合并后 manifest；-i + 统一小写，堵死大小写变体绕过
+          MERGED_MANIFEST=$(find app/build/intermediates/merged_manifests -name 'AndroidManifest.xml' -print -quit)
+          if [ -z "$MERGED_MANIFEST" ]; then
+            echo "::error::未找到合并后 manifest——请确认 assembleDebug 已执行"
+            exit 1
+          fi
+          echo "权限白名单校验：$MERGED_MANIFEST"
+          ALLOWED='android.permission.schedule_exact_alarm|android.permission.use_exact_alarm|android.permission.post_notifications|android.permission.receive_boot_completed|android.permission.vibrate|android.permission.internet'
+          BAD=$(grep -oiE 'android\.permission\.[a-z_.]+' "$MERGED_MANIFEST" | tr 'A-Z' 'a-z' | sort -u \
+                | grep -Ev "^($ALLOWED)$" || true)
+          if [ -n "$BAD" ]; then
+            echo "::error::发现白名单之外的权限：$BAD"
+            exit 1
+          fi
+
+          echo "网络约束校验通过（白名单制 · 合并后 manifest）✅"
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
