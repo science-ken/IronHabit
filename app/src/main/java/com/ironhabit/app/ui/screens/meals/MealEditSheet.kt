@@ -32,6 +32,7 @@ import com.ironhabit.app.domain.model.InputLimits
 import com.ironhabit.app.domain.model.Meal
 import com.ironhabit.app.domain.model.MealType
 import com.ironhabit.app.ui.components.mealTypeLabelRes
+import com.ironhabit.app.ui.theme.IronHabitSpacing
 
 /**
  * 「编辑这一餐」底部弹层（无状态组件，**不持有 ViewModel**，由 `TodayViewModel` 消费提交结果）。
@@ -90,8 +91,8 @@ fun MealEditSheet(
                 // 故这里必须可滚动，并加 imePadding 让键盘弹出时按钮仍能滚出来。
                 .verticalScroll(rememberScrollState())
                 .imePadding()
-                .padding(horizontal = 20.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(horizontal = IronHabitSpacing.xl, vertical = IronHabitSpacing.sm),
+            verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.md),
         ) {
             Text(
                 text = stringResource(R.string.title_edit_meal),
@@ -106,7 +107,7 @@ fun MealEditSheet(
             )
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
             ) {
                 MealType.entries.forEach { type ->
                     FilterChip(
@@ -160,7 +161,7 @@ fun MealEditSheet(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 16.dp),
+                    .padding(bottom = IronHabitSpacing.lg),
                 horizontalArrangement = Arrangement.End,
             ) {
                 TextButton(onClick = onDismissRequest) {
@@ -174,7 +175,7 @@ fun MealEditSheet(
                         }
                     },
                     enabled = formValid,
-                    modifier = Modifier.padding(start = 8.dp),
+                    modifier = Modifier.padding(start = IronHabitSpacing.sm),
                 ) {
                     Text(text = stringResource(R.string.action_save))
                 }

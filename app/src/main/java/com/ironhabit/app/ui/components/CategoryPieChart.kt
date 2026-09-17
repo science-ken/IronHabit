@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.CategoryShare
 import com.ironhabit.app.domain.model.ExerciseCategory
+import com.ironhabit.app.ui.theme.IronHabitSpacing
 import kotlin.math.roundToInt
 
 /**
@@ -54,7 +55,7 @@ fun CategoryPieChart(
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.lg),
     ) {
         Canvas(modifier = Modifier.size(PIE_SIZE)) {
             var startAngle = START_ANGLE
@@ -96,9 +97,9 @@ private fun LegendRow(
     ratio: Float,
 ) {
     Row(
-        modifier = Modifier.padding(vertical = 2.dp),
+        modifier = Modifier.padding(vertical = IronHabitSpacing.xxs),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
     ) {
         Box(
             modifier = Modifier

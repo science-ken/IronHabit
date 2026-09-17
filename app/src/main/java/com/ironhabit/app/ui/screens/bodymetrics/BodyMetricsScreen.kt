@@ -43,6 +43,7 @@ import com.ironhabit.app.domain.model.BodyMetricType
 import com.ironhabit.app.ui.components.EmptyState
 import com.ironhabit.app.ui.components.LoadingSkeleton
 import com.ironhabit.app.ui.components.LocalSnackbarHostState
+import com.ironhabit.app.ui.theme.IronHabitSpacing
 import kotlinx.datetime.LocalDate
 
 /**
@@ -70,8 +71,8 @@ fun BodyMetricsScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+            .padding(IronHabitSpacing.lg),
+        verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.lg),
     ) {
         Text(
             text = stringResource(R.string.title_body_metrics),
@@ -114,7 +115,7 @@ fun BodyMetricsScreen(
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
                 ) {
                     OutlinedTextField(
                         value = uiState.valueText,
@@ -172,7 +173,7 @@ private fun MetricTypePicker(
         modifier = Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
     ) {
         BodyMetricType.entries.forEach { type ->
             FilterChip(
@@ -200,8 +201,8 @@ private fun LatestValueCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+                .padding(IronHabitSpacing.lg),
+            verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.xs),
         ) {
             Text(
                 text = stringResource(metricLabelRes(latest?.type ?: fallbackType)),
@@ -286,7 +287,7 @@ private fun MetricRecordRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .padding(vertical = IronHabitSpacing.xs),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {

@@ -45,7 +45,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -72,6 +71,7 @@ import com.ironhabit.app.domain.model.UnitSystem
 import com.ironhabit.app.ui.components.EmptyState
 import com.ironhabit.app.ui.components.LoadingSkeleton
 import com.ironhabit.app.ui.components.LocalSnackbarHostState
+import com.ironhabit.app.ui.theme.IronHabitSpacing
 
 /**
  * 「设置」页：主题 / 单位 / 我的档案 / 每日提醒（含精确闹钟与通知权限引导）/ 隐私 / 版本 / 备份入口。
@@ -125,8 +125,8 @@ fun SettingsScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+            .padding(IronHabitSpacing.lg),
+        verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.lg),
     ) {
         Text(
             text = stringResource(R.string.title_settings),
@@ -223,7 +223,7 @@ fun SettingsScreen(
                                     minute = uiState.reminderMinute,
                                 ) { hour, minute -> viewModel.onReminderTimeChange(hour, minute) }
                             }
-                            .padding(vertical = 8.dp),
+                            .padding(vertical = IronHabitSpacing.sm),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
@@ -291,7 +291,7 @@ fun SettingsScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable(onClick = onOpenBackup)
-                        .padding(vertical = 14.dp),
+                        .padding(vertical = IronHabitSpacing.lg),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
@@ -324,7 +324,9 @@ private fun AiSettingsSection(
     uiState: SettingsUiState,
     viewModel: SettingsViewModel,
 ) {
-    var keyInput by rememberSaveable { mutableStateOf("") }
+    // 密钥输入**不可**用 rememberSaveable：那会把明文 API Key 写进 savedInstanceState
+    // （系统 Bundle 可被备份/转储）。进程重建后重新输入即可——安全 > 便捷。
+    var keyInput by remember { mutableStateOf("") }
 
     SectionLabel(text = stringResource(R.string.settings_section_ai))
 
@@ -603,8 +605,8 @@ private fun <T> ChipGroup(
 ) {
     FlowRow(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
+        verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.xs),
     ) {
         options.forEach { option ->
             FilterChip(
@@ -842,7 +844,7 @@ private fun TipCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(horizontal = IronHabitSpacing.lg, vertical = IronHabitSpacing.md),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {

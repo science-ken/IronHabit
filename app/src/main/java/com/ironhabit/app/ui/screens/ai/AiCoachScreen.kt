@@ -48,6 +48,7 @@ import com.ironhabit.app.ui.components.EmptyState
 import com.ironhabit.app.ui.components.LoadingSkeleton
 import com.ironhabit.app.ui.components.ProfileSummaryCard
 import com.ironhabit.app.ui.components.aiPlanGoalText
+import com.ironhabit.app.ui.theme.IronHabitSpacing
 
 /**
  * Tab銆孉I 鏁欑粌銆嶉〉闈紙**鑱旂綉鍙€?路 鏈湴瑙勫垯鍏滃簳**锛夈€?
@@ -113,8 +114,8 @@ fun AiCoachScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(padding)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .padding(IronHabitSpacing.lg),
+            verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.lg),
         ) {
             LocalRulesBadge(
                 aiRemoteEnabled = uiState.aiRemoteEnabled,
@@ -329,8 +330,8 @@ private fun GeneratedPlanCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+                .padding(horizontal = IronHabitSpacing.lg, vertical = IronHabitSpacing.md),
+            verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -346,14 +347,14 @@ private fun GeneratedPlanCard(
                         text = exerciseName.ifEmpty { stringResource(R.string.unknown_exercise) },
                         style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(start = 8.dp),
+                        modifier = Modifier.padding(start = IronHabitSpacing.sm),
                     )
                     if (plan.isUserEdited) {
                         Text(
                             text = stringResource(R.string.label_user_edited),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(start = 8.dp),
+                            modifier = Modifier.padding(start = IronHabitSpacing.sm),
                         )
                     }
                 }
@@ -414,8 +415,8 @@ private fun AiOutputCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+                .padding(horizontal = IronHabitSpacing.lg, vertical = IronHabitSpacing.md),
+            verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -461,8 +462,8 @@ private fun AiAnalysisCard(analysis: String) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+                .padding(horizontal = IronHabitSpacing.lg, vertical = IronHabitSpacing.md),
+            verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
         ) {
             Text(
                 text = stringResource(R.string.ai_analysis_title),
@@ -490,8 +491,8 @@ private fun LocalBasisCard(basis: List<PlanBasisItem>) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+                .padding(horizontal = IronHabitSpacing.lg, vertical = IronHabitSpacing.md),
+            verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
         ) {
             Text(
                 text = stringResource(R.string.ai_basis_title),
@@ -663,8 +664,8 @@ private fun DietAnalysisCard(analysis: String) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+                .padding(IronHabitSpacing.lg),
+            verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
         ) {
             Text(
                 text = stringResource(R.string.ai_diet_analysis_title),
@@ -690,8 +691,8 @@ private fun DietLocalBasisCard() {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+                .padding(IronHabitSpacing.lg),
+            verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
         ) {
             Text(
                 text = stringResource(R.string.ai_diet_basis_title),
@@ -754,8 +755,8 @@ private fun InsightBlock(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                        .padding(IronHabitSpacing.lg),
+                    verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
                 ) {
                     Text(
                         text = stringResource(
@@ -843,8 +844,8 @@ private fun ExplainBlock(bmr: Int?, canAsk: Boolean) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+                .padding(horizontal = IronHabitSpacing.lg, vertical = IronHabitSpacing.md),
+            verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
         ) {
             if (!canAsk) {
                 Text(
@@ -906,7 +907,7 @@ private fun SuggestionRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 10.dp),
+            .padding(vertical = IronHabitSpacing.md),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
@@ -967,7 +968,7 @@ private fun LocalRulesBadge(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 4.dp),
+                .padding(horizontal = IronHabitSpacing.md, vertical = IronHabitSpacing.xs),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
@@ -1013,7 +1014,7 @@ private fun ErrorCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(horizontal = IronHabitSpacing.lg, vertical = IronHabitSpacing.sm),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {

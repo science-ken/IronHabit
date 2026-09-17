@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.Meal
 import com.ironhabit.app.domain.model.MealType
+import com.ironhabit.app.ui.theme.IronHabitSpacing
 import kotlin.math.roundToInt
 
 /**
@@ -54,14 +55,14 @@ fun MealBlock(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(horizontal = IronHabitSpacing.md, vertical = IronHabitSpacing.sm),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .padding(end = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
+                    .padding(end = IronHabitSpacing.sm),
+                verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.xxs),
             ) {
                 Text(
                     text = stringResource(mealTypeLabelRes(meal.mealType)),
@@ -88,7 +89,7 @@ fun MealBlock(
 
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(2.dp),
+                verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.xxs),
             ) {
                 Checkbox(
                     checked = meal.isCompleted,

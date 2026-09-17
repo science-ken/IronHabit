@@ -23,6 +23,7 @@ import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.Gender
 import com.ironhabit.app.domain.model.Goal
 import com.ironhabit.app.domain.model.UserProfile
+import com.ironhabit.app.ui.theme.IronHabitSpacing
 
 /**
  * 身体档案概要卡（**只读**、**纯展示**）：标题 + `性别 · 年龄 · 目标` 概要 + `›`。
@@ -65,7 +66,7 @@ fun ProfileSummaryCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(horizontal = IronHabitSpacing.lg, vertical = IronHabitSpacing.md),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {

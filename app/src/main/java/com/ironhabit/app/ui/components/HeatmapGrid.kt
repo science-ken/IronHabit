@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -20,6 +19,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.ironhabit.app.R
+import com.ironhabit.app.ui.theme.IronHabitShapes
 import com.ironhabit.app.domain.model.HeatmapCell
 import com.ironhabit.app.domain.util.DateUtils
 
@@ -60,7 +60,7 @@ fun HeatmapGrid(
                     Box(
                         modifier = Modifier
                             .size(CELL_SIZE)
-                            .clip(RoundedCornerShape(CELL_CORNER))
+                            .clip(IronHabitShapes.cell)
                             .background(cellColor(cell)),
                     )
                 }
@@ -96,6 +96,8 @@ private fun cellColor(cell: HeatmapCell?): Color {
 private const val DAYS_PER_WEEK = 7
 private const val MIN_LEVEL = 0
 private const val MAX_LEVEL = 4
+/** 单元格边长：组件固有尺寸，非布局间距，故就地定义。 */
 private val CELL_SIZE = 14.dp
-private val CELL_CORNER = 2.dp
+
+/** 单元格间距：热力图需要比 4dp 更紧凑才能在一屏放下 52 周，故作为组件规格就地定义。 */
 private val COLUMN_GAP = 3.dp

@@ -18,6 +18,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.ironhabit.app.R
+import com.ironhabit.app.ui.theme.IronHabitSpacing
 
 /**
  * 统一空态占位（图标 + 文案 + 可选引导按钮）。
@@ -40,7 +41,7 @@ fun EmptyState(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(24.dp),
+            .padding(IronHabitSpacing.xxl),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -55,12 +56,12 @@ fun EmptyState(
             style = MaterialTheme.typography.bodyMedium,
             color = colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 12.dp),
+            modifier = Modifier.padding(top = IronHabitSpacing.md),
         )
         if (actionText != null && onAction != null) {
             Button(
                 onClick = onAction,
-                modifier = Modifier.padding(top = 16.dp),
+                modifier = Modifier.padding(top = IronHabitSpacing.lg),
             ) {
                 Text(text = actionText)
             }

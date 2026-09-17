@@ -30,12 +30,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.ReviewNote
 import com.ironhabit.app.domain.model.WeeklyReview
+import com.ironhabit.app.ui.theme.IronHabitSpacing
+import com.ironhabit.app.ui.theme.IronHabitTypeStyles
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.toLocalDateTime
 
@@ -114,8 +114,8 @@ private fun WeeklyReviewCard(
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(IronHabitSpacing.lg),
+            verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
         ) {
             Text(
                 text = weekLabel(weekOffset) + " · " + weekRange(review),
@@ -199,9 +199,9 @@ internal fun WeekPackageSheet(
                 // ⚠️ 必须可滚动 + 有高度上限：小屏（1080×1920）上长 JSON 会把按钮顶出屏幕
                 //（「编辑一餐」弹层踩过同一个坑，见 `MealEditSheet`）。
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+                .padding(horizontal = IronHabitSpacing.xl)
+                .padding(bottom = IronHabitSpacing.xxl),
+            verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.md),
         ) {
             Text(
                 text = stringResource(R.string.ai_package_title),
@@ -248,22 +248,19 @@ internal fun WeekPackageSheet(
                 ) {
                     Text(
                         text = text,
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 11.sp,
-                        ),
+                        style = IronHabitTypeStyles.code,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier
                             .verticalScroll(rememberScrollState())
                             .horizontalScroll(rememberScrollState())
-                            .padding(12.dp),
+                            .padding(IronHabitSpacing.md),
                     )
                 }
             }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.md),
             ) {
                 Button(
                     onClick = {
@@ -303,7 +300,7 @@ private fun StatRow(
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.md),
     ) {
         StatCell(label = leftLabel, value = leftValue, modifier = Modifier.weight(1f))
         if (rightLabel != null && rightValue != null) {
@@ -323,7 +320,7 @@ private fun StatCell(label: String, value: String, modifier: Modifier = Modifier
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 8.dp, horizontal = 10.dp),
+                .padding(vertical = IronHabitSpacing.sm, horizontal = IronHabitSpacing.md),
             horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
         ) {
             Text(

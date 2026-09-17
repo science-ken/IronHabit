@@ -4,8 +4,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -25,6 +28,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.TodayPlanItem
+import com.ironhabit.app.ui.theme.IronHabitSpacing
 
 /**
  * 「补录详情」底部弹层（无状态组件，**不持有 ViewModel**，由 `TodayViewModel` 消费提交结果）。
@@ -67,8 +71,12 @@ fun CheckInSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                // B-4：小屏 + 键盘弹起时，5 个输入框会把「保存」顶出屏幕外点不到。
+                // `verticalScroll` 让内容可滚动，`imePadding` 给键盘让位（其他弹层均已修，唯独这里漏了）。
+                .imePadding()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = IronHabitSpacing.xl, vertical = IronHabitSpacing.sm),
+            verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.md),
         ) {
             Text(
                 text = item.exercise.name,
@@ -135,7 +143,7 @@ fun CheckInSheet(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 16.dp),
+                    .padding(bottom = IronHabitSpacing.lg),
                 horizontalArrangement = Arrangement.End,
             ) {
                 TextButton(onClick = onDismissRequest) {
@@ -156,7 +164,7 @@ fun CheckInSheet(
                         }
                     },
                     enabled = formValid,
-                    modifier = Modifier.padding(start = 8.dp),
+                    modifier = Modifier.padding(start = IronHabitSpacing.sm),
                 ) {
                     Text(text = stringResource(R.string.action_save))
                 }

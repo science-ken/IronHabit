@@ -21,6 +21,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.TrendPoint
+import com.ironhabit.app.ui.theme.IronHabitSpacing
 import kotlinx.datetime.LocalDate
 
 /**
@@ -94,7 +95,7 @@ fun TrendChart(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 4.dp),
+                .padding(top = IronHabitSpacing.xs),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             AxisLabel(points.first().epochDay)

@@ -48,6 +48,7 @@ import com.ironhabit.app.domain.model.HabitFrequency
 import com.ironhabit.app.ui.components.EmptyState
 import com.ironhabit.app.ui.components.LoadingSkeleton
 import com.ironhabit.app.ui.components.LocalSnackbarHostState
+import com.ironhabit.app.ui.theme.IronHabitSpacing
 
 /**
  * 「新增 / 编辑习惯」表单页：名称 / emoji / 主题色 / 频率 / 重复日 / 提醒。
@@ -86,8 +87,8 @@ fun AddEditHabitScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .padding(IronHabitSpacing.lg),
+        verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.md),
     ) {
         Text(
             text = stringResource(
@@ -137,7 +138,7 @@ fun AddEditHabitScreen(
                 // 目标值 / 单位（v2）：留空 = 纯勾选型习惯；填写 = 计量型（如每天 8 杯水）。
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.md),
                 ) {
                     OutlinedTextField(
                         value = uiState.targetValue,
@@ -241,7 +242,7 @@ fun AddEditHabitScreen(
                     }
                     Button(
                         onClick = viewModel::onSave,
-                        modifier = Modifier.padding(start = 8.dp),
+                        modifier = Modifier.padding(start = IronHabitSpacing.sm),
                     ) {
                         Text(text = stringResource(R.string.action_save))
                     }
@@ -261,7 +262,7 @@ private fun HabitColorPicker(
         modifier = Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.md),
     ) {
         HABIT_COLOR_HEXES.forEach { hex ->
             val swatch: Color = remember(hex) {
@@ -294,7 +295,7 @@ private fun WeeklyDaysPicker(
         modifier = Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
     ) {
         WEEKDAY_RES.forEachIndexed { index, labelRes ->
             FilterChip(
@@ -317,7 +318,7 @@ private fun ReminderTimeRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(vertical = 12.dp),
+            .padding(vertical = IronHabitSpacing.md),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
@@ -389,5 +390,6 @@ private val WEEKDAY_RES: List<Int> = listOf(
     R.string.weekday_short_sun,
 )
 
+/** 色板圆点边长 / 选中描边宽度：组件固有尺寸，非布局间距。 */
 private val SWATCH_SIZE = 36.dp
 private val SELECTED_BORDER = 3.dp

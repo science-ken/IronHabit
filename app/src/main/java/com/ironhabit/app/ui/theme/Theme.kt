@@ -63,6 +63,7 @@ fun IronHabitTheme(
     MaterialTheme(
         colorScheme = colorScheme,
         typography = IronHabitTypography,
+        shapes = IronHabitShapesSpec,
         content = content,
     )
 }

@@ -24,6 +24,7 @@ import com.ironhabit.app.domain.model.CheckIn
 import com.ironhabit.app.domain.model.ExerciseCategory
 import com.ironhabit.app.ui.components.EmptyState
 import com.ironhabit.app.ui.components.LoadingSkeleton
+import com.ironhabit.app.ui.theme.IronHabitSpacing
 import kotlinx.datetime.LocalDate
 
 /**
@@ -45,8 +46,8 @@ fun ExerciseDetailScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .padding(IronHabitSpacing.lg),
+        verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.md),
     ) {
         // 普通本地 val：委托属性不支持智能转换，需先取出再在分支内使用。
         val errorRes: Int? = uiState.errorRes
@@ -117,7 +118,7 @@ private fun CheckInHistoryRow(checkIn: CheckIn) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 6.dp),
+            .padding(vertical = IronHabitSpacing.sm),
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Text(

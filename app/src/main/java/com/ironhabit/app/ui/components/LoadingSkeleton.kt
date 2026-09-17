@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -22,6 +21,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.ironhabit.app.ui.theme.IronHabitShapes
+import com.ironhabit.app.ui.theme.IronHabitSpacing
 
 /**
  * 骨架屏：用 `rememberInfiniteTransition` + `animateFloat` 做 alpha 呼吸的灰色圆角块。
@@ -62,8 +63,8 @@ fun SkeletonCard(modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 4.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+            .padding(horizontal = IronHabitSpacing.xs, vertical = IronHabitSpacing.sm),
+        verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
     ) {
         SkeletonBlock(alpha = alpha, height = TITLE_HEIGHT, widthFraction = 0.6f)
         SkeletonBlock(alpha = alpha, height = LINE_HEIGHT, widthFraction = 1f)
@@ -83,7 +84,7 @@ private fun SkeletonBlock(
             .fillMaxWidth(widthFraction)
             .height(height)
             .alpha(alpha)
-            .clip(RoundedCornerShape(CORNER_RADIUS))
+            .clip(IronHabitShapes.small)
             .background(MaterialTheme.colorScheme.surfaceVariant),
     )
 }
@@ -91,7 +92,8 @@ private fun SkeletonBlock(
 private const val MIN_ALPHA = 0.3f
 private const val MAX_ALPHA = 1.0f
 private const val BREATH_DURATION_MS = 900
+
+/** 以下三个高度是骨架块的**组件固有尺寸**（用于撑出与真实内容一致的行高），非布局间距。 */
 private val BLOCK_HEIGHT = 64.dp
 private val TITLE_HEIGHT = 20.dp
 private val LINE_HEIGHT = 14.dp
-private val CORNER_RADIUS = 8.dp

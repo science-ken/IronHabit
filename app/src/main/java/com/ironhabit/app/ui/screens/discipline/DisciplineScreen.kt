@@ -25,6 +25,7 @@ import com.ironhabit.app.ui.components.HabitRow
 import com.ironhabit.app.ui.components.HeatmapGrid
 import com.ironhabit.app.ui.components.LoadingSkeleton
 import com.ironhabit.app.ui.components.LocalSnackbarHostState
+import com.ironhabit.app.ui.theme.IronHabitSpacing
 import kotlin.math.roundToInt
 
 /**
@@ -55,8 +56,8 @@ fun DisciplineScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+            .padding(IronHabitSpacing.lg),
+        verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.lg),
     ) {
         val errorRes: Int? = uiState.errorRes
         when {
@@ -120,8 +121,8 @@ private fun MonthSummaryCard(completionRate: Float) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+                .padding(IronHabitSpacing.lg),
+            verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.xs),
         ) {
             Text(
                 text = stringResource(R.string.title_discipline_summary),

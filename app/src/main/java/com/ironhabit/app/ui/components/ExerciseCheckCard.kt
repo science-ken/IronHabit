@@ -29,6 +29,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.TodayPlanItem
+import com.ironhabit.app.ui.theme.IronHabitSpacing
 
 /**
  * 今日训练打卡卡片。
@@ -98,13 +99,13 @@ fun ExerciseCheckCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(horizontal = IronHabitSpacing.lg, vertical = IronHabitSpacing.md),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.xs),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (completed) {
@@ -203,7 +204,7 @@ private fun RpeChips(
         modifier = Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(

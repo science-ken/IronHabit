@@ -29,6 +29,7 @@ import com.ironhabit.app.ui.components.EmptyState
 import com.ironhabit.app.ui.components.LoadingSkeleton
 import com.ironhabit.app.ui.components.ProfileSummaryCard
 import com.ironhabit.app.ui.components.TrendChart
+import com.ironhabit.app.ui.theme.IronHabitSpacing
 
 /**
  * Tab4「我的」页面：身体档案概要卡（跳设置页档案区）+ 二级入口（身体数据 / 设置 / 备份）
@@ -52,8 +53,8 @@ fun ProfileScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+            .padding(IronHabitSpacing.lg),
+        verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.lg),
     ) {
         ProfileSummaryCard(
             profile = uiState.profile,
@@ -111,7 +112,7 @@ private fun EntryRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(vertical = 14.dp),
+            .padding(vertical = IronHabitSpacing.lg),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {

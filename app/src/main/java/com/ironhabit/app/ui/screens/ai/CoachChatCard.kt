@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.ironhabit.app.R
+import com.ironhabit.app.ui.theme.IronHabitSpacing
 
 /**
  * 「问教练」区块（子项 A）—— 输入框 + 发送按钮 + 最近几轮问答气泡。
@@ -50,8 +51,8 @@ fun CoachChatCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+                .padding(horizontal = IronHabitSpacing.lg, vertical = IronHabitSpacing.md),
+            verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
         ) {
             Text(
                 text = stringResource(R.string.ai_chat_section_title),
@@ -89,7 +90,7 @@ fun CoachChatCard(
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
             ) {
                 OutlinedTextField(
                     value = input,
@@ -132,7 +133,7 @@ private fun ChatBubble(message: CoachChatMessage) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 2.dp),
+            .padding(vertical = IronHabitSpacing.xxs),
         verticalAlignment = Alignment.Top,
     ) {
         Text(

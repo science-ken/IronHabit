@@ -16,6 +16,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.MAX_SETS
+import com.ironhabit.app.ui.theme.IronHabitSpacing
 
 /**
  * 逐组勾选行：`totalSets` 个编号复选框，第 [index] 组（0-based）的勾选态由 [mask] 的第 `index` 位决定。
@@ -46,14 +47,14 @@ fun SetCheckboxRow(
         modifier = modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.xxs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         for (index in 0 until count) {
             val done = (mask shr index) and 1 == 1
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(end = 2.dp),
+                modifier = Modifier.padding(end = IronHabitSpacing.xxs),
             ) {
                 Checkbox(
                     checked = done,

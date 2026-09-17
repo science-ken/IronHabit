@@ -43,6 +43,7 @@ import com.ironhabit.app.ui.components.ProgressRing
 import com.ironhabit.app.ui.components.SkeletonCard
 import com.ironhabit.app.ui.screens.checkin.CheckInSheet
 import com.ironhabit.app.ui.screens.meals.MealEditSheet
+import com.ironhabit.app.ui.theme.IronHabitSpacing
 
 /**
  * Tab1「今日」页面：进度环 + 日期栏 + 训练打卡卡片 + 习惯勾选行。
@@ -98,8 +99,8 @@ fun TodayScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+            .padding(IronHabitSpacing.lg),
+        verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.lg),
     ) {
         ProgressRing(
             completed = uiState.completedCount,
@@ -342,8 +343,8 @@ private fun WeekPlanEmptyCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+                .padding(IronHabitSpacing.lg),
+            verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
         ) {
             Text(
                 text = stringResource(R.string.empty_week_plan_title),
@@ -395,7 +396,7 @@ private fun RepeatWeeklyRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 4.dp),
+            .padding(top = IronHabitSpacing.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {

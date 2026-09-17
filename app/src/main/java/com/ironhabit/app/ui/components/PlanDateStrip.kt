@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.ironhabit.app.R
+import com.ironhabit.app.ui.theme.IronHabitSpacing
 import kotlinx.datetime.LocalDate
 
 /**
@@ -58,7 +59,7 @@ fun PlanDateStrip(
 
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.xs),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -97,7 +98,7 @@ fun PlanDateStrip(
             modifier = Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
         ) {
             plannedWeekdays.forEach { weekday ->
                 val epochDay = weekStartEpochDay + (weekday - 1).coerceAtLeast(0)

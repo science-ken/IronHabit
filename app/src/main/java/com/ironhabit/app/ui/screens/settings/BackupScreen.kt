@@ -27,6 +27,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ironhabit.app.R
 import com.ironhabit.app.ui.components.LocalSnackbarHostState
+import com.ironhabit.app.ui.theme.IronHabitSpacing
 
 /** 导入文件类型过滤：仅 JSON。 */
 private const val MIME_JSON = "application/json"
@@ -79,8 +80,8 @@ fun BackupScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+            .padding(IronHabitSpacing.lg),
+        verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.lg),
     ) {
         Text(
             text = stringResource(R.string.title_backup),
@@ -93,8 +94,8 @@ fun BackupScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                    .padding(IronHabitSpacing.lg),
+                verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
             ) {
                 Text(
                     text = stringResource(R.string.backup_export_title),
@@ -121,8 +122,8 @@ fun BackupScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                    .padding(IronHabitSpacing.lg),
+                verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
             ) {
                 Text(
                     text = stringResource(R.string.backup_import_title),

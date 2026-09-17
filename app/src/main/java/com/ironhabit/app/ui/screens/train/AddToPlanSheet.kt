@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.Exercise
 import com.ironhabit.app.domain.model.InputLimits
+import com.ironhabit.app.ui.theme.IronHabitSpacing
 
 /** 一周 7 天的短标签资源（周一 → 周日，`1..7`）。 */
 private val WEEKDAY_SHORT_RES = listOf(
@@ -93,8 +94,8 @@ fun AddToPlanSheet(
                 .fillMaxWidth()
                 // 坑 4：小屏（1080×1920）上内容会超出弹层高度 → 整层可滚动，保证「确定」永远可达。
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(horizontal = IronHabitSpacing.xl, vertical = IronHabitSpacing.sm),
+            verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.md),
         ) {
             Text(
                 text = exercise.name,
@@ -116,7 +117,7 @@ fun AddToPlanSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
             ) {
                 WEEKDAY_SHORT_RES.forEachIndexed { index, labelRes ->
                     val day = index + 1
@@ -136,7 +137,7 @@ fun AddToPlanSheet(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.md),
             ) {
                 OutlinedTextField(
                     value = setsText,

@@ -19,6 +19,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.HabitItem
+import com.ironhabit.app.ui.theme.IronHabitSpacing
 
 /**
  * 习惯勾选行。
@@ -45,7 +46,7 @@ fun HabitRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 4.dp, vertical = 4.dp),
+            .padding(horizontal = IronHabitSpacing.xs, vertical = IronHabitSpacing.xs),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
@@ -58,8 +59,8 @@ fun HabitRow(
                 style = MaterialTheme.typography.headlineSmall,
             )
             Column(
-                modifier = Modifier.padding(start = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
+                modifier = Modifier.padding(start = IronHabitSpacing.md),
+                verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.xxs),
             ) {
                 Text(
                     text = item.habit.name,

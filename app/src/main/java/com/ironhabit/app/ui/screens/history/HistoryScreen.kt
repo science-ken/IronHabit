@@ -24,6 +24,7 @@ import com.ironhabit.app.R
 import com.ironhabit.app.ui.components.EmptyState
 import com.ironhabit.app.ui.components.HeatmapGrid
 import com.ironhabit.app.ui.components.LoadingSkeleton
+import com.ironhabit.app.ui.theme.IronHabitSpacing
 import kotlin.math.roundToInt
 import kotlinx.datetime.LocalDate
 
@@ -43,8 +44,8 @@ fun HistoryScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+            .padding(IronHabitSpacing.lg),
+        verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.lg),
     ) {
         Text(
             text = stringResource(R.string.section_history),
@@ -97,8 +98,8 @@ private fun CompletionRateCard(rate: Float) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+                .padding(IronHabitSpacing.lg),
+            verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.xs),
         ) {
             Text(
                 text = stringResource(R.string.label_completion_rate),
@@ -120,7 +121,7 @@ private fun DayHeader(epochDay: Long) {
         text = formatMonthDay(epochDay),
         style = MaterialTheme.typography.titleMedium,
         color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(top = 4.dp),
+        modifier = Modifier.padding(top = IronHabitSpacing.xs),
     )
 }
 
@@ -130,7 +131,7 @@ private fun HistoryItemRow(item: HistoryItem) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 6.dp),
+            .padding(vertical = IronHabitSpacing.sm),
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Text(

@@ -30,6 +30,7 @@ import com.ironhabit.app.domain.model.ExerciseCategory
 import com.ironhabit.app.ui.components.EmptyState
 import com.ironhabit.app.ui.components.LoadingSkeleton
 import com.ironhabit.app.ui.components.LocalSnackbarHostState
+import com.ironhabit.app.ui.theme.IronHabitSpacing
 
 /**
  * 「新增 / 编辑动作」表单页。
@@ -67,8 +68,8 @@ fun AddEditExerciseScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .padding(IronHabitSpacing.lg),
+        verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.md),
     ) {
         Text(
             text = stringResource(
@@ -179,7 +180,7 @@ fun AddEditExerciseScreen(
                     }
                     Button(
                         onClick = viewModel::onSave,
-                        modifier = Modifier.padding(start = 8.dp),
+                        modifier = Modifier.padding(start = IronHabitSpacing.sm),
                     ) {
                         Text(text = stringResource(R.string.action_save))
                     }
@@ -200,7 +201,7 @@ private fun CategoryChips(
         modifier = Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
     ) {
         ExerciseCategory.entries.forEach { category ->
             FilterChip(
@@ -223,7 +224,7 @@ private fun MuscleGroupChips(
         modifier = Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
     ) {
         PRESET_MUSCLE_GROUPS.forEach { group ->
             FilterChip(

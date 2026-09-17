@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.dp
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.DietTarget
 import com.ironhabit.app.domain.model.MealTotals
+import com.ironhabit.app.ui.theme.IronHabitSpacing
 import kotlin.math.roundToInt
 
 /**
@@ -41,7 +42,7 @@ fun DietTotalsBar(
 
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.xs),
     ) {
         Text(
             text = stringResource(R.string.label_diet_intake_kcal, totals.intakeKcal, kcalDenominator),
