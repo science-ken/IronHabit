@@ -23,3 +23,9 @@ captures/
 
 # Kotlin 编译错误日志（构建产物）
 .kotlin/
+
+# 本地方案与原型（含截图，二进制进历史难清除）
+.scratch/
+# 若想把 spec 纳入版本库、只挡图片，改用下面两行代替上面一行：
+# .scratch/**/*.png
+# !.scratch/**/*.md
