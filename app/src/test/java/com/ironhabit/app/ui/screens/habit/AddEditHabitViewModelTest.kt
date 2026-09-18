@@ -177,4 +177,50 @@ class AddEditHabitViewModelTest {
 
         assertEquals(2.5, savedHabit.captured.targetValue!!, 0.0)
     }
+
+    // ---------------- P0-4：保存防抖（连点不得产生重复数据）----------------
+
+    /**
+     * 连点「保存」：两次点击都会读到 `habitId = 0`（表单尚未清空），历史实现会插入两条同名习惯。
+     * 现在进入即置位 `isSaving` 并提前返回 → 只落一条。
+     */
+    @Test
+    fun rapidDoubleSave_writesOnlyOnce() = runTest(mainDispatcherRule.testDispatcher) {
+        var writes = 0
+        val repo = mockk<HabitRepository>(relaxed = true)
+        every { repo.observeActiveHabits() } returns flowOf(emptyList())
+        coEvery { repo.upsertHabit(capture(savedHabit)) } answers {
+            writes += 1
+            42L
+        }
+
+        val vm = viewModel(repo, habitId = 0L)   // 新增态
+        advanceUntilIdle()
+        vm.onNameChange("晨跑")
+
+        vm.onSave()
+        vm.onSave()
+        vm.onSave()
+        assertEquals("写入中必须置位（按钮据此禁用）", true, vm.uiState.value.isSaving)
+
+        advanceUntilIdle()
+        assertEquals("连点三次只允许落库一次", 1, writes)
+        assertEquals("写完后必须复位，否则按钮永久禁用", false, vm.uiState.value.isSaving)
+    }
+
+    /** 写入抛异常时同样要复位，否则保存失败后按钮就再也点不动了。 */
+    @Test
+    fun failedSave_resetsSavingFlag() = runTest(mainDispatcherRule.testDispatcher) {
+        val repo = mockk<HabitRepository>(relaxed = true)
+        every { repo.observeActiveHabits() } returns flowOf(emptyList())
+        coEvery { repo.upsertHabit(capture(savedHabit)) } throws RuntimeException("disk full")
+
+        val vm = viewModel(repo, habitId = 0L)
+        advanceUntilIdle()
+        vm.onNameChange("晨跑")
+        vm.onSave()
+        advanceUntilIdle()
+
+        assertEquals("失败后必须复位，否则用户只能退出页面重来", false, vm.uiState.value.isSaving)
+    }
 }

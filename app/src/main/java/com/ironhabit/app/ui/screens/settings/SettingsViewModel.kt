@@ -46,6 +46,7 @@ import kotlinx.coroutines.launch
  * @property currentWeightKg 当前体重（只读，来自 `body_metrics` 最新 WEIGHT 值；无记录为 `null`）
  * @property aiRemoteEnabled 「AI 联网增强」开关（默认 false = 纯本地规则，行为与纯离线版一致）
  * @property hasApiKey 是否已配置 DeepSeek API Key（只读快照；存于加密文件，不经 DataStore）
+ * @property aiStorageUnavailable 加密存储是否不可用（Keystore 异常等）→ UI 给出「重置加密存储」出口
  * @property errorRes 页面级错误资源 id
  * @property snackbarRes 一次性 Snackbar 资源 id（提醒设置结果）
  * @property snackbarArgs Snackbar 格式化参数（提醒时间）
@@ -61,6 +62,7 @@ data class SettingsUiState(
     val currentWeightKg: Float? = null,
     val aiRemoteEnabled: Boolean = false,
     val hasApiKey: Boolean = false,
+    val aiStorageUnavailable: Boolean = false,
     @StringRes val errorRes: Int? = null,
     @StringRes val snackbarRes: Int? = null,
     val snackbarArgs: List<String> = emptyList(),
@@ -123,12 +125,30 @@ class SettingsViewModel @Inject constructor(
                         snackbarRes = local.snackbarRes,
                         snackbarArgs = local.snackbarArgs,
                         hasApiKey = local.hasApiKey,
+                        aiStorageUnavailable = local.aiStorageUnavailable,
                         errorRes = data.errorRes ?: local.errorRes,
                     )
                 }
             }
         }
-        _uiState.update { it.copy(hasApiKey = aiCredentialsStore.isConfigured()) }
+        refreshAiCredentialSnapshot()
+    }
+
+    /**
+     * 刷新「是否已配置 Key」与「加密存储是否可用」两个快照。
+     *
+     * ⚠️ P0-2：`AiCredentialsStore` 内部已兜住 Keystore 异常（不再抛），这里再包一层
+     * `runCatching` 属防御性写法。历史实现是直接抛，而本方法在 `init` 里**同步**执行
+     * （不在协程内）→ 一旦抛出即 ViewModel 构造失败，设置页**永远进不去**，
+     * 而诱因仅仅是"这台机器的密钥库有问题"。
+     */
+    private fun refreshAiCredentialSnapshot() {
+        val (configured, storageAvailable) = runCatching {
+            aiCredentialsStore.isConfigured() to aiCredentialsStore.isStorageAvailable()
+        }.getOrDefault(false to false)
+        _uiState.update {
+            it.copy(hasApiKey = configured, aiStorageUnavailable = !storageAvailable)
+        }
     }
 
     fun onThemeChange(mode: ThemeMode) {
@@ -162,13 +182,25 @@ class SettingsViewModel @Inject constructor(
         }
         viewModelScope.launch {
             try {
-                aiCredentialsStore.setKey(key)
-                _uiState.update {
-                    it.copy(
-                        hasApiKey = true,
-                        snackbarRes = R.string.settings_ai_key_saved,
-                        snackbarArgs = emptyList(),
-                    )
+                // P0-2：`setKey` 现在返回是否写入成功 —— 存储不可用时**如实报错**，
+                // 绝不假装"已保存"（否则用户以为配好了，实际每次都回落本地规则）。
+                if (aiCredentialsStore.setKey(key)) {
+                    _uiState.update {
+                        it.copy(
+                            hasApiKey = true,
+                            snackbarRes = R.string.settings_ai_key_saved,
+                            snackbarArgs = emptyList(),
+                        )
+                    }
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            hasApiKey = false,
+                            aiStorageUnavailable = true,
+                            snackbarRes = R.string.settings_ai_key_storage_failed,
+                            snackbarArgs = emptyList(),
+                        )
+                    }
                 }
             } catch (throwable: Throwable) {
                 _uiState.update { it.copy(snackbarRes = R.string.error_generic) }
@@ -180,17 +212,41 @@ class SettingsViewModel @Inject constructor(
     fun onApiKeyClear() {
         viewModelScope.launch {
             try {
-                aiCredentialsStore.setKey(null)
-                _uiState.update {
-                    it.copy(
-                        hasApiKey = false,
-                        snackbarRes = R.string.settings_ai_key_cleared,
-                        snackbarArgs = emptyList(),
-                    )
+                if (aiCredentialsStore.setKey(null)) {
+                    _uiState.update {
+                        it.copy(
+                            hasApiKey = false,
+                            snackbarRes = R.string.settings_ai_key_cleared,
+                            snackbarArgs = emptyList(),
+                        )
+                    }
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            hasApiKey = false,
+                            aiStorageUnavailable = true,
+                            snackbarRes = R.string.settings_ai_key_storage_failed,
+                            snackbarArgs = emptyList(),
+                        )
+                    }
                 }
             } catch (throwable: Throwable) {
                 _uiState.update { it.copy(snackbarRes = R.string.error_generic) }
             }
+        }
+    }
+
+    /**
+     * **重置加密存储**（P0-2）：Keystore 损坏导致 Key 读不到 / 存不进时的可自恢复出口。
+     *
+     * 代价：已配置的 Key 会丢失（需重新填写），因此必须由用户**显式点击**触发。
+     * 重置后立刻重试打开一次 → 成功则"存储不可用"提示自动消失。
+     */
+    fun onAiStorageReset() {
+        aiCredentialsStore.resetStorage()
+        refreshAiCredentialSnapshot()
+        _uiState.update {
+            it.copy(snackbarRes = R.string.settings_ai_storage_reset_done, snackbarArgs = emptyList())
         }
     }
 

@@ -9,8 +9,8 @@
 
 1. **你的源码在这里**（免 git，直接可编译）：
    `D:\Workbuddy data\2026-09-14-09-31-06\fitness-app-v204`
-   （已同步到 `versionCode = 15` / `versionName = "2.0.4"`；如果你的沙箱只能访问别的目录，把整个文件夹拷过去即可，它是纯源码、不含 `.git`）
-2. **跑一次全量测试**确认环境没问题（命令见 §2），**期望：43 个测试类 / 395 用例 / 0 失败**。
+   （已同步到 `versionCode = 16` / `versionName = "2.0.5"`；如果你的沙箱只能访问别的目录，把整个文件夹拷过去即可，它是纯源码、不含 `.git`）
+2. **跑一次全量测试**确认环境没问题（命令见 §2），**期望：47 个测试类 / 435 用例 / 0 失败**。
 3. **读 §3（红线）和 §4（数据模型）**，再动代码。这两节是"不知道就会踩雷"的部分。
 
 产出的东西（APK / 报告）放哪、怎么交付，见 §8。
@@ -25,10 +25,10 @@
 | 项 | 值 |
 |---|---|
 | 远端仓库 | `git@github.com:science-ken/IronHabit.git`，分支 `main` |
-| 远端 HEAD | `6a80932`（本地与远端一致，已用 `git ls-remote` 校验） |
-| 版本 | `versionCode = 15` / `versionName = "2.0.4"`（**debug 签名**，只用于自装/侧载） |
+| 远端 HEAD | tag `v2.0.5` = `8903ec0`；`origin/main` 停在 `123e890`（v2.0.5 是它的后代，没落后） |
+| 版本 | `versionCode = 16` / `versionName = "2.0.5"`（**debug 签名**，只用于自装/侧载） |
 | 当前 APK | `D:\dsh data\deliverables\IronHabit-v2.0.4-debug.apk` |
-| 测试 | 43 个测试类 / 395 用例 / 0 失败 |
+| 测试 | 47 个测试类 / 435 用例 / 0 失败（2026-09-18 实测，含 P0 轮新增 13 条） |
 | 模拟器 | MuMu 实例「软件测试」，`adb 127.0.0.1:16448`，Android 12，1080×1920 |
 
 ### 三条线做到哪了
@@ -281,7 +281,7 @@ F-6 过期 KDoc、F-7 桶下标负数截断 —— **都已修**，并把它的 
 
 ## 9. 测试与证据现状
 
-- 全量：**43 类 / 395 用例 / 0 失败**。
+- 全量：**47 类 / 435 用例 / 0 失败**（2026-09-18 在 tag `v2.0.5` 上实测；历史交接文里写的 43/395 是 v2.0.4 时代的数字）。
 - `app/src/test/java/com/ironhabit/app/verify/`：**41 条对抗性用例**（另一位 agent 写的，已收进主仓）。
   它们专门打边界：极端档案（3840 组组合）、脏数据、幂等、手改行保护、JSON 字段集合冻结、无密钥泄漏等。
   **改动 P1/P2 相关代码后必须跑它们。**
@@ -297,3 +297,35 @@ F-6 过期 KDoc、F-7 桶下标负数截断 —— **都已修**，并把它的 
 2. **谁能 push / 谁能 bump 版本**：目前约定"只有主理人（上一任 agent）"。你要是也需要推，先说清楚，避免两边同时推。
 3. **是否要改产品行为**：涉及"AI 能不能自动改计划""伤病替代的粒度""计划是否默认每周相同"这类，
    都已经由用户拍过板（见 §3 / §4），**要改先问用户**。
+
+
+---
+
+## 11. P0 缺陷修复记录（2026-09-18 · 基线 tag `v2.0.5`）
+
+来源：资料库《IronHabit 审查报告与功能补齐工作单》（逐条复核为属实，复核文档见
+`deliverables/IronHabit-v2.0.5-审查复核与修复方案.md`）。本轮只做 **§2.1 的 4 个 P0**，
+分支 `fix/p0-round1`，未 bump 版本（发布前统一 bump）。
+
+| 编号 | 缺陷 | 修复要点 |
+|---|---|---|
+| P0-1 | 导入 v1–v3 老备份会**静默清空本机全部饮食记录** | `BackupRestoreRules` 增 `MEALS_SCHEMA_VERSION=4` + `carriesMeals()`；`BackupRepositoryImpl` 的 `mealDao.clearAll()/insertAll()` 改为仅当备份确实携带 `meals` 时执行。判据用**版本号**而非 `isEmpty()`（用户真的没记录时列表同样为空） |
+| P0-2 | Keystore 异常 → 设置页/AI 页**一进就崩且无法自恢复** | `AiCredentialsStore` 初始化 `runCatching` 兜底（失败 = 未配置，不抛）；`setKey` 返回 `Boolean` 让 UI 如实报错；新增「重置加密存储」入口（`resetStorage()` + 设置页按钮 + 4 条新文案）；**禁止降级明文**。`SettingsViewModel.init` 的同步读取也加了兜底 |
+| P0-3 | 「每周相同」模板里的手改/删除在**生成本周计划时被绕过** | `GenerateTrainingPlanUseCase` 拆成 `weekRows`（喂 advisor + 陈旧行回收，保持"只看本周"）与 `templateEditedRows`（只做保护）。新增**日级保护**：模板手改过、且本周没有启用专属行的天，本周整日不写专属行。新增 `PlanRepository.getRepeatRows()`（含软删行的一次性快照） |
+| P0-4 | 保存按钮无防抖，连点产生重复数据 | `AddEditHabit/Plan/Exercise` 三个 ViewModel 的 UiState 增 `isSaving`，`onSave` 进入即守卫 + `finally` 复位；三个 Screen 的保存按钮绑 `enabled`。`TrainViewModel.onSubmitAddToPlan` **原本就有**守卫，未改 |
+
+### ⚠️ P0-3 的两条重要结论（别按审查报告的字面改）
+
+1. **槽位级保护不够**：`WeekPlanWeekResolver` 的生效规则是**日级**的（"该天有启用专属行 → 用专属行；
+   否则回落模板"）。所以只把模板手改槽位并进 `blockedSlots` 仍会绕过用户改动 —— 必须**整日不写**。
+2. **不能把模板行并进 `existing`**：`existing` 同时喂 `deactivateGenerated` 的输入，
+   合并写法会把整份「每周相同」计划当成陈旧 AI 行**停用**（比原缺陷更严重）。
+   `GenerateTrainingPlanUseCaseTest.generateTrainingPlan_neverRetiresRepeatTemplateRows` 就是钉这条的。
+
+### 本轮验证现状
+
+- JVM 全量：**47 类 / 435 例 / 0 失败**（`gradle :app:testDebugUnitTest`；新增 13 条：
+  `carriesMeals` 2 条、`AiCredentialsStoreTest` 6 条、生成计划模板保护 3 条、保存防抖 2 条）。
+- 既有 41 条对抗性用例同步补了 `getRepeatRows()` 桩（严格 mockk 会因新接口方法未打桩而失败）。
+- **未做**：真机/模拟器手工验收（P0-1 的导入、P0-3 的"模板删一条 → 重新生成"仍需在真机上走一遍）。
+  出包前必须补，单测证明不了界面上的东西。

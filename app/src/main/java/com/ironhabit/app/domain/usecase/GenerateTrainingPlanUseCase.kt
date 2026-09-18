@@ -54,8 +54,16 @@ data class GeneratedPlanSummary(
  * 职责：组装输入 → 调 [PlanAdvisor.planWeek] → **只对可写槽位显式 upsert**。
  *
  * ## 🔒 不变量（每条都有单测 / 代码约束）
- * 1. **手改行完整保留**：`existing` 里 `isUserEdited == true` 的行（**含软删除行**）
+ * 1. **手改行完整保留**：`isUserEdited == true` 的行（**含软删除行**）
  *    一行都不碰 —— 既不在它上面覆盖，也不"复活"它。
+ *    手改行有**两个来源**，都必须保护（P0-3）：
+ *    - 目标周的专属行（`getRowsForWeek`）；
+ *    - 「每周相同」模板行（`getRepeatRows`）—— 某天在本周没有启用专属行时，
+ *      本周生效计划来自模板，模板里的手改同样不能被绕过。
+ *    且**模板里被手改过、本周又缺启用专属行的天，本周整日不写**（P0-3）：
+ *    一旦为该天写入专属行，`WeekPlanWeekResolver` 的逐天覆盖规则会让它不再回落模板，
+ *    用户的手改（含删掉的动作）就被静默绕过（"删掉的深蹲又回来了"）。
+ *    陈旧行回收因此**只看 `weekRows`**：模板行并进回收会把整份「每周相同」停用。
  *    保险做法：规则层已排除这些槽位，写入前**再过滤一次**（双保险，见 [invoke]）。
  * 2. **禁用 REPLACE / 禁用"先删再建"**：本用例**没有任何 DELETE 调用**，
  *    写入统一走 `PlanRepository.upsertGenerated`（内部是显式 upsert）。
@@ -88,11 +96,15 @@ class GenerateTrainingPlanUseCase @Inject constructor(
      *
      * ## 🔒 P3：必须指定"哪一周"
      * 计划按周存放（`week_start_epoch_day`）。生成时：
-     * - `existing` = **该周的行**（含软删行）—— 不能拿全表，否则会把别的周 / 「每周相同」那份
-     *   误当成"这一周的现有内容"；
+     * - `weekRows` = **该周的行**（含软删行）—— 不能拿全表，否则会把别的周误当成
+     *   "这一周的现有内容"；
      * - 写入的草案**带上该周的周一** —— 不带的话会落到 `0`（=「每周相同」那份），
      *   于是"给下周生成"会**偷偷改掉每周循环的那份计划**；
-     * - 陈旧行回收也只在该周范围内。
+     * - 陈旧行回收也只在该周范围内（`weekRows`）。
+     *
+     * ## 🔒 P0-3：模板手改行只借来"保护"，不借来"回收"
+     * `templateEditedRows` 参与规则层入参 / `blockedSlots` / `userOwnedDays` 三件事，
+     * 但**不参与**陈旧行回收 —— 见类注释不变量 1。
      *
      * @param weekStartEpochDay 目标周的周一；`null` = 今天所在的那一周
      */
@@ -103,7 +115,17 @@ class GenerateTrainingPlanUseCase @Inject constructor(
         val targetWeek: Long = weekStartEpochDay
             ?: DateUtils.weekStartMon1(today.toEpochDays().toLong())
         // 🔒 必须拿**该周全量**（含软删除行），否则会误写手改/软删槽位把它"复活"。
-        val existing = planRepository.getRowsForWeek(targetWeek)
+        val weekRows = planRepository.getRowsForWeek(targetWeek)
+        // 🔒 P0-3：「每周相同」模板里被用户手改过的行（**含软删行**）——**只做保护**，两个去向：
+        //    ① 传给规则层 / `blockedSlots` → 这些槽位不被覆盖、不被"复活"；
+        //    ② 推出 `userOwnedDays`（下方）→ 该天本周没有启用专属行时，本周生效计划本来
+        //       就来自模板，被手改过的天必须**整日**交回模板。
+        //    ⚠️ 它**绝不参与陈旧行回收** —— 模板行不是"本周的行"，并进回收会把整份
+        //       「每周相同」计划当成陈旧 AI 行停用。
+        val templateEditedRows: List<WeekPlan> =
+            planRepository.getRepeatRows().filter { plan -> plan.isUserEdited }
+        // 规则层入参 = 该周行 + 模板手改行（规则层据此排除"受保护的槽位"）。
+        val existing: List<WeekPlan> = weekRows + templateEditedRows
         val history = checkInRepository.latestProgressPerExercise().first()
         // P1：当前体重（体重唯一真源是 body_metrics，不是档案）→ 供"体重 vs 目标体重"规则使用。
         // 取不到就是 null（用户没记过体重）→ 规则层会**跳过**体重相关判断，而不是拿 0 去算。
@@ -127,24 +149,38 @@ class GenerateTrainingPlanUseCase @Inject constructor(
             .map { plan -> plan.dayOfWeek to plan.exerciseId }
             .toSet()
 
+        // 🔒 P0-3 日级保护：某天在本周**没有启用专属行**时，本周的生效计划来自「每周相同」那份
+        // （`WeekPlanWeekResolver` 的逐天覆盖规则）。这类天若写入任何专属行，从那一刻起该天
+        // 就不再回落模板 → 用户在模板里手改/删掉的动作在本周被静默绕过（"删掉的深蹲又回来了"）。
+        // 因此：模板里被手改过、且本周没有启用专属行的天，本周**一条都不写**，整体交回模板。
+        val weekActiveDays: Set<Int> = weekRows.filter { plan -> plan.isActive }.map { plan -> plan.dayOfWeek }.toSet()
+        val userOwnedDays: Set<Int> = templateEditedRows
+            .map { plan -> plan.dayOfWeek }
+            .filter { day -> day !in weekActiveDays }
+            .toSet()
+
         // ② 只把"可写槽位"收集成待写列表，**整批**交给仓库（内部仍逐条显式 upsert）。
         val drafts: List<WeekPlan> = proposal.days.flatMap { day ->
-            day.items.mapIndexedNotNull { index, item ->
-                if (day.dayOfWeek to item.exerciseId in blockedSlots) {
-                    null // 手改槽位：跳过，不覆盖也不复活
-                } else {
-                    WeekPlan(
-                        exerciseId = item.exerciseId,
-                        dayOfWeek = day.dayOfWeek,
-                        // P3：落到**目标周**（不带这一维就会写进「每周相同」那份）。
-                        weekStartEpochDay = targetWeek,
-                        targetSets = item.targetSets,
-                        targetReps = item.targetReps,
-                        targetWeightKg = item.targetWeightKg,
-                        // 修复 C3：把有氧时长（分钟）一并写入，避免生成链路丢字段。
-                        targetDurationMin = item.targetDurationMin,
-                        sortOrder = index,
-                    )
+            if (day.dayOfWeek in userOwnedDays) {
+                emptyList() // 该天由模板（含用户手改）负责 → 不写专属行，避免绕过用户改动
+            } else {
+                day.items.mapIndexedNotNull { index, item ->
+                    if (day.dayOfWeek to item.exerciseId in blockedSlots) {
+                        null // 手改槽位：跳过，不覆盖也不复活
+                    } else {
+                        WeekPlan(
+                            exerciseId = item.exerciseId,
+                            dayOfWeek = day.dayOfWeek,
+                            // P3：落到**目标周**（不带这一维就会写进「每周相同」那份）。
+                            weekStartEpochDay = targetWeek,
+                            targetSets = item.targetSets,
+                            targetReps = item.targetReps,
+                            targetWeightKg = item.targetWeightKg,
+                            // 修复 C3：把有氧时长（分钟）一并写入，避免生成链路丢字段。
+                            targetDurationMin = item.targetDurationMin,
+                            sortOrder = index,
+                        )
+                    }
                 }
             }
         }
@@ -162,7 +198,7 @@ class GenerateTrainingPlanUseCase @Inject constructor(
             //    过滤：已启用 + 非用户手改 + 本次未写入；用户手改行（含软删除行）永不淘汰。
             val writtenSlots: Set<Pair<Int, Long>> =
                 drafts.map { it.dayOfWeek to it.exerciseId }.toSet()
-            val staleRows: List<WeekPlan> = existing.filter { row ->
+            val staleRows: List<WeekPlan> = weekRows.filter { row ->
                 row.isActive &&
                     !row.isUserEdited &&
                     (row.dayOfWeek to row.exerciseId) !in writtenSlots

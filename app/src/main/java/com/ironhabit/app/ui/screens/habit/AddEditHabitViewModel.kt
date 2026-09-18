@@ -40,6 +40,7 @@ import kotlinx.datetime.Clock
  * @property nameErrorRes 名称校验错误资源 id
  * @property errorRes 页面级错误资源 id
  * @property snackbarRes 一次性 Snackbar 资源 id
+ * @property isSaving 写入中（P0-4 防抖：进入即置位，按钮据此禁用，避免连点产生重复数据）
  * @property saved 保存成功标志
  */
 data class AddEditHabitUiState(
@@ -59,6 +60,7 @@ data class AddEditHabitUiState(
     @StringRes val nameErrorRes: Int? = null,
     @StringRes val errorRes: Int? = null,
     @StringRes val snackbarRes: Int? = null,
+    val isSaving: Boolean = false,
     val saved: Boolean = false,
 )
 
@@ -203,6 +205,10 @@ class AddEditHabitViewModel @Inject constructor(
         }
         val targetUnit = state.targetUnit.trim().takeIf { it.isNotEmpty() }
 
+        // 🔒 P0-4 防抖：连点「保存」时，两次点击都会读到 `habitId = 0`（表单尚未清空）→
+        // 同一条习惯被自增插入两次。进入即置位 + 提前返回，写完在 `finally` 复位。
+        if (_uiState.value.isSaving) return
+        _uiState.update { it.copy(isSaving = true) }
         viewModelScope.launch {
             try {
                 val existing = if (habitId != 0L) {
@@ -244,6 +250,9 @@ class AddEditHabitViewModel @Inject constructor(
                 _uiState.update { it.copy(snackbarRes = R.string.msg_saved, saved = true) }
             } catch (throwable: Throwable) {
                 _uiState.update { it.copy(snackbarRes = R.string.error_save_failed) }
+            } finally {
+                // 必须复位：否则保存失败后按钮永久禁用，用户只能退出页面重来。
+                _uiState.update { it.copy(isSaving = false) }
             }
         }
     }

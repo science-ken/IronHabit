@@ -108,4 +108,36 @@ class BackupRestoreRulesTest {
             BackupRestoreRules.shouldRestoreSet(setOf("KNEE"), carriesProfileSnapshot = true),
         )
     }
+
+    // ---------------- P0-1：meals 表携带判定（老备份绝不覆盖本机饮食记录）----------------
+
+    @Test
+    fun legacySchemaVersionsDoNotCarryMeals() {
+        assertFalse("v1 备份没有 meals 键", BackupRestoreRules.carriesMeals(1))
+        assertFalse("v2 备份没有 meals 键", BackupRestoreRules.carriesMeals(2))
+        assertFalse(
+            "v3 备份仍没有 meals 键 —— 若无条件 clearAll + 灌空列表，本机饮食历史会被删干净",
+            BackupRestoreRules.carriesMeals(3),
+        )
+        assertFalse(
+            "0 等异常版本同样按「不携带」处理（偏保守，绝不覆盖本地饮食记录）",
+            BackupRestoreRules.carriesMeals(0),
+        )
+    }
+
+    @Test
+    fun currentSchemaVersionCarriesMeals() {
+        assertTrue("v4 起 meals 纳入备份", BackupRestoreRules.carriesMeals(4))
+        assertTrue(
+            "更高版本沿用同一契约（导入前已被 require 拦住，这里只保证判定单调）",
+            BackupRestoreRules.carriesMeals(5),
+        )
+        assertEquals("meals 快照自 v4 起", 4, BackupRestoreRules.MEALS_SCHEMA_VERSION)
+        assertEquals(
+            "meals 与「每周训练天数」同属 v4（BackupPayload 的版本说明即如此定义）—— " +
+                "两者起始版本若漂移，说明有人只改了其中一处",
+            BackupRestoreRules.TRAINING_DAYS_SCHEMA_VERSION,
+            BackupRestoreRules.MEALS_SCHEMA_VERSION,
+        )
+    }
 }

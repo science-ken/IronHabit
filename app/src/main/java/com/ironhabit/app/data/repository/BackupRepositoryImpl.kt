@@ -128,7 +128,15 @@ class BackupRepositoryImpl @Inject constructor(
             habitDao.clearAll()
             habitLogDao.clearAll()
             bodyMetricDao.clearAll()
-            mealDao.clearAll()
+            // P0-1：`meals` 自备份 schema **v4** 起才导出 → 导入 v1–v3 备份时 `payload.meals`
+            // 恒为空列表。若无条件「清空 + 灌空列表」，本机**全部饮食记录**会被删掉且不可撤销
+            // （与本文件 B-6 的既有口径自相矛盾：老备份不该覆盖本地已有数据）。
+            // 判据用**版本号**而不是 `isEmpty()`：用户确实没有饮食记录时列表同样为空，
+            // 那属于"显式携带的空快照"，与"老备份根本没这个键"是两回事。
+            val carriesMeals: Boolean = BackupRestoreRules.carriesMeals(payload.schemaVersion)
+            if (carriesMeals) {
+                mealDao.clearAll()
+            }
 
             exerciseDao.insertAll(payload.exercises.map { it.toEntity(importMillis) })
             weekPlanDao.insertAll(payload.weekPlans.map { it.toEntity(importMillis) })
@@ -136,7 +144,9 @@ class BackupRepositoryImpl @Inject constructor(
             habitDao.insertAll(payload.habits.map { it.toEntity(importMillis) })
             habitLogDao.insertAll(payload.habitLogs.map { it.toEntity(importMillis) })
             bodyMetricDao.insertAll(payload.bodyMetrics.map { it.toEntity(importMillis) })
-            mealDao.insertAll(payload.meals.map { it.toEntity(importMillis) })
+            if (carriesMeals) {
+                mealDao.insertAll(payload.meals.map { it.toEntity(importMillis) })
+            }
         }
 
         // 数据库导入成功后同步设置快照（DataStore 不参与 Room 事务）。
@@ -241,6 +251,19 @@ internal object BackupRestoreRules {
      */
     fun carriesTrainingDaysPerWeek(schemaVersion: Int): Boolean =
         schemaVersion >= TRAINING_DAYS_SCHEMA_VERSION
+
+    /** 备份自 v4 起携带 `meals` 表（B-2 饮食模块）。 */
+    const val MEALS_SCHEMA_VERSION: Int = 4
+
+    /**
+     * 备份是否携带 `meals` 表。
+     *
+     * v4+ 一定显式编码整表（空列表 = "用户确实没有饮食记录"）→ 照写；
+     * v1–v3 完全没有该键（解码即空列表）→ **本机 `meals` 一行都不动**，
+     * 否则"导入老备份"会静默清空本机全部饮食历史（P0-1）。
+     */
+    fun carriesMeals(schemaVersion: Int): Boolean =
+        schemaVersion >= MEALS_SCHEMA_VERSION
 
     /**
      * 备份 `createdAt` → 实体 `createdAt`。

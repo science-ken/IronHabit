@@ -43,6 +43,7 @@ import kotlinx.datetime.TimeZone
  * @property numberErrorRes 数字校验错误资源 id
  * @property errorRes 页面级错误资源 id
  * @property snackbarRes 一次性 Snackbar 资源 id
+ * @property isSaving 写入中（P0-4 防抖：进入即置位，按钮据此禁用，避免连点产生重复数据）
  * @property saved 保存成功标志
  */
 data class AddEditPlanUiState(
@@ -59,6 +60,7 @@ data class AddEditPlanUiState(
     @StringRes val numberErrorRes: Int? = null,
     @StringRes val errorRes: Int? = null,
     @StringRes val snackbarRes: Int? = null,
+    val isSaving: Boolean = false,
     val saved: Boolean = false,
 )
 
@@ -203,6 +205,9 @@ class AddEditPlanViewModel @Inject constructor(
             return
         }
 
+        // 🔒 P0-4 防抖：连点「保存」会读到同一个 `planId = 0` → 同一条计划被插两次。
+        if (_form.value.isSaving) return
+        _form.update { it.copy(isSaving = true) }
         viewModelScope.launch {
             try {
                 val existing = if (planId != 0L) {
@@ -240,6 +245,9 @@ class AddEditPlanViewModel @Inject constructor(
                     R.string.error_save_failed
                 }
                 _form.update { it.copy(snackbarRes = res) }
+            } finally {
+                // 必须复位：否则保存失败后按钮永久禁用，用户只能退出页面重来。
+                _form.update { it.copy(isSaving = false) }
             }
         }
     }

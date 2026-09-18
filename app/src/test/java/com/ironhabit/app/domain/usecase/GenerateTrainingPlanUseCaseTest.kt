@@ -294,6 +294,129 @@ class GenerateTrainingPlanUseCaseTest {
         assertEquals("有氧时长（1200s → 20min）应写入本周计划", 20, cardio.targetDurationMin)
     }
 
+    // ---------------- P0-3：「每周相同」模板里的手改行不得被绕过 ----------------
+
+    /**
+     * 本周没有任何启用专属行 → 本周生效计划**来自模板**（`WeekPlanWeekResolver` 逐天覆盖规则）。
+     * 此时若为这些天写入专属行，该天从此不再回落模板 → 用户在模板里删掉/换掉的动作
+     * 在本周被静默绕过（"删掉的深蹲又回来了"）。修复：模板手改过的天本周整日不写。
+     */
+    @Test
+    fun generateTrainingPlan_doesNotBypassTemplateHandEditedDays() = runTest {
+        // 模板：周一那条被用户删掉（软删 + isUserEdited）、周三被用户手改过。
+        val templateDeletedMonday = WeekPlan(
+            id = 900L,
+            exerciseId = 1L,
+            dayOfWeek = 1,
+            isActive = false,
+            isUserEdited = true,
+            weekStartEpochDay = WeekPlan.TEMPLATE_WEEK_START,
+        )
+        val templateEditedWednesday = WeekPlan(
+            id = 901L,
+            exerciseId = 3L,
+            dayOfWeek = 3,
+            isActive = true,
+            isUserEdited = true,
+            weekStartEpochDay = WeekPlan.TEMPLATE_WEEK_START,
+        )
+        stubDefaults(existing = emptyList())
+        coEvery { planRepository.getRepeatRows() } returns
+            listOf(templateDeletedMonday, templateEditedWednesday)
+
+        val summary = useCase()
+
+        val written = slot<List<WeekPlan>>()
+        coVerify(exactly = 1) { planRepository.upsertGenerated(capture(written)) }
+        assertFalse(
+            "周一（模板里被删过、本周无专属行）不得写入任何专属行 —— 否则删除被绕过",
+            written.captured.any { it.dayOfWeek == 1 },
+        )
+        assertFalse(
+            "周三（模板里被手改过、本周无专属行）同理",
+            written.captured.any { it.dayOfWeek == 3 },
+        )
+        assertTrue(
+            "本周自有专属行、且模板未动过的天（周五）照常生成",
+            written.captured.any { it.dayOfWeek == 5 },
+        )
+        assertEquals("两条模板手改行都要计入「已保留」", 2, summary.preservedCount)
+    }
+
+    /**
+     * 🔴 回归钉子：报告的修复写法（`existing = 本周行 + 模板行`）会把模板行喂进
+     * `deactivateGenerated` 的输入 → 整份「每周相同」计划被判成陈旧 AI 行而停用，
+     * 比原缺陷更严重。本用例把这个坑钉死：模板行**永不**出现在回收输入里。
+     */
+    @Test
+    fun generateTrainingPlan_neverRetiresRepeatTemplateRows() = runTest {
+        val templateEdited = WeekPlan(
+            id = 901L,
+            exerciseId = 3L,
+            dayOfWeek = 3,
+            isActive = true,
+            isUserEdited = true,
+            weekStartEpochDay = WeekPlan.TEMPLATE_WEEK_START,
+        )
+        val templateAiRow = WeekPlan(
+            id = 902L,
+            exerciseId = 5L,
+            dayOfWeek = 5,
+            isActive = true,
+            isUserEdited = false,
+            weekStartEpochDay = WeekPlan.TEMPLATE_WEEK_START,
+        )
+        stubDefaults(existing = emptyList())
+        coEvery { planRepository.getRepeatRows() } returns listOf(templateEdited, templateAiRow)
+
+        useCase()
+
+        val retired = slot<List<WeekPlan>>()
+        coVerify(exactly = 1) { planRepository.deactivateGenerated(capture(retired)) }
+        assertFalse("模板手改行绝不被回收", retired.captured.any { it.id == 901L })
+        assertFalse(
+            "模板里的 AI 行也绝不被回收（它是模板，不是本周的行）",
+            retired.captured.any { it.id == 902L },
+        )
+        assertTrue("本周没有专属行 → 没什么可回收的", retired.captured.isEmpty())
+    }
+
+    /** 本周某天**有自己的启用专属行**时，该天不受模板影响（先保证不误伤正常路径）。 */
+    @Test
+    fun generateTrainingPlan_dayWithOwnWeekRowsIsNotTemplateOwned() = runTest {
+        val weekRowMonday = WeekPlan(
+            id = 100L,
+            exerciseId = 4L,
+            dayOfWeek = 1,
+            isActive = true,
+            isUserEdited = false,
+        )
+        val templateEditedMonday = WeekPlan(
+            id = 900L,
+            exerciseId = 1L,
+            dayOfWeek = 1,
+            isActive = true,
+            isUserEdited = true,
+            weekStartEpochDay = WeekPlan.TEMPLATE_WEEK_START,
+        )
+        stubDefaults(existing = listOf(weekRowMonday))
+        coEvery { planRepository.getRepeatRows() } returns listOf(templateEditedMonday)
+
+        val summary = useCase()
+
+        val written = slot<List<WeekPlan>>()
+        coVerify(exactly = 1) { planRepository.upsertGenerated(capture(written)) }
+        assertTrue(
+            "本周周一有自己的专属行 → 该天照常生成（模板手改不改变归属）",
+            written.captured.any { it.dayOfWeek == 1 },
+        )
+        assertFalse(
+            "但模板手改的**槽位**（周一 × 动作1）仍受保护，不得写入",
+            written.captured.any { it.dayOfWeek == 1 && it.exerciseId == 1L },
+        )
+        assertEquals("模板手改行计入「已保留」", 1, summary.preservedCount)
+    }
+
     private companion object {
         // 2026-09-14 附近的一个固定时刻（可复现；具体日期不影响「周计划按星期存储」的语义）。
         const val FIXED_MILLIS: Long = 1_787_000_000_000L
