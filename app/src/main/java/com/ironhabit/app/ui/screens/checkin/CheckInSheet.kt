@@ -46,7 +46,13 @@ fun CheckInSheet(
 ) {
     val sheetState = rememberModalBottomSheetState()
 
-    var setsText by remember { mutableStateOf(item.plan.targetSets.toString()) }
+    // 初值是「已勾了几组」而不是「目标几组」：字段标签写的是已完成组数，填目标值会让用户
+    // 什么都不改、只点保存就把没勾的组凭空标成已完成（连已完成数一起抬高）。
+    // 只有"这条今天一条都没勾上（或还没有记录）"时才回落到目标组数，避免出现打不开保存的 `0`。
+    val completedSetsSoFar = item.checkIn?.completedSets ?: 0
+    val initialSets = if (completedSetsSoFar > 0) completedSetsSoFar.toString() else item.plan.targetSets.toString()
+
+    var setsText by remember { mutableStateOf(initialSets) }
     var repsText by remember { mutableStateOf(item.plan.targetReps.toString()) }
     var weightText by remember { mutableStateOf(item.plan.targetWeightKg?.toString().orEmpty()) }
     var durationText by remember { mutableStateOf(item.plan.targetDurationMin?.toString().orEmpty()) }

@@ -23,13 +23,18 @@ class BackfillCheckInUseCase @Inject constructor(
 
     suspend operator fun invoke(exerciseId: Long, epochDay: Long, sets: Int, reps: Int) {
         val nowMillis = clock.now().toEpochMilliseconds()
+        // 与详细打卡同理：该日已有勾选时保留「是哪几组」的身份，只按数量增减调整位图。
+        val previousMask = checkInRepository
+            .getForExerciseOnDate(exerciseId, epochDay)
+            ?.completedSetsMask
+            ?: 0
         val checkIn = CheckIn(
             id = 0L,
             exerciseId = exerciseId,
             planId = null,
             dateEpochDay = epochDay,
             dateStartMillis = DateUtils.startOfDayMillis(epochDay, timeZone),
-            completedSetsMask = CheckIn.maskFromCount(sets),
+            completedSetsMask = CheckIn.mergedMask(count = sets, previousMask = previousMask),
             completedReps = reps,
             weightKg = null,
             durationMinutes = null,

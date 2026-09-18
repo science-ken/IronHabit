@@ -78,13 +78,19 @@ class DetailedCheckInUseCase @Inject constructor(
         notes: String?,
     ) {
         val nowMillis = clock.now().toEpochMilliseconds()
+        // 勾选身份保留：弹层提交的只是「组数」，先读旧 mask 再折算，
+        // 否则「勾了第 1、3 组」会在保存补录时被重写成「第 1、2 组」（mask 是唯一真源）。
+        val previousMask = checkInRepository
+            .getForExerciseOnDate(exerciseId, epochDay)
+            ?.completedSetsMask
+            ?: 0
         val checkIn = CheckIn(
             id = 0L,
             exerciseId = exerciseId,
             planId = planId?.takeIf { it > 0L },
             dateEpochDay = epochDay,
             dateStartMillis = DateUtils.startOfDayMillis(epochDay, timeZone),
-            completedSetsMask = CheckIn.maskFromCount(sets),
+            completedSetsMask = CheckIn.mergedMask(count = sets, previousMask = previousMask),
             completedReps = reps,
             weightKg = weightKg,
             durationMinutes = durationMinutes,

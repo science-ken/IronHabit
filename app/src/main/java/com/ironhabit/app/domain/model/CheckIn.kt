@@ -57,11 +57,57 @@ data class CheckIn(
         /**
          * 由「已完成组数」折算为低 n 位全 1 的 bitmask。
          *
-         * 用于「一键打卡」「详细打卡」「补录」等只知总数、不知逐组明细的入口，
+         * 用于**知道目标组数、不知道逐组明细**的入口（「一键打卡」把目标全勾满即算完成），
          * 保证不变量 `completedSets == completedSetsMask.countOneBits()` 成立。
          * `n` 上限钳制到 [MAX_SETS]，避免 `1 shl 31` 触到符号位（结果仍为 `Int.MAX_VALUE`）。
+         *
+         * ⚠️ 这一行**已经存在勾选记录**时不要用本函数 —— 它会丢掉"是哪几组"的身份，
+         * 改用 [mergedMask]。
          */
         fun maskFromCount(count: Int): Int =
             if (count <= 0) 0 else (1 shl count.coerceAtMost(MAX_SETS)) - 1
+
+        /**
+         * 由「已完成组数」折算 bitmask，但**保留 [previousMask] 里已有的勾选身份**。
+         *
+         * 与 [maskFromCount] 的分歧只在"这一行已经有勾选"时出现：
+         * - 数量不变 → 原样返回 [previousMask]，第几组做过这件事不受扰动；
+         * - 数量变多 → 保留原有位置，再从序号最小的空位起补齐；
+         * - 数量变少 → 保留 [previousMask] 中序号最小的 n 位。
+         *
+         * 补录 / 详细打卡的弹层只有一个数字输入框，提交的是**组数**而非位图；若直接走
+         * [maskFromCount] 得到的是"低 n 位全 1"，于是"勾了第 1、3 组"会被静默重写成
+         * "第 1、2 组"—— 而 mask 是全 app 唯一记录勾选身份的地方。本函数保证**任何情况下
+         * 都不重编号**。无旧记录时传 `previousMask = 0`，结果与 [maskFromCount] 完全一致。
+         */
+        fun mergedMask(count: Int, previousMask: Int): Int {
+            val target = count.coerceIn(0, MAX_SETS)
+            var mask = if (previousMask.countOneBits() <= target) {
+                previousMask
+            } else {
+                lowestNBits(previousMask, target)
+            }
+            var index = 0
+            while (index < MAX_SETS && mask.countOneBits() < target) {
+                if ((mask shr index) and 1 == 0) mask = mask or (1 shl index)
+                index++
+            }
+            return mask
+        }
+
+        /** 只保留 [mask] 中序号最小的 [n] 个置位。 */
+        private fun lowestNBits(mask: Int, n: Int): Int {
+            var result = 0
+            var remaining = n
+            var index = 0
+            while (index < MAX_SETS && remaining > 0) {
+                if ((mask shr index) and 1 == 1) {
+                    result = result or (1 shl index)
+                    remaining--
+                }
+                index++
+            }
+            return result
+        }
     }
 }
