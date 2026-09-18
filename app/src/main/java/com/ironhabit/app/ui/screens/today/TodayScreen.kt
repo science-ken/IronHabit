@@ -39,14 +39,16 @@ import com.ironhabit.app.ui.components.LoadingSkeleton
 import com.ironhabit.app.ui.components.LocalSnackbarHostState
 import com.ironhabit.app.ui.components.MealBlock
 import com.ironhabit.app.ui.components.PlanDateStrip
-import com.ironhabit.app.ui.components.ProgressRing
 import com.ironhabit.app.ui.components.SkeletonCard
 import com.ironhabit.app.ui.screens.checkin.CheckInSheet
 import com.ironhabit.app.ui.screens.meals.MealEditSheet
 import com.ironhabit.app.ui.theme.IronHabitSpacing
 
 /**
- * Tab1「今日」页面：进度环 + 日期栏 + 训练打卡卡片 + 习惯勾选行。
+ * Tab1「今日」页面：磁贴概览 + 日期栏 + 训练打卡卡片 + 习惯勾选行。
+ *
+ * 顶部 [TodayBento] 只作**读数概览**，勾选与编辑仍在下方清单 —— 本页是全 app 唯一能看到
+ * 「哪几组被勾了」的地方，磁贴化不能把它搬走。
  *
  * 三态齐全：加载中 → 骨架屏；加载失败 → 空态 + 「重试」；空数据 → 空态 + 「去创建」。
  * 写操作结果通过全局 [LocalSnackbarHostState] 反馈；补录详情由 [CheckInSheet]（`ModalBottomSheet`）承载。
@@ -73,6 +75,14 @@ fun TodayScreen(
     onOpenExerciseDetail: (Long) -> Unit = {},
     /** 编辑今日某条计划（参数：计划 id、星期 1..7）。今日页此前只能打卡、不能改，这是补上的入口。 */
     onEditPlan: (Long, Int) -> Unit = { _, _ -> },
+    /**
+     * 习惯磁贴跳到「自律」tab。
+     *
+     * 磁贴里**只有习惯这一格能跳出去**：`HabitRow` 在 `DisciplineScreen` 也渲染、那边也有
+     * `toggleHabit`，跳过去勾选不丢。动作与饮食的勾选/编辑只在今日页有，所以它们的格子
+     * 一律留在本屏，不做路由。
+     */
+    onOpenDiscipline: () -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: TodayViewModel = hiltViewModel(),
 ) {
@@ -105,13 +115,6 @@ fun TodayScreen(
             .padding(bottom = IronHabitSpacing.lg),
         verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.lg),
     ) {
-        ProgressRing(
-            completed = uiState.completedCount,
-            total = uiState.totalCount,
-            streak = uiState.trainingStreak,
-            modifier = Modifier.align(Alignment.CenterHorizontally),
-        )
-
         val errorRes: Int? = uiState.errorRes
         when {
             uiState.isLoading -> {
@@ -129,6 +132,12 @@ fun TodayScreen(
             }
 
             else -> {
+                // ---- 磁贴概览（F1：概览 + 同屏清单，勾选仍在下面的清单里）----
+                TodayBento(
+                    state = uiState,
+                    onOpenDiscipline = onOpenDiscipline,
+                )
+
                 // ---- 日期栏：切换查看日期（`‹ ›` 跨周；chip = 有计划的星期模板）----
                 val selectedEpochDay = uiState.dateEpochDay
                 if (selectedEpochDay > 0L) {
