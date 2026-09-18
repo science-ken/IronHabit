@@ -42,7 +42,8 @@ PY="/c/Users/science/.workbuddy/binaries/python/versions/3.13.12/python.exe"
 PKG="com.ironhabit.app"
 DBNAME="ironhabit.db"          # 真实库名（不是包名！）
 VM="${VM:-2}"
-SHOTS="D:/Workbuddy data/2026-09-14-09-31-06/shots"   # 用 D:/ 形式：Git Bash 与 Windows Python 都能读
+# 当前活动树（纯 ASCII，可含空格：下面每处用法都带引号，Python 侧走 r'' 字面量）
+SHOTS="D:/fitness-app-v204 1/shots"   # 用 D:/ 形式：Git Bash 与 Windows Python 都能读
 DBDIR="$SHOTS/db/wal"
 
 # MuMu 实例 → adb 端口（每次重启可能变，必须动态取）

@@ -29,3 +29,6 @@ captures/
 # 若想把 spec 纳入版本库、只挡图片，改用下面两行代替上面一行：
 # .scratch/**/*.png
 # !.scratch/**/*.md
+
+# dev.sh 的截图与拉库输出（含 WAL，可能带真实数据，切勿入库）
+shots/
