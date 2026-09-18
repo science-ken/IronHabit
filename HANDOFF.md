@@ -5,7 +5,54 @@
 
 ---
 
-## ⏳ 当前进度快照（2026-09-18 22:45 · 今日页改版 阶段 1 · 已提交两笔，**未截图未装包**）
+## ⏳ 当前进度快照（2026-09-18 23:10 收尾 · 关机前停止 · 见「下一步」）
+
+**本会话只提交了一笔**：`42fdbfa` —— `scripts/dev.sh` 的 `SHOTS`/`DBDIR` 从树外的
+`D:/Workbuddy data/2026-09-14-09-31-06/shots` 改到活动树内的 `D:/fitness-app-v204 1/shots`，
+并在 `.gitignore` 加 `shots/`（截图与含真实数据的 WAL 都不该入库）。
+
+### 1) 坑 0 已解除：不再需要 `D:\ih-check` 镜像
+
+活动树现在是 **`D:\fitness-app-v204 1`** —— 纯 ASCII，只剩一个空格。AGP 拦的是**非 ASCII 字符**，
+空格不触发。实测：`bash scripts/dev.sh build` → **BUILD SUCCESSFUL in 1m16s**（就在这个带空格的路径上）。
+含空格路径逐项复核过：`dev.sh` 里 `$SHOTS` 的每处用法都带引号，Python 侧走 `r''` 字面量，
+bash 重定向 + Windows Python 读取实测正常。
+
+`D:\ih-check\`（无 `.git` 的一次性镜像，spec.md 还是 22:18 的旧版）**已无用，可删**，本会话没动它。
+
+### 2) 阶段 2（`7acf501` 的 §4 四项）首次拿到真机肉眼确认
+
+之前那份快照写着"未截图未装包"，现在装了：`build` → `install` → `crash` **崩溃缓冲为空** → 3 张截图。
+- **顶栏换色 ✅ 确认生效**：标题条已是浅色 `surface`，不再是整块琥珀色 `primaryContainer`。
+- 截图在 `shots/before-today-{1-top,2-mid,3-bottom}.png`（已 gitignore，**未入库**，关机后仍在磁盘上）。
+- ⚠️ **陷阱（本次踩到）**：`dev.sh app` 只 `am start` **不安装**。第一次截图因此拍到**旧 APK**，
+  顶栏仍是琥珀色，一度看起来像 `7acf501` 白改了。**验证 UI 改动必须 `install`，不能只 `app`。**
+
+### 3) 今日页磁贴化：**一行代码都没改**
+
+只做了读码。`TodayScreen.kt`（423 行）现状 = 环 + 日期栏 + 训练卡列表 + 饮食 + 习惯 + 空态，全在一屏。
+
+**⚠️ spec 内部矛盾，下一个人务必按顶部决策做**：`spec.md` §2 开头写「删掉（移到 ②）：
+`ExerciseCheckCard` 列表、`MealBlock`、`HabitRow`、`RepeatWeeklyRow`」—— 那是**已作废的旧 F 形态残留**，
+与顶部 2026-09-18 定稿的 **F1** 直接冲突。F1 下**动作清单 / 饮食 / 每周相同开关必须留在今日页同屏**，
+只有习惯磁贴跳出到「自律」tab。§2 只当「新增磁贴层」读。
+
+### 4) 下一步（按这个切，两步各自可独立回退）
+
+- **2a（先做，零 ViewModel 改动）**：在 `TodayScreen` 顶部加磁贴层，只用 `TodayUiState` **现有**字段 ——
+  连续 N 天（`trainingStreak`）、今日 n/7（`completedCount`/`totalCount`）、习惯 n/m（`habits`）、
+  饮食 kcal/蛋白（`mealTotals` + `dietTarget`）、下一项（`plans` 取首个未完成）。
+- **2b（要动数据源，单独一笔）**：本周 12/35 + 热力、本周容量/平均 RPE/总组数、体重 Δ
+  这三块 **`TodayUiState` 里没有**，需给 `TodayViewModel` 注入 `StatsDao` / `BuildWeeklyReviewUseCase` /
+  `BodyMetricDao`。注意「不改 ViewModel 作用域」是本轮硬约束（作用域问题见旧快照 §阶段 0 结论）。
+- **环**：F1 下今日页从「环 + 清单」改成「磁贴 + 清单」，`ProgressRing` 今日页调用（`:108`）是它**唯一消费者**，
+  摘掉前想清楚是删还是留。
+- **禁止假数据**：睡眠、饮水、按"下一项 18:00"这类无数据源的磁贴不许出现（spec §2 已列）。
+
+---
+
+## ⏳ 旧快照（2026-09-18 22:45 · 已被上面取代，仅坑 0 的报错原文还有参考价值）
+
 
 > **Gradle 跑过了**：`bash scripts/dev.sh test` → BUILD SUCCESSFUL / 1m45s /
 > **47 个测试类 · 429 用例 · 0 失败 0 错误 0 跳过**。但**不是在 `D:\fitness-app-v204 副本` 里跑的** ——
@@ -34,8 +81,9 @@ non-ASCII 会**直接失败**（连编译都不开始，24 秒内报错）：
    后面的 aapt2 / zipalign 仍可能因中文路径出问题，我没试过，不敢担保；
 3. 维持现状：写在这个目录，验证时用 `D:\ih-check` 镜像。
 
-注意 `scripts/dev.sh` 里的 `SHOTS` 与 `DBDIR` 是**硬编码到原件目录**的
+注意 `scripts/dev.sh` 里的 `SHOTS` 与 `DBDIR` 曾是**硬编码到原件目录**的
 （`D:/Workbuddy data/2026-09-14-09-31-06/shots`），所以 `shot` / `sql` 子命令的产物会落到原件那边，不在本副本里。
+**（已解决：`42fdbfa` 起改指活动树内的 `shots/`，见顶部新快照。）**
 
 ### 正在做的事
 
