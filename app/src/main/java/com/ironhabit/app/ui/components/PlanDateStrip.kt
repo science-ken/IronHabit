@@ -97,7 +97,9 @@ fun PlanDateStrip(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
+                .horizontalScroll(rememberScrollState())
+                // 写在 scroll 之后 → 属于被滚动内容，滚到末尾时最后一片不会压在视口边缘上。
+                .padding(end = IronHabitSpacing.sm),
             horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
         ) {
             plannedWeekdays.forEach { weekday ->

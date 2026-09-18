@@ -98,8 +98,11 @@ fun TodayScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
+            // `verticalScroll` 没有 `contentPadding`：侧边与顶部内缩写在容器**外**（常驻，
+            // 不会随内容滚走），底部留白写在容器**内**（滚到末尾时才有呼吸空间）。
+            .padding(start = IronHabitSpacing.lg, top = IronHabitSpacing.lg, end = IronHabitSpacing.lg)
             .verticalScroll(rememberScrollState())
-            .padding(IronHabitSpacing.lg),
+            .padding(bottom = IronHabitSpacing.lg),
         verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.lg),
     ) {
         ProgressRing(

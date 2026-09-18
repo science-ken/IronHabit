@@ -149,7 +149,9 @@ val IronHabitLightColorScheme = lightColorScheme(
     surfaceContainerLow = Neutral96,
     surfaceContainer = Neutral94,
     surfaceContainerHigh = Neutral92,
-    surfaceContainerHighest = WarmGray90,
+    // 最高一档再下探一级：原先与 surfaceVariant 同为 WarmGray90，阶梯到顶却和辅助档同色，
+    // 磁贴/卡片需要"更深的一档"时无处可取（surfaceVariant 有 20+ 处消费者，保持原值）。
+    surfaceContainerHighest = WarmGray80,
     surfaceDim = Neutral87,
     surfaceBright = Neutral98,
 

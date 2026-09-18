@@ -203,7 +203,9 @@ private fun RpeChips(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .horizontalScroll(rememberScrollState()),
+            .horizontalScroll(rememberScrollState())
+            // 末片内衬：`spacedBy` 不会在最后一个之后产生间隙。
+            .padding(end = IronHabitSpacing.sm),
         horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
