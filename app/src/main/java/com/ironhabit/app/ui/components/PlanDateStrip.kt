@@ -132,8 +132,10 @@ private fun formatMonthDay(epochDay: Long): String {
  * 「你正在改哪一周」的提示在计划编辑页与训练页都要用，抽这一份避免第三处复制粘贴。
  * [weekStartEpochDay] 为 `0`（「每周相同」哨兵值）时返回空串 —— 那份不属于任何一周。
  */
-internal fun weekRangeText(weekStartEpochDay: Long): String {
-    if (weekStartEpochDay <= 0L) return ""
+/** epochDay → 「9/21」；预览页逐天卡片要标出日期，不只是星期。 */
+internal fun monthDayText(epochDay: Long): String = formatMonthDay(epochDay)
+
+internal fun weekRangeText(weekStartEpochDay: Long): String {    if (weekStartEpochDay <= 0L) return ""
     val end = weekStartEpochDay + DAYS_PER_WEEK - 1
     return "${formatMonthDay(weekStartEpochDay)}–${formatMonthDay(end)}"
 }

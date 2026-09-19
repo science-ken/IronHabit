@@ -115,6 +115,13 @@ class StringResourcePlaceholderContractTest {
         entry("scope_plan_this_week", ArgKind.STRING)
         // TrainScreen PlanSection（同一个 weekRangeText 的产出）
         entry("label_week_this", ArgKind.STRING)
+        // PlanPreviewScreen（weekRangeText / 草案计数 / 保留条数）
+        entry("title_plan_preview", ArgKind.STRING)
+        entry("plan_preview_preserved", ArgKind.NUMERIC)
+        entry("plan_preview_day_meta", ArgKind.NUMERIC, ArgKind.NUMERIC)
+        entry("plan_preview_adopt_all", ArgKind.NUMERIC, ArgKind.NUMERIC)
+        entry("msg_plan_adopted_count", ArgKind.STRING)
+        entry("plan_preview_footer", ArgKind.NUMERIC, ArgKind.NUMERIC, ArgKind.NUMERIC)
         entry("label_sets_progress", ArgKind.NUMERIC, ArgKind.NUMERIC)
         entry("label_rpe_short", ArgKind.NUMERIC)
         entry("ai_explain_injury_swap", ArgKind.STRING)

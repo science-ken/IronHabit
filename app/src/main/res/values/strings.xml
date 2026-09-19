@@ -69,6 +69,24 @@
     <string name="scope_plan_this_week">你正在改：这一周（%1$s）</string>
     <string name="scope_plan_template">你正在改：「每周相同」那份 —— 所有没单独排计划的周都会跟着变</string>
     <string name="label_week_this">本周 %1$s</string>
+    <!-- ===== 计划预览（生成 → 逐天采纳 → 不写库）===== -->
+    <string name="title_plan_preview">本周计划预览 · %1$s</string>
+    <string name="plan_preview_hint">这些还没写进你的计划。挑要练的天点「采纳这天」，没点的一条都不会进库。</string>
+    <string name="plan_preview_preserved">已保留你手动改过的 %1$d 条，不会被覆盖</string>
+    <string name="plan_preview_day_meta">%1$d 个动作 · %2$d 组</string>
+    <string name="plan_preview_adopt_day">采纳这天</string>
+    <string name="plan_preview_adopted">已采纳 ✓</string>
+    <string name="plan_preview_adopt_all">全部采纳（%1$d/%2$d）</string>
+    <string name="plan_preview_cancel">取消，不写入</string>
+    <string name="plan_preview_rest_day">休息日 · 不排动作</string>
+    <string name="plan_preview_template_day">这天由「每周相同」那份负责，本次不动它</string>
+    <string name="msg_plan_nothing_adoptable">这次没有可采纳的新内容（现有安排都被保留）</string>
+    <string name="msg_plan_adopted_count">已写入 %1$s 条计划</string>
+    <string name="plan_preview_empty">没有待采纳的草案了</string>
+    <string name="plan_preview_source_local">本地规则</string>
+    <string name="plan_preview_source_ai">AI 生成</string>
+    <string name="plan_preview_footer">已采纳 %1$d / %2$d 天 · 共 %3$d 条</string>
+    <string name="plan_preview_footer_none">一天都没采纳 · 现在点「取消」什么都不写</string>
     <string name="action_repeat_weekly">每周相同</string>
     <string name="hint_repeat_weekly">勾上之后，没有单独排计划的周都会用这一份</string>
     <string name="msg_repeat_weekly_on">已设为「每周相同」：以后没单独排计划的周都会用这一份</string>
@@ -377,7 +395,7 @@
     <string name="plan_goal_duration"> · 约%1$d分钟</string>
     <string name="ai_generate_plan">生成训练计划</string>
     <string name="ai_regenerate_plan">重新生成训练计划</string>
-    <string name="ai_generate_hint">基于你的档案生成，写入后出现在「今日」页</string>
+    <string name="ai_generate_hint">基于你的档案生成，先进「本周计划预览」，挑要采纳的天才会写入</string>
     <string name="ai_plan_preserved_hint">已保留你手动改过的 %1$d 条，不会被覆盖</string>
     <string name="ai_plan_retired_hint">已清理 %1$d 条本次不再出现的旧计划</string>
     <string name="ai_plan_written_hint">已写入 %1$d 条到本周计划</string>

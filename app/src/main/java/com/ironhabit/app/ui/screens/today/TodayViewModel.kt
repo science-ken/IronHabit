@@ -18,6 +18,8 @@ import com.ironhabit.app.domain.usecase.DeleteMealUseCase
 import com.ironhabit.app.domain.usecase.DetailedCheckInUseCase
 import com.ironhabit.app.domain.usecase.GenerateDietPlanUseCase
 import com.ironhabit.app.domain.usecase.GenerateTrainingPlanUseCase
+import com.ironhabit.app.domain.usecase.PlanPreview
+import com.ironhabit.app.domain.usecase.PlanPreviewHolder
 import com.ironhabit.app.domain.usecase.GeneratedPlanSummary
 import com.ironhabit.app.domain.usecase.GetTodayMealsUseCase
 import com.ironhabit.app.domain.usecase.GetTodayOverviewUseCase
@@ -73,6 +75,7 @@ class TodayViewModel @Inject constructor(
     private val toggleMeal: ToggleMealUseCase,
     private val generateDietPlan: GenerateDietPlanUseCase,
     private val generateTrainingPlan: GenerateTrainingPlanUseCase,
+    private val planPreviewHolder: PlanPreviewHolder,
     private val deleteMeal: DeleteMealUseCase,
     private val upsertMeal: UpsertMealUseCase,
     private val checkInRepository: CheckInRepository,
@@ -394,13 +397,20 @@ class TodayViewModel @Inject constructor(
 
         viewModelScope.launch {
             _uiState.update { state -> state.copy(isCreatingPlan = true) }
-            val snackbarRes: Int
+            val snackbarRes: Int?
             val snackbarArgs: List<String>
             try {
-                val summary: GeneratedPlanSummary = generateTrainingPlan(targetWeek)
-                snackbarRes = R.string.msg_plan_created
-                // 本通道实参是 String（List<String>）→ 资源占位符用 %1$s。
-                snackbarArgs = listOf(summary.writtenCount.toString())
+                val preview: PlanPreview = generateTrainingPlan.preview(targetWeek)
+                if (preview.allDrafts.isEmpty()) {
+                    // 一条都没排出来（全被手改行 / 模板整日保护挡住）→ 不去预览页空跑一趟。
+                    snackbarRes = R.string.msg_plan_nothing_adoptable
+                    snackbarArgs = emptyList()
+                } else {
+                    planPreviewHolder.set(preview)
+                    _uiState.update { state -> state.copy(previewRequested = true) }
+                    snackbarRes = null
+                    snackbarArgs = emptyList()
+                }
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (throwable: Throwable) {
@@ -418,6 +428,11 @@ class TodayViewModel @Inject constructor(
                 )
             }
         }
+    }
+
+    /** 预览页已经跳过去了，消费掉这次信号（否则回到本页会再跳一次）。 */
+    fun onPreviewConsumed() {
+        _uiState.update { state -> state.copy(previewRequested = false) }
     }
 
     /**

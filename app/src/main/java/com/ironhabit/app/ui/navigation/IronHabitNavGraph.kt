@@ -17,6 +17,7 @@ import com.ironhabit.app.ui.screens.exercise.ExerciseDetailScreen
 import com.ironhabit.app.ui.screens.habit.AddEditHabitScreen
 import com.ironhabit.app.ui.screens.history.HistoryScreen
 import com.ironhabit.app.ui.screens.plan.AddEditPlanScreen
+import com.ironhabit.app.ui.screens.planpreview.PlanPreviewScreen
 import com.ironhabit.app.ui.screens.profile.ProfileScreen
 import com.ironhabit.app.ui.screens.settings.BackupScreen
 import com.ironhabit.app.ui.screens.settings.SettingsScreen
@@ -52,6 +53,7 @@ fun IronHabitNavGraph(
                         ),
                     )
                 },
+                onOpenPlanPreview = { navController.navigate(Destinations.PLAN_PREVIEW) },
                 onCreateHabit = { navController.navigateToTab(Destinations.DISCIPLINE) },
                 onEditHabit = { habitId -> navController.navigate(Destinations.habitAddEdit(habitId)) },
                 onOpenExerciseDetail = { exerciseId ->
@@ -98,6 +100,7 @@ fun IronHabitNavGraph(
                 onEditPlan = { planId, dayOfWeek ->
                     navController.navigate(Destinations.planAddEdit(planId = planId, dayOfWeek = dayOfWeek))
                 },
+                onOpenPlanPreview = { navController.navigate(Destinations.PLAN_PREVIEW) },
             )
         }
         composable(Destinations.PROFILE) {
@@ -205,6 +208,11 @@ fun NavGraphBuilder.registerSecondaryRoutes(navController: NavHostController) {
             onOpenBackup = { navController.navigate(Destinations.BACKUP) },
             onOpenBodyMetrics = { navController.navigate(Destinations.BODY_METRICS) },
         )
+    }
+
+    // 9) 本周计划预览（生成 → 逐天采纳；不采纳就返回 = 一条都不写）
+    composable(Destinations.PLAN_PREVIEW) {
+        PlanPreviewScreen(onBack = { navController.popBackStack() })
     }
 
     // 8) 数据备份

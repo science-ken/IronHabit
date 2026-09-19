@@ -67,6 +67,8 @@ data class TodayUiState(
     val hasPlanThisWeek: Boolean = false,
     /** 正在为这一周生成训练计划（按钮禁用 + 文案更换）。 */
     val isCreatingPlan: Boolean = false,
+    /** 「已算出一份预览」的一次性信号：界面据此跳到预览页，消费后立即置回 `false`。 */
+    val previewRequested: Boolean = false,
     /**
      * 「每周相同」是否已开启（= 存在那份"以后每周都用这份"的计划）。
      *

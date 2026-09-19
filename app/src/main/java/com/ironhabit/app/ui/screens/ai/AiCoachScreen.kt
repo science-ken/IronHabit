@@ -60,11 +60,20 @@ fun AiCoachScreen(
     onEditProfile: () -> Unit,
     onAddPlan: (Int) -> Unit = {},
     onEditPlan: (Long, Int) -> Unit = { _, _ -> },
+    /** 生成完跳到「本周计划预览」页，由用户逐天采纳（AI 页自己不再写库）。 */
+    onOpenPlanPreview: () -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: AiCoachViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(uiState.previewRequested) {
+        if (uiState.previewRequested) {
+            viewModel.onPreviewConsumed()
+            onOpenPlanPreview()
+        }
+    }
 
     // 浠庤缃〉鏀瑰畬 Key 鍥炴潵鏃跺埛鏂板窘鏍囷紙鍔犲瘑鏂囦欢鏃犲搷搴斿紡娴侊紝鍙兘涓诲姩鎷夛級銆?
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {

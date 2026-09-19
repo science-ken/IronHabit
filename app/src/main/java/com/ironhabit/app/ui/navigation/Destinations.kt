@@ -64,4 +64,7 @@ object Destinations {
     const val BODY_METRICS = "body_metrics"
     const val SETTINGS = "settings"
     const val BACKUP = "backup"
+
+    /** 「本周计划预览」：生成后、写库前停在这里，逐天采纳。 */
+    const val PLAN_PREVIEW = "plan/preview"
 }

@@ -77,6 +77,8 @@ fun TodayScreen(
     onOpenExerciseDetail: (Long) -> Unit = {},
     /** 编辑今日某条计划（参数：计划 id、星期 1..7）。今日页此前只能打卡、不能改，这是补上的入口。 */
     onEditPlan: (Long, Int, Long) -> Unit = { _, _, _ -> },
+    /** 预览已备好，跳到「本周计划预览」页（采纳才写库）。 */
+    onOpenPlanPreview: () -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: TodayViewModel = hiltViewModel(),
 ) {
@@ -207,6 +209,14 @@ fun TodayScreen(
                     }
                 }
             }
+        }
+    }
+
+    // 生成只算不写：算完由 ViewModel 举一下手，这里跳一次就把信号收掉，避免来回跳。
+    LaunchedEffect(uiState.previewRequested) {
+        if (uiState.previewRequested) {
+            viewModel.onPreviewConsumed()
+            onOpenPlanPreview()
         }
     }
 

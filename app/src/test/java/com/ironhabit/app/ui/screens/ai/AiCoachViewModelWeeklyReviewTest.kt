@@ -117,6 +117,7 @@ class AiCoachViewModelWeeklyReviewTest {
             exerciseRepository = exerciseRepository,
             aiCredentialsStore = credentials,
             generateTrainingPlan = generateTrainingPlan,
+            planPreviewHolder = com.ironhabit.app.domain.usecase.PlanPreviewHolder(),
             suggestExercises = suggestExercises,
             askCoach = askCoach,
             generateDietPlan = generateDietPlan,

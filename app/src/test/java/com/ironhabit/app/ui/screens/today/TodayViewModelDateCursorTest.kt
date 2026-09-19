@@ -144,6 +144,7 @@ class TodayViewModelDateCursorTest {
             planRepository = planRepository,
             buildWeeklyReview = buildWeeklyReview,
             statsRepository = statsRepository,
+            planPreviewHolder = com.ironhabit.app.domain.usecase.PlanPreviewHolder(),
             clock = clock,
             timeZone = timeZone,
         )

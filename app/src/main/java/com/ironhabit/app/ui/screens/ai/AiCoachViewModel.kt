@@ -28,6 +28,7 @@ import com.ironhabit.app.domain.usecase.CoachInsightUseCase
 import com.ironhabit.app.domain.usecase.ExplainDietUseCase
 import com.ironhabit.app.domain.usecase.ExportWeekPackageUseCase
 import com.ironhabit.app.domain.usecase.GenerateDietPlanUseCase
+import com.ironhabit.app.domain.usecase.PlanPreviewHolder
 import com.ironhabit.app.domain.usecase.GenerateTrainingPlanUseCase
 import com.ironhabit.app.domain.usecase.SuggestExercisesUseCase
 import com.ironhabit.app.domain.util.DateUtils
@@ -120,6 +121,8 @@ data class AiCoachUiState(
     val currentWeightKg: Float? = null,
     val planResult: PlanResultUi? = null,
     val isGenerating: Boolean = false,
+    /** 预览已备好 → 界面跳一次「本周计划预览」页，跳完立即消费掉。 */
+    val previewRequested: Boolean = false,
     val suggestions: List<ExerciseSuggestion> = emptyList(),
     val adoptedNames: Set<String> = emptySet(),
     val exerciseNames: Map<Long, String> = emptyMap(),
@@ -207,6 +210,7 @@ class AiCoachViewModel @Inject constructor(
     exerciseRepository: ExerciseRepository,
     private val aiCredentialsStore: AiCredentialsStore,
     private val generateTrainingPlan: GenerateTrainingPlanUseCase,
+    private val planPreviewHolder: PlanPreviewHolder,
     private val suggestExercises: SuggestExercisesUseCase,
     private val askCoach: AskCoachUseCase,
     private val generateDietPlan: GenerateDietPlanUseCase,
@@ -377,30 +381,37 @@ class AiCoachViewModel @Inject constructor(
         _uiState.update { it.copy(hasApiKey = aiCredentialsStore.isConfigured()) }
     }
 
-    /** 生成 / 重新生成训练计划（写入本周计划，用户手改行保持不动）。 */
+    /** 预览页已经跳过去了，收掉信号；否则每次回到这一页都会再跳一次。 */
+    fun onPreviewConsumed() {
+        _uiState.update { it.copy(previewRequested = false) }
+    }
+
+    /**
+     * 生成 / 重新生成训练计划 —— **只算不写**。
+     *
+     * 以前这里直接 `generateTrainingPlan()` 把整周写进库，AI 教练页上没有任何
+     * "这天要不要"的余地；现在算完交给「本周计划预览」页，用户逐天点「采纳这天」才落库。
+     */
     fun generatePlan() {
         if (_uiState.value.isGenerating) return
         viewModelScope.launch {
             _uiState.update { it.copy(isGenerating = true, errorRes = null) }
-            runCatching { generateTrainingPlan() }
-                .onSuccess { summary ->
+            runCatching { generateTrainingPlan.preview() }
+                .onSuccess { preview ->
+                    if (preview.allDrafts.isEmpty()) {
+                        // 一条都排不出来（全被手改行 / 模板整日保护挡住）→ 不去预览页空跑。
+                        _uiState.update {
+                            it.copy(
+                                isGenerating = false,
+                                snackbarRes = R.string.msg_plan_nothing_adoptable,
+                                snackbarArgs = emptyList(),
+                            )
+                        }
+                        return@onSuccess
+                    }
+                    planPreviewHolder.set(preview)
                     _uiState.update {
-                        it.copy(
-                            isGenerating = false,
-                            planResult = PlanResultUi(
-                                writtenCount = summary.writtenCount,
-                                preservedCount = summary.preservedCount,
-                                retiredCount = summary.retiredCount,
-                                notes = summary.notes,
-                                source = summary.source,
-                                fallbackReason = summary.fallbackReason,
-                                plans = summary.plans,
-                                analysis = summary.analysis,
-                                basis = summary.basis,
-                            ),
-                            snackbarRes = R.string.ai_plan_written_hint,
-                            snackbarArgs = listOf(summary.writtenCount),
-                        )
+                        it.copy(isGenerating = false, planResult = null, previewRequested = true)
                     }
                 }
                 .onFailure {
