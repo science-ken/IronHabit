@@ -75,8 +75,11 @@ fun HabitRow(
                 // v2：计量型习惯显示目标值（如「8杯」「30分钟」）；纯勾选型无目标值则不显示。
                 val targetValue = item.habit.targetValue
                 if (targetValue != null) {
+                    val unit: String = item.habit.targetUnit.orEmpty()
                     Text(
-                        text = formatTarget(targetValue) + item.habit.targetUnit.orEmpty(),
+                        // 单位是自由文本，填成数字时直接拼会读成一个数（「4」+「2」→「42」），
+                        // 所以中间加间隔点；没有单位时不加，免得留个孤零零的「 · 」。
+                        text = formatTarget(targetValue) + if (unit.isEmpty()) "" else " · $unit",
                         style = MaterialTheme.typography.labelMedium,
                         color = colorScheme.primary,
                     )
