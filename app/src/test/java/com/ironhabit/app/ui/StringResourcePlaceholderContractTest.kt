@@ -79,9 +79,9 @@ class StringResourcePlaceholderContractTest {
         entry("basis_library_too_narrow", ArgKind.NUMERIC) // LocalRuleAdvisor
 
         // ---------------- 【直调】stringResource(R.string.x, ...) 字面量调用 ----------------
-        entry("label_streak_days", ArgKind.NUMERIC) // HabitRow:70 / ProgressRing:97（streak.current）
-        entry("label_streak_best", ArgKind.NUMERIC) // ProgressRing:102（streak.best）
-        entry("label_progress_ratio", ArgKind.NUMERIC, ArgKind.NUMERIC) // ProgressRing:92（completed, total）
+        entry("label_streak_days", ArgKind.NUMERIC) // HabitRow:70 / TodayBento（streak.current）
+        entry("label_streak_best", ArgKind.NUMERIC) // TodayBento（streak.best）
+        entry("label_progress_ratio", ArgKind.NUMERIC, ArgKind.NUMERIC) // TodayBento（今日完成、习惯 n/m）
         entry("cd_set_index", ArgKind.NUMERIC) // SetCheckboxRow:76（index + 1）
         entry("label_weight_kg", ArgKind.STRING) // PlanGoalText:62 / SettingsScreen:478（toDisplayNumber(): String）
         entry("label_duration_min", ArgKind.NUMERIC) // PlanGoalText:39/44/73（durationMin: Int）

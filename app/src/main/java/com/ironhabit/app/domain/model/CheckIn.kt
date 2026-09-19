@@ -53,6 +53,19 @@ data class CheckIn(
     fun isSetCompleted(setIndex: Int): Boolean =
         setIndex in 0 until MAX_SETS && (completedSetsMask shr setIndex) and 1 == 1
 
+    /**
+     * 这条打卡是否已覆盖计划要求的**全部**组数 —— 「这个动作今天算不算练完」的唯一判据。
+     *
+     * ⚠️ `targetSets <= 0` 时**直接算完成**，不能要求"勾满"：那种动作 `SetCheckboxRow`
+     * 压根不渲染勾选框（没有组可勾），而一键打卡走 `maskFromCount(0)` 得到的是 mask `0`，
+     * 要求勾满会让它永远完成不了。
+     *
+     * 用 `>=` 而不是"低 n 位正好对齐"：计划组数被改小之后，旧打卡里多勾的位
+     * 不该把这条反判成未完成。
+     */
+    fun coversTargetSets(targetSets: Int): Boolean =
+        targetSets <= 0 || completedSets >= targetSets
+
     companion object {
         /**
          * 由「已完成组数」折算为低 n 位全 1 的 bitmask。

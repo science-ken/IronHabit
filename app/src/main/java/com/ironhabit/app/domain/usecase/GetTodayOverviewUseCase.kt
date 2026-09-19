@@ -87,7 +87,11 @@ class GetTodayOverviewUseCase @Inject constructor(
             TodayPlanItem(
                 plan = plan,
                 exercise = exercise,
-                isCompleted = checkIn != null,
+                // 「练完」= 要求的全部组数勾满，不是"有记录就算"。
+                // 旧口径 `checkIn != null` 会让只勾 1/3 组的动作立刻变灰打勾、
+                // 点卡片从「一键打卡」翻成「撤销」，今日完成数也会提前跳满。
+                // ⚠️ 连续天数不受此影响：它走「这天有没有打卡」，与这个标记无关。
+                isCompleted = checkIn != null && checkIn.coversTargetSets(plan.targetSets),
                 checkIn = checkIn,
             )
         }

@@ -193,6 +193,20 @@ fun TodayBento(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+        } else if (state.plans.isNotEmpty()) {
+            // 全部勾完时不能只是让这格消失 —— 用户分不清"练完了"和"今天没排课"。
+            BentoTile(
+                modifier = Modifier.fillMaxWidth(),
+                go = true,
+                onClick = onOpenTrain,
+            ) {
+                TileTitle(stringResource(R.string.title_today_train))
+                Text(
+                    text = stringResource(R.string.label_today_done),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
         }
     }
 }

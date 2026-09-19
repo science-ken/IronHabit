@@ -29,7 +29,8 @@ data class TodayOverview(
  *
  * @property plan 计划条目
  * @property exercise 动作
- * @property isCompleted 今日是否已打卡
+ * @property isCompleted 今日是否**练完**：要求的全部组数已勾满（`targetSets <= 0` 的动作有记录即算）。
+ *   注意**不是**"今日是否已打卡" —— 只勾了 3 组里的 1 组时它是 `false`。
  * @property checkIn 今日打卡记录，未打卡时为 `null`
  */
 data class TodayPlanItem(

@@ -1,6 +1,8 @@
 package com.ironhabit.app.domain.model
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -70,5 +72,28 @@ class CheckInSetMaskTest {
             val row = CheckIn(completedSetsMask = mask)
             assertEquals("count=$count 破坏不变量", mask.countOneBits(), row.completedSets)
         }
+    }
+
+    // ---- coversTargetSets：「这个动作今天练完了没」的唯一判据 ----
+
+    /** 勾满才算完成；只勾一部分不算（旧口径"有记录即完成"会让 1/3 组就变灰打勾）。 */
+    @Test
+    fun coversTargetSets_requiresAllTargetSetsTicked() {
+        assertFalse(CheckIn(completedSetsMask = 0b001).coversTargetSets(targetSets = 3))
+        assertFalse(CheckIn(completedSetsMask = 0b101).coversTargetSets(targetSets = 3))
+        assertTrue(CheckIn(completedSetsMask = 0b111).coversTargetSets(targetSets = 3))
+    }
+
+    /** 目标 0 组的动作压根没有勾选框，一键打卡得到的 mask 也是 0 → 有记录就该算完成。 */
+    @Test
+    fun coversTargetSets_zeroTargetSets_anyRecordCounts() {
+        assertTrue(CheckIn(completedSetsMask = 0).coversTargetSets(targetSets = 0))
+        assertTrue(CheckIn(completedSetsMask = 0b1).coversTargetSets(targetSets = 0))
+    }
+
+    /** 计划组数被改小之后，旧打卡里多勾的位不该把这条反判成未完成。 */
+    @Test
+    fun coversTargetSets_planShrunkAfterCheckIn_staysComplete() {
+        assertTrue(CheckIn(completedSetsMask = 0b1111).coversTargetSets(targetSets = 2))
     }
 }
