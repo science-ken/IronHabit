@@ -44,6 +44,7 @@ private val Neutral70 = Color(0xFFBDBDBD)
 private val Neutral80 = Color(0xFFDCDCDC)
 private val Neutral87 = Color(0xFFE8E8E8)
 private val Neutral90 = Color(0xFFE4E4E4)
+private val Neutral96 = Color(0xFFF5F5F5)
 private val Neutral95 = Color(0xFFF0F0F0)
 private val Neutral98 = Color(0xFFFAFAFA)
 private val Neutral99 = Color(0xFFFFFFFF)
@@ -121,7 +122,7 @@ val IronHabitLightColorScheme = lightColorScheme(
     // M3 容器阶梯：页面 → 卡片 → 浮层，逐级抬升（磁贴取 High，压暗的 hero 取 Highest）
     surfaceContainerLowest = Neutral100,
     surfaceContainerLow = Neutral98,
-    surfaceContainer = Neutral95,
+    surfaceContainer = Neutral96,
     surfaceContainerHigh = Neutral95,
     surfaceContainerHighest = Neutral80,
     surfaceDim = Neutral87,

@@ -59,7 +59,6 @@ class StringResourcePlaceholderContractTest {
         }
 
         // ---------------- 【通道 A】String 实参（List<String> Snackbar） ----------------
-        entry("msg_streak_up", ArgKind.STRING) // TodayViewModel:354（current.toString()）
         entry("msg_diet_filtered", ArgKind.STRING) // Today/AiCoach Snackbar + AiCoachScreen:639（toString()，历史崩溃主角）
         entry("msg_reminder_set", ArgKind.STRING) // SettingsViewModel:66（formatTime(...)）
         entry("msg_plan_created", ArgKind.STRING) // TodayViewModel:354-357（writtenCount.toString()）
@@ -120,7 +119,6 @@ class StringResourcePlaceholderContractTest {
 
     /** 通道 A：实参为 `String` 的动态 Snackbar 通道 → 只能 `%s`。 */
     private val channelStringArgs = listOf(
-        "msg_streak_up",
         "msg_diet_filtered",
         "msg_reminder_set",
         "msg_plan_created",

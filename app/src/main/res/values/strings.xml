@@ -51,7 +51,6 @@
     <string name="label_today_done">已完成 ✓</string>
     <string name="label_today_pending">待完成</string>
     <string name="msg_checkin_done">已完成 ✓</string>
-    <string name="msg_streak_up">连续 %1$s 天 🔥</string>
     <string name="msg_streak_broken">已断档，重新开始</string>
     <string name="msg_rest_day">今天是休息日，好好放松 😌</string>
     <string name="empty_today_plan">今天还没有安排，去「训练」页添加计划吧</string>

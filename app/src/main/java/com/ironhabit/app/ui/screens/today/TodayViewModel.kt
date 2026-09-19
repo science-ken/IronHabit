@@ -516,9 +516,9 @@ class TodayViewModel @Inject constructor(
 
         val current: Int = data.trainingStreak.current
         val previous: Int? = previousStreak
+        // 只报"断档"，不报"涨了"：连续天数本身就是磁贴上的大字，再弹一条属于重复打扰。
         val streakRes: Int? = when {
             previous == null -> null
-            current > previous -> R.string.msg_streak_up
             previous > 0 && current == 0 -> R.string.msg_streak_broken
             else -> null
         }
@@ -550,11 +550,7 @@ class TodayViewModel @Inject constructor(
                 todayEpochDay = todayEpochDay(),
                 errorRes = null,
                 snackbarRes = streakRes ?: state.snackbarRes,
-                snackbarArgs = if (streakRes == R.string.msg_streak_up) {
-                    listOf(current.toString())
-                } else {
-                    state.snackbarArgs
-                },
+                snackbarArgs = state.snackbarArgs,
             )
         }
         previousStreak = current
