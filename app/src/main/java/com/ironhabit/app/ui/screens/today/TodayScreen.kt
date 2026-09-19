@@ -219,8 +219,12 @@ fun TodayScreen(
                             uiState.plans.isEmpty() && !uiState.hasPlanThisWeek -> {
                                 WeekPlanEmptyCard(
                                     isCreating = uiState.isCreatingPlan,
+                                    // AI 生成不切路由，弹窗保持打开，用户能当场看到卡片变化。
                                     onCreateByAi = viewModel::onCreatePlanByAi,
-                                    onCreateManually = onCreatePlan,
+                                    onCreateManually = {
+                                        sheetTarget = null
+                                        onCreatePlan()
+                                    },
                                 )
                             }
 
@@ -228,7 +232,10 @@ fun TodayScreen(
                                 EmptyState(
                                     text = stringResource(R.string.empty_today_plan),
                                     actionText = stringResource(R.string.action_create),
-                                    onAction = onCreatePlan,
+                                    onAction = {
+                                        sheetTarget = null
+                                        onCreatePlan()
+                                    },
                                 )
                             }
 
@@ -315,7 +322,10 @@ fun TodayScreen(
                             EmptyState(
                                 text = stringResource(R.string.empty_today_habits),
                                 actionText = stringResource(R.string.action_create),
-                                onAction = onCreateHabit,
+                                onAction = {
+                                    sheetTarget = null
+                                    onCreateHabit()
+                                },
                             )
                         } else {
                             uiState.habits.forEach { item ->

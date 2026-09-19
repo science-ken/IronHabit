@@ -125,45 +125,52 @@ fun TodayBento(
             }
         }
 
-        if (hasMeals || habitTotal > 0) {
-            Row(horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm)) {
-                if (hasMeals) {
-                    BentoTile(
-                        modifier = Modifier.weight(1f),
-                        go = true,
-                        onClick = onOpenMeal,
-                    ) {
-                        TileTitle(stringResource(R.string.title_today_meals))
-                        Text(
-                            text = stringResource(
-                                R.string.label_diet_intake_kcal,
-                                state.mealTotals.intakeKcal,
-                                dietDenominatorKcal(state),
-                            ),
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Text(
-                            text = stringResource(
-                                R.string.label_diet_intake_protein,
-                                state.mealTotals.intakeProtein.roundToInt(),
-                                dietDenominatorProtein(state),
-                            ),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+        // 习惯格**常驻**：一个习惯都没有时，这里就是今日页唯一的创建入口
+        // （磁贴化之前页面上有那条空态，格子跟着数据消失就等于把路断了）。
+        // 饮食格相反：常驻入口里已经有「生成饮食计划」，没数据时不必占一格。
+        Row(horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm)) {
+            if (hasMeals) {
+                BentoTile(
+                    modifier = Modifier.weight(1f),
+                    go = true,
+                    onClick = onOpenMeal,
+                ) {
+                    TileTitle(stringResource(R.string.title_today_meals))
+                    Text(
+                        text = stringResource(
+                            R.string.label_diet_intake_kcal,
+                            state.mealTotals.intakeKcal,
+                            dietDenominatorKcal(state),
+                        ),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = stringResource(
+                            R.string.label_diet_intake_protein,
+                            state.mealTotals.intakeProtein.roundToInt(),
+                            dietDenominatorProtein(state),
+                        ),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
-                if (habitTotal > 0) {
-                    BentoTile(
-                        modifier = Modifier.weight(1f),
-                        go = true,
-                        onClick = onOpenHabit,
-                    ) {
-                        TileTitle(stringResource(R.string.title_today_habits))
-                        TileValue(stringResource(R.string.label_progress_ratio, habitDone, habitTotal))
-                        ProgressPips(done = habitDone, total = habitTotal)
-                    }
+            }
+            BentoTile(
+                modifier = Modifier.weight(1f),
+                go = true,
+                onClick = onOpenHabit,
+            ) {
+                TileTitle(stringResource(R.string.title_today_habits))
+                if (habitTotal == 0) {
+                    Text(
+                        text = stringResource(R.string.empty_today_habits),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    TileValue(stringResource(R.string.label_progress_ratio, habitDone, habitTotal))
+                    ProgressPips(done = habitDone, total = habitTotal)
                 }
             }
         }
