@@ -11,6 +11,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.MaterialTheme
@@ -45,10 +46,10 @@ import com.ironhabit.app.ui.screens.meals.MealEditSheet
 import com.ironhabit.app.ui.theme.IronHabitSpacing
 
 /**
- * Tab1「今日」页面：磁贴概览 + 日期栏 + 训练打卡卡片 + 习惯勾选行。
+ * Tab1「今日」页面：磁贴概览 + 日期栏；训练 / 饮食 / 习惯三份清单在磁贴点开的底部弹窗里。
  *
- * 顶部 [TodayBento] 只作**读数概览**，勾选与编辑仍在下方清单 —— 本页是全 app 唯一能看到
- * 「哪几组被勾了」的地方，磁贴化不能把它搬走。
+ * 弹窗仍是**同一屏**的 `ModalBottomSheet`（不是新路由），所以逐组勾选、四餐勾选这些
+ * 全 app 唯一出口都还在 —— 代价是打卡从 1 tap 变 2 tap（磁贴 → 弹窗 → 勾）。
  *
  * 三态齐全：加载中 → 骨架屏；加载失败 → 空态 + 「重试」；空数据 → 空态 + 「去创建」。
  * 写操作结果通过全局 [LocalSnackbarHostState] 反馈；补录详情由 [CheckInSheet]（`ModalBottomSheet`）承载。
@@ -75,14 +76,6 @@ fun TodayScreen(
     onOpenExerciseDetail: (Long) -> Unit = {},
     /** 编辑今日某条计划（参数：计划 id、星期 1..7）。今日页此前只能打卡、不能改，这是补上的入口。 */
     onEditPlan: (Long, Int) -> Unit = { _, _ -> },
-    /**
-     * 习惯磁贴跳到「自律」tab。
-     *
-     * 磁贴里**只有习惯这一格能跳出去**：`HabitRow` 在 `DisciplineScreen` 也渲染、那边也有
-     * `toggleHabit`，跳过去勾选不丢。动作与饮食的勾选/编辑只在今日页有，所以它们的格子
-     * 一律留在本屏，不做路由。
-     */
-    onOpenDiscipline: () -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: TodayViewModel = hiltViewModel(),
 ) {
@@ -90,6 +83,9 @@ fun TodayScreen(
     val snackbarHostState = LocalSnackbarHostState.current
 
     var sheetItem by remember { mutableStateOf<TodayPlanItem?>(null) }
+
+    /** 磁贴点开的清单弹窗；`null` = 未打开。 */
+    var sheetTarget by remember { mutableStateOf<TodaySheetTarget?>(null) }
 
     // 未来日只读：所选日 > 今天（`todayEpochDay` == 0 表示尚未加载，不判定）。
     val isFutureDay: Boolean =
@@ -132,10 +128,12 @@ fun TodayScreen(
             }
 
             else -> {
-                // ---- 磁贴概览（F1：概览 + 同屏清单，勾选仍在下面的清单里）----
+                // ---- 磁贴概览（① 形态：整屏只有磁贴，清单在点开的弹窗里）----
                 TodayBento(
                     state = uiState,
-                    onOpenDiscipline = onOpenDiscipline,
+                    onOpenTrain = { sheetTarget = TodaySheetTarget.TRAIN },
+                    onOpenMeal = { sheetTarget = TodaySheetTarget.MEAL },
+                    onOpenHabit = { sheetTarget = TodaySheetTarget.HABIT },
                 )
 
                 // ---- 日期栏：切换查看日期（`‹ ›` 跨周；chip = 有计划的星期模板）----
@@ -175,106 +173,163 @@ fun TodayScreen(
                     )
                 }
 
-                // ---- 今日训练 ----
-                SectionTitle(text = stringResource(R.string.title_today_train))
-                when {
-                    // 这一周还没有任何计划（P3：计划按周存放）→ 只给一个「创建训练计划」入口。
-                    // 与下面的"今天是休息日"是两种不同状态，不能混为一谈。
-                    uiState.plans.isEmpty() && !uiState.hasPlanThisWeek -> {
-                        WeekPlanEmptyCard(
-                            isCreating = uiState.isCreatingPlan,
-                            onCreateByAi = viewModel::onCreatePlanByAi,
-                            onCreateManually = onCreatePlan,
-                        )
-                    }
-
-                    uiState.plans.isEmpty() -> {
-                        EmptyState(
-                            text = stringResource(R.string.empty_today_plan),
-                            actionText = stringResource(R.string.action_create),
-                            onAction = onCreatePlan,
-                        )
-                    }
-
-                    else -> {
-                        uiState.plans.forEach { item ->
-                            ExerciseCheckCard(
-                                item = item,
-                                onQuickCheckIn = { viewModel.onQuickCheckIn(item) },
-                                onUndo = { viewModel.onUndoCheckIn(item) },
-                                onOpenDetail = { onOpenExerciseDetail(item.exercise.id) },
-                                onOpenSheet = { sheetItem = item },
-                                onToggleSet = { setIndex -> viewModel.onToggleSet(item, setIndex) },
-                                onSetRpe = { rpe -> viewModel.onSetRpe(item, rpe) },
-                                onEditPlan = { onEditPlan(item.plan.id, item.plan.dayOfWeek) },
-                                enabled = !isFutureDay,
-                            )
-                        }
-                        // 「每周相同」开关（P3）：只在这一周**自己有**计划时出现
-                        //（正在显示"每周相同"那份时，开关已经开着，用来关掉它）。
-                        if (!isFutureDay) {
-                            RepeatWeeklyRow(
-                                checked = uiState.isRepeatWeeklyOn,
-                                enabled = !uiState.isTogglingRepeatWeekly,
-                                onCheckedChange = viewModel::onToggleRepeatWeekly,
-                            )
-                        }
-                    }
-                }
-
-                // ---- 今日饮食（v3）----
-                SectionTitle(text = stringResource(R.string.title_today_meals))
-                if (uiState.meals.isEmpty()) {
-                    EmptyState(
-                        text = stringResource(R.string.empty_today_meals),
-                        actionText = stringResource(R.string.action_generate_diet),
-                        onAction = viewModel::onGenerateDiet,
-                    )
-                } else {
-                    DietTotalsBar(
-                        totals = uiState.mealTotals,
-                        target = uiState.dietTarget,
-                    )
-                    uiState.meals.forEach { meal ->
-                        MealBlock(
-                            meal = meal,
-                            onToggle = { done -> viewModel.onToggleMeal(meal, done) },
-                            onEdit = { viewModel.onOpenMealEditor(meal) },
-                            onDelete = { viewModel.onDeleteMeal(meal) },
-                            enabled = !isFutureDay,
-                        )
-                    }
-                    if (uiState.dietTarget.usedDefaults) {
+                // ---- 三个常驻入口：不塞进弹窗，页面上一眼能点到 ----
+                Row(horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm)) {
+                    TextButton(
+                        onClick = viewModel::onCreatePlanByAi,
+                        enabled = !uiState.isCreatingPlan && !isFutureDay,
+                    ) {
                         Text(
-                            text = stringResource(R.string.profile_incomplete_hint),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.tertiary,
+                            text = stringResource(
+                                if (uiState.isCreatingPlan) R.string.msg_plan_creating
+                                else R.string.action_create_plan_ai,
+                            ),
                         )
                     }
                     TextButton(
                         onClick = viewModel::onGenerateDiet,
                         enabled = !isFutureDay,
                     ) {
-                        Text(text = stringResource(R.string.action_regenerate_diet))
+                        Text(text = stringResource(R.string.action_generate_diet))
+                    }
+                    TextButton(onClick = onCreatePlan) {
+                        Text(text = stringResource(R.string.action_create))
                     }
                 }
+            }
+        }
+    }
 
-                // ---- 今日习惯 ----
-                SectionTitle(text = stringResource(R.string.title_today_habits))
-                if (uiState.habits.isEmpty()) {
-                    EmptyState(
-                        text = stringResource(R.string.empty_today_habits),
-                        actionText = stringResource(R.string.action_create),
-                        onAction = onCreateHabit,
-                    )
-                } else {
-                    uiState.habits.forEach { item ->
-                        HabitRow(
-                            item = item,
-                            onToggle = { viewModel.onToggleHabit(item) },
-                            onEdit = { onEditHabit(item.habit.id) },
-                            enabled = !isFutureDay,
-                        )
+    // ---- 磁贴点开的清单弹窗（① 形态：清单不再常驻页面，但仍在同一屏内，勾选没丢）----
+    val listTarget = sheetTarget
+    if (listTarget != null) {
+        ModalBottomSheet(onDismissRequest = { sheetTarget = null }) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(start = IronHabitSpacing.lg, end = IronHabitSpacing.lg)
+                    .padding(bottom = IronHabitSpacing.xxl),
+                verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.md),
+            ) {
+                when (listTarget) {
+                    TodaySheetTarget.TRAIN -> {
+                        SectionTitle(text = stringResource(R.string.title_today_train))
+                        when {
+                            uiState.plans.isEmpty() && !uiState.hasPlanThisWeek -> {
+                                WeekPlanEmptyCard(
+                                    isCreating = uiState.isCreatingPlan,
+                                    onCreateByAi = viewModel::onCreatePlanByAi,
+                                    onCreateManually = onCreatePlan,
+                                )
+                            }
+
+                            uiState.plans.isEmpty() -> {
+                                EmptyState(
+                                    text = stringResource(R.string.empty_today_plan),
+                                    actionText = stringResource(R.string.action_create),
+                                    onAction = onCreatePlan,
+                                )
+                            }
+
+                            else -> {
+                                uiState.plans.forEach { item ->
+                                    ExerciseCheckCard(
+                                        item = item,
+                                        onQuickCheckIn = { viewModel.onQuickCheckIn(item) },
+                                        onUndo = { viewModel.onUndoCheckIn(item) },
+                                        onOpenDetail = {
+                                            sheetTarget = null
+                                            onOpenExerciseDetail(item.exercise.id)
+                                        },
+                                        // 补录是第二层弹窗：先收掉清单再弹，两个 ModalBottomSheet 不能叠。
+                                        onOpenSheet = {
+                                            sheetTarget = null
+                                            sheetItem = item
+                                        },
+                                        onToggleSet = { setIndex -> viewModel.onToggleSet(item, setIndex) },
+                                        onSetRpe = { rpe -> viewModel.onSetRpe(item, rpe) },
+                                        onEditPlan = {
+                                            sheetTarget = null
+                                            onEditPlan(item.plan.id, item.plan.dayOfWeek)
+                                        },
+                                        enabled = !isFutureDay,
+                                    )
+                                }
+                                if (!isFutureDay) {
+                                    RepeatWeeklyRow(
+                                        checked = uiState.isRepeatWeeklyOn,
+                                        enabled = !uiState.isTogglingRepeatWeekly,
+                                        onCheckedChange = viewModel::onToggleRepeatWeekly,
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    TodaySheetTarget.MEAL -> {
+                        SectionTitle(text = stringResource(R.string.title_today_meals))
+                        if (uiState.meals.isEmpty()) {
+                            EmptyState(
+                                text = stringResource(R.string.empty_today_meals),
+                                actionText = stringResource(R.string.action_generate_diet),
+                                onAction = viewModel::onGenerateDiet,
+                            )
+                        } else {
+                            DietTotalsBar(
+                                totals = uiState.mealTotals,
+                                target = uiState.dietTarget,
+                            )
+                            uiState.meals.forEach { meal ->
+                                MealBlock(
+                                    meal = meal,
+                                    onToggle = { done -> viewModel.onToggleMeal(meal, done) },
+                                    // 编辑弹层是第二层：先收掉清单。
+                                    onEdit = {
+                                        sheetTarget = null
+                                        viewModel.onOpenMealEditor(meal)
+                                    },
+                                    onDelete = { viewModel.onDeleteMeal(meal) },
+                                    enabled = !isFutureDay,
+                                )
+                            }
+                            if (uiState.dietTarget.usedDefaults) {
+                                Text(
+                                    text = stringResource(R.string.profile_incomplete_hint),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.tertiary,
+                                )
+                            }
+                            TextButton(
+                                onClick = viewModel::onGenerateDiet,
+                                enabled = !isFutureDay,
+                            ) {
+                                Text(text = stringResource(R.string.action_regenerate_diet))
+                            }
+                        }
+                    }
+
+                    TodaySheetTarget.HABIT -> {
+                        SectionTitle(text = stringResource(R.string.title_today_habits))
+                        if (uiState.habits.isEmpty()) {
+                            EmptyState(
+                                text = stringResource(R.string.empty_today_habits),
+                                actionText = stringResource(R.string.action_create),
+                                onAction = onCreateHabit,
+                            )
+                        } else {
+                            uiState.habits.forEach { item ->
+                                HabitRow(
+                                    item = item,
+                                    onToggle = { viewModel.onToggleHabit(item) },
+                                    onEdit = {
+                                        sheetTarget = null
+                                        onEditHabit(item.habit.id)
+                                    },
+                                    enabled = !isFutureDay,
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -332,6 +387,9 @@ private fun SectionTitle(text: String) {
 
 /** 一周 7 天（日期栏 `‹ ›` 跨周步长）。 */
 private const val DAYS_PER_WEEK: Long = 7L
+
+/** 磁贴点开的清单弹窗内容。 */
+enum class TodaySheetTarget { TRAIN, MEAL, HABIT }
 
 /**
  * 「这一周还没有训练计划」空状态卡（P3）。

@@ -17,6 +17,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -37,21 +38,23 @@ import com.ironhabit.app.ui.theme.IronHabitSpacing
 import kotlin.math.roundToInt
 
 /**
- * 今日页的磁贴概览（F1：概览 + **同屏**清单）。
+ * 今日页的磁贴概览（① 形态：整屏只有磁贴，清单在点开的底部弹窗里）。
  *
- * 三条硬规则：
+ * 三条规则：
  * 1. **只渲染有真实数据的格子** —— 没数据的整块缺席，绝不出现 `0 / 0` 或编出来的数字
  *    （与 [com.ironhabit.app.domain.model.WeeklyReview] 的「`null` 不用 `0` 冒充」同一口径）。
- * 2. **格子本身不承载勾选** —— 逐组勾选、餐次勾选全在下方清单里，这里只是读数。
- *    唯一的例外是习惯格：它的勾选在「自律」tab 也有一份（`HabitRow` 由 `DisciplineScreen` 渲染，
- *    `DisciplineViewModel.toggleHabit` 在），所以跳过去不丢功能。
+ * 2. **磁贴本身不承载勾选** —— 逐组勾选、餐次勾选在 [onOpenTrain] / [onOpenMeal] 打开的弹窗里。
+ *    弹窗仍在同一屏（不是新路由），所以「哪几组被勾了」这个全 app 唯一出口**没有丢**，
+ *    只是从 1 tap 变成 2 tap。
  * 3. **不做动效** —— 本轮（spec §5）整体推迟，这里连 `animateColorAsState` 都不用。
  */
 @Composable
 fun TodayBento(
     state: TodayUiState,
+    onOpenTrain: () -> Unit,
+    onOpenMeal: () -> Unit,
+    onOpenHabit: () -> Unit,
     modifier: Modifier = Modifier,
-    onOpenDiscipline: () -> Unit = {},
 ) {
     // 「下一项」= 当天首个未完成，按 sortOrder 取（与清单的展示顺序一致）。
     val nextItem: TodayPlanItem? = state.plans.asSequence()
@@ -78,7 +81,11 @@ fun TodayBento(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            BentoTile(modifier = Modifier.weight(1f)) {
+            BentoTile(
+                modifier = Modifier.weight(1f),
+                go = true,
+                onClick = onOpenTrain,
+            ) {
                 TileTitle(stringResource(R.string.title_progress))
                 TileValue(stringResource(R.string.label_progress_ratio, state.completedCount, state.totalCount))
                 ProgressPips(done = state.completedCount, total = state.totalCount)
@@ -121,7 +128,11 @@ fun TodayBento(
         if (hasMeals || habitTotal > 0) {
             Row(horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm)) {
                 if (hasMeals) {
-                    BentoTile(modifier = Modifier.weight(1f)) {
+                    BentoTile(
+                        modifier = Modifier.weight(1f),
+                        go = true,
+                        onClick = onOpenMeal,
+                    ) {
                         TileTitle(stringResource(R.string.title_today_meals))
                         Text(
                             text = stringResource(
@@ -146,7 +157,8 @@ fun TodayBento(
                 if (habitTotal > 0) {
                     BentoTile(
                         modifier = Modifier.weight(1f),
-                        onClick = onOpenDiscipline,
+                        go = true,
+                        onClick = onOpenHabit,
                     ) {
                         TileTitle(stringResource(R.string.title_today_habits))
                         TileValue(stringResource(R.string.label_progress_ratio, habitDone, habitTotal))
@@ -157,7 +169,11 @@ fun TodayBento(
         }
 
         if (nextItem != null) {
-            BentoTile(modifier = Modifier.fillMaxWidth()) {
+            BentoTile(
+                modifier = Modifier.fillMaxWidth(),
+                go = true,
+                onClick = onOpenTrain,
+            ) {
                 TileTitle(stringResource(R.string.label_today_pending))
                 Text(
                     text = nextItem.exercise.name,
@@ -183,23 +199,38 @@ fun TodayBento(
 private fun BentoTile(
     modifier: Modifier = Modifier,
     deep: Boolean = false,
+    go: Boolean = false,
     onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val colorScheme = MaterialTheme.colorScheme
     val container: Color =
         if (deep) colorScheme.surfaceContainerHighest else colorScheme.surfaceContainerHigh
-    Column(
+    Box(
         modifier = modifier
             .clip(IronHabitShapes.card)
             .background(container)
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            // 同行两格内容行数可能不同，给一个共同下限把它们撑平（组件固有规格，非布局间距）。
-            .heightIn(min = 92.dp)
-            .padding(IronHabitSpacing.md),
-        verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.xs),
-        content = content,
-    )
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+    ) {
+        Column(
+            modifier = Modifier
+                // 同行两格内容行数可能不同，给一个共同下限把它们撑平（组件固有规格，非布局间距）。
+                .heightIn(min = 92.dp)
+                .padding(IronHabitSpacing.md),
+            verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.xs),
+            content = content,
+        )
+        if (go) {
+            Text(
+                text = "›",
+                style = MaterialTheme.typography.titleMedium,
+                color = colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(IronHabitSpacing.md),
+            )
+        }
+    }
 }
 
 @Composable

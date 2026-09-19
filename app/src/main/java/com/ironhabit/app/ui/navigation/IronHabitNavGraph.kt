@@ -51,8 +51,6 @@ fun IronHabitNavGraph(
                 onEditPlan = { planId, dayOfWeek ->
                     navController.navigate(Destinations.planAddEdit(planId = planId, dayOfWeek = dayOfWeek))
                 },
-                // 习惯磁贴的去向：复用既有 tab 切换，不新增路由。
-                onOpenDiscipline = { navController.navigateToTab(Destinations.DISCIPLINE) },
             )
         }
         composable(Destinations.TRAIN) {
