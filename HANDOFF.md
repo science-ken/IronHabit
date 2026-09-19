@@ -77,6 +77,11 @@
 **签名的事澄清**：`§8` 约定"本机不打 tag"——CI 的 `android-release.yml` 在 tag 时用 4 个 secret 出签名 APK。
 所以本机 `assembleRelease` 出未签名包**不是缺陷**，是分工；要出包得推 tag，那是主理人的活。
 
+**已推 `origin/main`（09-19，用户明确授权"推"）**：`3dd3597..7bc04ef`，**fast-forward、没 force、没打 tag**
+（`git ls-remote --tags` 复核过，远端仍只有 `v2.0.5` / `v2.0.6` → CI 没被触发，没有新 Release）。
+本地 `main` 现已 track `origin/main`，以后 `git status` 会直接显示领先/落后。
+**要出 2.0.7 的签名包，还差一步"打 tag `v2.0.7` 并推 tag"** —— 那一步本机不做，需你或主理人来。
+
 #### ③ `D:\ih-check` 已删除（09-19，删前逐文件核过）
 
 不是"更早的无 git 镜像"，是 **09-18 那次被中断的工作树**：它自己的 `HANDOFF.md` 顶部写着
@@ -92,12 +97,13 @@
 |---|---|
 | `CheckInSetMaskTest.kt` 的另一版 7 条用例 | **零** —— 用例名与活动树逐字相同，活动树是 7 条 + 今天新增 3 条 `coversTargetSets` 的超集 |
 | 9 个源文件的 WIP 改法（`CheckIn`/`DetailedCheckInUseCase`/`BackfillCheckInUseCase`/`ExerciseCheckCard`/`PlanDateStrip`/`AppRoot`/`CheckInSheet`/`TodayScreen`/`Color`） | **零** —— 未编译未测试，同一批文件今天已重做并真机验过 |
-| 那份从未入库的 WIP 快照文本（`git log --all -S'WIP，被中断'` 零命中） | 低，但**已留档** |
-| `.scratch` 里早期版 `spec.md` / `prototype.html` | 低，活动树是更新版，**已留档** |
+| 那份从未入库的 WIP 快照文本（`git log --all -S'WIP，被中断'` 零命中） | 低 —— 曾留档，随后一并删除（结论已抄进本节） |
+| `.scratch` 里早期版 `spec.md` / `prototype.html` | 低，活动树是更新版 —— 曾留档，随后一并删除 |
 | 4 张原型截图 `shot-comp/comp2/drill/fprime.png` | **零** —— 与活动树**字节相同**（`cmp` 核过） |
 
-留档位置（`.scratch/` 下，gitignored，共 116KB）：`ih-check-wip-vs-v205.patch`（12 文件全量差异 52KB）、
-`ih-check-HANDOFF-20260918.md`（24KB）、`ih-check-scratch-20260918/`（早期 spec + prototype 40KB）。
+曾留档 116KB（`ih-check-wip-vs-v205.patch` 12 文件差异 52KB / 那份 WIP 快照 HANDOFF 24KB / 早期 spec+prototype 40KB），
+**判完价值后也删了**：补丁只有 +324/−135 行，改的正是今天重做并推到远端的那批文件，
+留一份"从未编译过的旧写法"diff 没有任何后续用途。要找回那段 WIP 的思路，只能从本节这段记录里读结论。
 **目录本身已 `rm -rf`，释放 90MB**（其中 ~87MB 是 `build/` + `.gradle/` + `.kotlin/` 缓存）。
 
 ### 本会话三条踩坑记录（下一个人别再踩）
@@ -505,7 +511,7 @@ non-ASCII 会**直接失败**（连编译都不开始，24 秒内报错）：
    另有两份**别当最新**的副本：`D:\Workbuddy data\2026-09-14-09-31-06\fitness-app-v204`
    是 09-18 那轮的免 git 镜像（**不含 09-19 今日页改版**）。
    第三份 `D:\ih-check` **已于 09-19 删除**（90MB）—— 它是 09-18 那次"阶段 1 WIP、从未编译从未测试"
-   的中断工作树，独有内容已全部留档在 `.scratch/ih-check-*`（见文末③的记录）。
+   的中断工作树；独有内容当时留过档，判完价值后连归档一起删了（见 §0 上方"③"那节）。
 2. **跑一次全量测试**确认环境没问题（命令见 §2），**期望以 §9 的实测数为准**。
 3. **读 §3（红线）和 §4（数据模型）**，再动代码。这两节是"不知道就会踩雷"的部分。
 
