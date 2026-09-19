@@ -126,6 +126,23 @@
   `applyData` 逐字段搬运这个坑**第三次**踩到（前两次是 `weeklyReview`、`weekHeatmap`），
   已补一条 `plannedSetsThisWeekReachesUiState` 回归。分母为 `0`（这周没排课）时磁贴**不挂分母**。
 
+#### A1 已发版：tag `v2.0.7` → CI 签名包（09-19 20:4x）
+
+| 项 | 实测 |
+|---|---|
+| tag | 带注释标签 `v2.0.7` → `dd54325`（与 `v2.0.5` 同形态；`v2.0.6` 当年是轻量标签） |
+| CI | `Android Release (Signed APK)` run **completed / success**；`Android CI` 在 `dd54325` 也已 success |
+| Release | https://github.com/science-ken/IronHabit/releases/tag/v2.0.7 （非 draft、非 prerelease） |
+| 产物 | `app-release.apk` **2,295,311 字节**，已下载并用 `apksigner verify` 核过：v2 方案通过，签名者 `CN=IronHabit`（RSA 2048）；`aapt2 dump badging` 回读 **versionCode 18 / versionName 2.0.7**，确认是这一笔 |
+
+### ⚠️ 想装这个 release 包，先导出备份
+
+release 用 **`CN=IronHabit`**（CI 的 keystore），本机 debug 包用 **`CN=Android Debug`** ——
+**两个签名者，不能覆盖安装**。要换 release 包必须先卸载 debug 包，
+而**卸载会连带删掉 `/data/data/com.ironhabit.app/databases/` 里的真实训练记录**。
+所以顺序只能是：**我的 → 数据备份 → 导出** → 卸载 → 装 release → 导入。
+（P0-1 修的就是"导入老备份清空饮食记录"，v4 备份才安全。）
+
 ### 本会话三条踩坑记录（下一个人别再踩）
 
 - **结构性改动不要交给"按花括号猜边界"的脚本**。日期栏移顶时我用脚本找块的右括号，
@@ -791,9 +808,13 @@ F-6 过期 KDoc、F-7 桶下标负数截断 —— 都已修；那轮加的 41 �
 ## 10. 需要用户拍板的事
 
 1. **这一轮做哪块**：§6 的 A（P3 收尾）是最有价值的，但它依赖远端 AI 路径（需要 Key）；B/C/D/E 都可以纯本地做。
-2. **谁能 push / 谁能 bump 版本**：目前约定"只有主理人（上一任 agent）"。你要是也需要推，先说清楚，避免两边同时推。
-   **这条已经失守过一次**：09-18 晚上另一棵树推了 4 个 P0 修复并把版本占到 17 / 2.0.6，本树不知道、
-   同一天又把版本 bump 成 17 / 2.0.6 → 同号两份内容（见文首分叉记录）。
+2. **谁能 push / 谁能 bump 版本**：**2026-09-19 用户改定了口径** ——
+   「用户在本会话里明确说'推'，当前会话就可以 `git push origin main`」；
+   **但打 tag 必须单独获授权**（tag 会触发 `android-release.yml` 出签名包和 GitHub Release，
+   那是对外发布，不是留痕）。当天按这条打了 `v2.0.7`。
+   历史教训：这条原来写的是"只有主理人能推"，09-18 晚上被另一棵树破过一次 ——
+   它推了 4 个 P0 修复并把版本占到 17 / 2.0.6，本树不知道、同一天也 bump 成 17 / 2.0.6，
+   同号两份内容（见文首分叉记录）。
    **落地规矩**：动 `versionCode` 前先 `git fetch` + `git ls-remote --tags`，确认号没被占用。
 3. **是否要改产品行为**：涉及"AI 能不能自动改计划""伤病替代的粒度""计划是否默认每周相同"这类，
    都已经由用户拍过板（见 §3 / §4），**要改先问用户**。
