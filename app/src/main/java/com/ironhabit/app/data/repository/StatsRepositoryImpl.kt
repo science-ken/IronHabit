@@ -45,9 +45,18 @@ class StatsRepositoryImpl @Inject constructor(
 
     override suspend fun heatmap(days: Int): List<HeatmapCell> {
         val range = dayRange(days)
-        val rows = statsDao.heatmapRows(range.first, range.second)
+        return cellsBetween(range.first, range.second)
+    }
+
+    override suspend fun heatmapRange(startEpochDay: Long, endEpochDay: Long): List<HeatmapCell> =
+        cellsBetween(startEpochDay, endEpochDay)
+
+    /** 铺满 `[start, end]` 每一天：没打卡的补 0 档，有打卡的按次数取密度档。 */
+    private suspend fun cellsBetween(startEpochDay: Long, endEpochDay: Long): List<HeatmapCell> {
+        if (endEpochDay < startEpochDay) return emptyList()
+        val rows = statsDao.heatmapRows(startEpochDay, endEpochDay)
         val byDay = rows.associate { it.epochDay to it.count }
-        return (range.first..range.second).map { epochDay ->
+        return (startEpochDay..endEpochDay).map { epochDay ->
             val count = byDay[epochDay] ?: 0
             HeatmapCell(epochDay = epochDay, count = count, level = densityLevel(count))
         }

@@ -21,11 +21,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.ironhabit.app.R
+import com.ironhabit.app.domain.model.HeatmapCell
 import com.ironhabit.app.domain.model.TodayPlanItem
 import com.ironhabit.app.domain.model.WeeklyReview
+import com.ironhabit.app.domain.util.DateUtils
+import com.ironhabit.app.ui.components.cellColor
 import com.ironhabit.app.ui.components.planGoalText
+import com.ironhabit.app.ui.components.weekdayShortLabel
 import com.ironhabit.app.ui.screens.ai.formatKg
 import com.ironhabit.app.ui.theme.IronHabitShapes
 import com.ironhabit.app.ui.theme.IronHabitSpacing
@@ -108,6 +113,8 @@ fun TodayBento(
                         } ?: missing,
                     )
                 }
+                // D 版：热力条贴在数字下面，不额外占一格。
+                WeekHeatStrip(cells = state.weekHeatmap)
             }
         }
 
@@ -234,7 +241,46 @@ private fun RowScope.TileStat(label: String, value: String) {
 }
 
 /**
- * 分段进度条：一格一项，填色 = 已完成。
+ * 本周热力条：周一 → 周日共 7 格，每格下面标一个单字星期。
+ *
+ * 配色复用 [cellColor]（`surfaceVariant → primary` 按密度档插值），标签复用
+ * [weekdayShortLabel] —— 和「自律」「历史」页的多周热力图同一套色阶，不另调一版。
+ */
+@Composable
+private fun WeekHeatStrip(cells: List<HeatmapCell>, modifier: Modifier = Modifier) {
+    if (cells.isEmpty()) return
+    val labelStyle = MaterialTheme.typography.labelSmall
+    val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.xxs),
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.xs)) {
+            cells.forEach { cell ->
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(HEAT_CELL_HEIGHT)
+                        .clip(IronHabitShapes.cell)
+                        .background(cellColor(cell)),
+                )
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.xs)) {
+            cells.forEach { cell ->
+                Text(
+                    text = weekdayShortLabel(DateUtils.weekdayMon1(cell.epochDay)),
+                    style = labelStyle,
+                    color = labelColor,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+    }
+}
+
+/** 分段进度条：一格一项，填色 = 已完成。
  *
  * 项数过多时（一天排了十几项）格子会细到看不见，退化成一根线性进度条。
  */
@@ -296,6 +342,9 @@ private const val PIP_MAX: Int = 12
 
 /** 分段条单段高度（组件固有规格）。 */
 private val PIP_HEIGHT = 6.dp
+
+/** 热力条单格高度（组件固有规格）。 */
+private val HEAT_CELL_HEIGHT = 20.dp
 
 /** 分段条单段圆角（组件固有规格）。 */
 private val PIP_CORNER = 2.dp

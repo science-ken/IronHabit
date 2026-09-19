@@ -12,6 +12,7 @@ import com.ironhabit.app.domain.model.WeeklyReview
 import com.ironhabit.app.domain.usecase.BuildWeeklyReviewUseCase
 import com.ironhabit.app.domain.repository.CheckInRepository
 import com.ironhabit.app.domain.repository.PlanRepository
+import com.ironhabit.app.domain.repository.StatsRepository
 import com.ironhabit.app.domain.usecase.DeleteMealUseCase
 import com.ironhabit.app.domain.usecase.DetailedCheckInUseCase
 import com.ironhabit.app.domain.usecase.GenerateDietPlanUseCase
@@ -67,6 +68,7 @@ class TodayViewModelMealEditTest {
     private val checkInRepository = mockk<CheckInRepository>(relaxed = true)
     private val planRepository = mockk<PlanRepository>(relaxed = true)
     private val buildWeeklyReview = mockk<BuildWeeklyReviewUseCase>()
+    private val statsRepository = mockk<StatsRepository>(relaxed = true)
 
     /** 与周磁贴无关的用例：一份「本周什么都没练」的复盘 → 两块周磁贴都不渲染。 */
     private fun emptyWeekReview(): WeeklyReview = WeeklyReview(
@@ -129,6 +131,7 @@ class TodayViewModelMealEditTest {
             checkInRepository = checkInRepository,
             planRepository = planRepository,
             buildWeeklyReview = buildWeeklyReview,
+            statsRepository = statsRepository,
             clock = clock,
             timeZone = timeZone,
         )

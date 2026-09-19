@@ -128,7 +128,7 @@ private fun formatMonthDay(epochDay: Long): String {
 
 /** 星期（`1..7`）→ 单字中文标签资源。 */
 @Composable
-private fun weekdayShortLabel(weekday: Int): String = stringResource(
+internal fun weekdayShortLabel(weekday: Int): String = stringResource(
     when (weekday) {
         1 -> R.string.weekday_short_mon
         2 -> R.string.weekday_short_tue

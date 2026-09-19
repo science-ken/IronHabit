@@ -1,6 +1,7 @@
 package com.ironhabit.app.ui.screens.today
 
 import com.ironhabit.app.domain.model.DietTarget
+import com.ironhabit.app.domain.model.HeatmapCell
 import com.ironhabit.app.domain.model.HabitItem
 import com.ironhabit.app.domain.model.Meal
 import com.ironhabit.app.domain.model.MealTotals
@@ -82,6 +83,12 @@ data class TodayUiState(
      * `0` 会被读成"这周没练"，那是编出来的结论（与 [WeeklyReview] 的诚实边界同一口径）。
      */
     val weeklyReview: WeeklyReview? = null,
+    /**
+     * 所选日**所在周**的热力（周一 → 周日，恒 7 格，没打卡的天 `level = 0`）。
+     *
+     * 空列表 = 未加载或取数失败 → 热力条整条不渲染。
+     */
+    val weekHeatmap: List<HeatmapCell> = emptyList(),
     val errorRes: Int? = null,
     val snackbarRes: Int? = null,
     val snackbarArgs: List<String> = emptyList(),

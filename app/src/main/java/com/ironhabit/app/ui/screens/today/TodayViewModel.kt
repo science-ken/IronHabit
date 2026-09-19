@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.HabitItem
+import com.ironhabit.app.domain.model.HeatmapCell
 import com.ironhabit.app.domain.model.Meal
 import com.ironhabit.app.domain.model.MealType
 import com.ironhabit.app.domain.model.TodayOverview
@@ -11,6 +12,7 @@ import com.ironhabit.app.domain.model.TodayPlanItem
 import com.ironhabit.app.domain.model.WeeklyReview
 import com.ironhabit.app.domain.repository.CheckInRepository
 import com.ironhabit.app.domain.repository.PlanRepository
+import com.ironhabit.app.domain.repository.StatsRepository
 import com.ironhabit.app.domain.usecase.BuildWeeklyReviewUseCase
 import com.ironhabit.app.domain.usecase.DeleteMealUseCase
 import com.ironhabit.app.domain.usecase.DetailedCheckInUseCase
@@ -76,6 +78,7 @@ class TodayViewModel @Inject constructor(
     private val checkInRepository: CheckInRepository,
     private val planRepository: PlanRepository,
     private val buildWeeklyReview: BuildWeeklyReviewUseCase,
+    private val statsRepository: StatsRepository,
     private val clock: Clock,
     private val timeZone: TimeZone,
 ) : ViewModel() {
@@ -112,12 +115,16 @@ class TodayViewModel @Inject constructor(
                             val review: WeeklyReview? = weeklyReviewOrNull(
                                 BuildWeeklyReviewUseCase.weekStartOf(day),
                             )
+                            val heat: List<HeatmapCell> = weekHeatmapOrNull(
+                                BuildWeeklyReviewUseCase.weekStartOf(day),
+                            )
                             overview.toUiState().copy(
                                 meals = meals.meals,
                                 mealTotals = meals.totals,
                                 dietTarget = meals.target,
                                 isRepeatWeeklyOn = repeatOn,
                                 weeklyReview = review,
+                                weekHeatmap = heat,
                             )
                         }
                     }
@@ -157,6 +164,19 @@ class TodayViewModel @Inject constructor(
             throw cancellation
         } catch (failure: Exception) {
             null
+        }
+
+    /** 所选周（周一 → 周日）的热力；失败只让热力条缺席，不影响整页。 */
+    private suspend fun weekHeatmapOrNull(weekStartEpochDay: Long): List<HeatmapCell> =
+        try {
+            statsRepository.heatmapRange(
+                startEpochDay = weekStartEpochDay,
+                endEpochDay = weekStartEpochDay + WEEK_DAYS - 1L,
+            )
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (failure: Exception) {
+            emptyList()
         }
 
     /** 一键打卡。 */
@@ -526,6 +546,7 @@ class TodayViewModel @Inject constructor(
                 // 同一个坑的第二处：本函数逐字段搬运，漏一个字段那格就永远是初始值。
                 // 漏掉它时「本周」磁贴在任何一周都不出现（真机实测踩到）。
                 weeklyReview = data.weeklyReview,
+                weekHeatmap = data.weekHeatmap,
                 todayEpochDay = todayEpochDay(),
                 errorRes = null,
                 snackbarRes = streakRes ?: state.snackbarRes,
@@ -547,6 +568,9 @@ class TodayViewModel @Inject constructor(
 
         /** 无订阅者后保留缓存 5 秒，避免旋转/切页立即重查。 */
         const val STOP_TIMEOUT_MS: Long = 5_000L
+
+        /** 热力条一周 7 格。 */
+        private const val WEEK_DAYS: Long = 7L
     }
 }
 

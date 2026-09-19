@@ -8,6 +8,7 @@ import com.ironhabit.app.domain.model.TodayOverview
 import com.ironhabit.app.domain.model.TodayMeals
 import com.ironhabit.app.domain.model.TodayPlanItem
 import com.ironhabit.app.domain.model.BodyReview
+import com.ironhabit.app.domain.model.HeatmapCell
 import com.ironhabit.app.domain.model.DietReview
 import com.ironhabit.app.domain.model.TrainingReview
 import com.ironhabit.app.domain.model.WeeklyReview
@@ -16,6 +17,7 @@ import io.mockk.coEvery
 import com.ironhabit.app.domain.model.WeekPlan
 import com.ironhabit.app.domain.repository.CheckInRepository
 import com.ironhabit.app.domain.repository.PlanRepository
+import com.ironhabit.app.domain.repository.StatsRepository
 import com.ironhabit.app.domain.usecase.DeleteMealUseCase
 import com.ironhabit.app.domain.usecase.DetailedCheckInUseCase
 import com.ironhabit.app.domain.usecase.GenerateDietPlanUseCase
@@ -72,6 +74,12 @@ class TodayViewModelDateCursorTest {
     private val checkInRepository = mockk<CheckInRepository>(relaxed = true)
     private val planRepository = mockk<PlanRepository>(relaxed = true)
     private val buildWeeklyReview = mockk<BuildWeeklyReviewUseCase>()
+    private val statsRepository = mockk<StatsRepository>(relaxed = true)
+
+    /** 本周热力：周一到周日 7 格，全 0 档（本用例只验证它能不能到 uiState）。 */
+    private fun weekHeat(): List<HeatmapCell> = (0L until 7L).map { offset ->
+        HeatmapCell(epochDay = 20_710L + offset, count = 0, level = 0)
+    }
 
     /** 与周磁贴无关的用例：一份「本周什么都没练」的复盘 → 两块周磁贴都不渲染。 */
     private fun emptyWeekReview(): WeeklyReview = WeeklyReview(
@@ -112,6 +120,7 @@ class TodayViewModelDateCursorTest {
         every { checkInRepository.observeActiveDaysSince(any()) } returns flowOf(emptyList())
         // 本用例不验证周磁贴：给一份「本周什么都没练」的复盘 → 磁贴整块不渲染。
         coEvery { buildWeeklyReview.invoke(any()) } returns emptyWeekReview()
+        coEvery { statsRepository.heatmapRange(any(), any()) } returns weekHeat()
 
         return TodayViewModel(
             getTodayOverview = getTodayOverview,
@@ -130,6 +139,7 @@ class TodayViewModelDateCursorTest {
             checkInRepository = checkInRepository,
             planRepository = planRepository,
             buildWeeklyReview = buildWeeklyReview,
+            statsRepository = statsRepository,
             clock = clock,
             timeZone = timeZone,
         )
@@ -156,6 +166,11 @@ class TodayViewModelDateCursorTest {
         assertNotNull(
             "周复盘必须搬进 uiState，否则本周磁贴永远拿不到数据",
             vm.uiState.value.weeklyReview,
+        )
+        assertEquals(
+            "本周热力同样要逐字段搬进 uiState（applyData 漏一个字段那格就永远是初始值）",
+            7,
+            vm.uiState.value.weekHeatmap.size,
         )
     }
 

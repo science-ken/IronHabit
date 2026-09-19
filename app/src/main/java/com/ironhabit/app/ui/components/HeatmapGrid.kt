@@ -86,7 +86,7 @@ private fun buildColumns(cells: List<HeatmapCell>): List<List<HeatmapCell?>> {
 
 /** 单元格颜色：按密度等级 `0..4` 在 `surfaceVariant` → `primary` 之间线性插值。 */
 @Composable
-private fun cellColor(cell: HeatmapCell?): Color {
+internal fun cellColor(cell: HeatmapCell?): Color {
     val colorScheme = MaterialTheme.colorScheme
     val level: Int = cell?.level ?: MIN_LEVEL
     val fraction: Float = level.coerceIn(MIN_LEVEL, MAX_LEVEL).toFloat() / MAX_LEVEL.toFloat()
