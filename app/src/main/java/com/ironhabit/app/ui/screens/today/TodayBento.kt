@@ -1,7 +1,12 @@
 package com.ironhabit.app.ui.screens.today
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,10 +22,13 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -46,7 +54,8 @@ import kotlin.math.roundToInt
  * 2. **磁贴本身不承载勾选** —— 逐组勾选、餐次勾选在 [onOpenTrain] / [onOpenMeal] 打开的弹窗里。
  *    弹窗仍在同一屏（不是新路由），所以「哪几组被勾了」这个全 app 唯一出口**没有丢**，
  *    只是从 1 tap 变成 2 tap。
- * 3. **不做动效** —— 本轮（spec §5）整体推迟，这里连 `animateColorAsState` 都不用。
+ * 3. **动效只有按压** —— 能点的格子按下去缩一档（[TILE_PRESSED_SCALE]），用来回答"这格点得动"。
+ *    spec §5 里的其余项（色彩过渡、弹窗自定义动效）仍整体推迟。
  */
 @Composable
 fun TodayBento(
@@ -227,11 +236,38 @@ private fun BentoTile(
     val colorScheme = MaterialTheme.colorScheme
     val container: Color =
         if (deep) colorScheme.surfaceContainerHighest else colorScheme.surfaceContainerHigh
+
+    // 按压反馈（spec §5：120ms 缩到 0.975）。只有能点的格子才有 ——
+    // 不能点的格子给一个按压缩放，等于谎报"这格能按"。
+    val interactionSource: MutableInteractionSource? =
+        if (onClick != null) remember { MutableInteractionSource() } else null
+    val pressed: Boolean = interactionSource?.collectIsPressedAsState()?.value == true
+    val scale: Float by animateFloatAsState(
+        targetValue = if (pressed) TILE_PRESSED_SCALE else 1f,
+        animationSpec = tween(PRESS_DURATION_MS),
+        label = "tilePress",
+    )
+
     Box(
         modifier = modifier
+            // graphicsLayer 放在 clip/background 之前，整块磁贴（含底色）一起缩。
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
             .clip(IronHabitShapes.card)
             .background(container)
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+            .then(
+                if (onClick != null && interactionSource != null) {
+                    Modifier.clickable(
+                        interactionSource = interactionSource,
+                        indication = LocalIndication.current,
+                        onClick = onClick,
+                    )
+                } else {
+                    Modifier
+                }
+            ),
     ) {
         Column(
             modifier = Modifier
@@ -400,3 +436,9 @@ private val HEAT_CELL_HEIGHT = 20.dp
 
 /** 分段条单段圆角（组件固有规格）。 */
 private val PIP_CORNER = 2.dp
+
+/** 按压缩放比例（spec §5：轻微到只够让人确认"点中了"）。 */
+private const val TILE_PRESSED_SCALE: Float = 0.975f
+
+/** 按压动画时长（毫秒，spec §5）。 */
+private const val PRESS_DURATION_MS: Int = 120
