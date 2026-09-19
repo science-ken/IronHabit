@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  深色模式下的 XML 层色值。只覆盖需要跟随主题的那一项，其余沿用 values/colors.xml。
+  没有这个目录时，浅色那份会直接套到深色模式上 —— 深色 app 启动前会白闪一下。
+-->
+<resources>
+    <!-- 启动图窗口底色：与深色 surface 一致，避免深色模式下开屏闪白 -->
+    <color name="splash_background">#FF111111</color>
+
+    <!-- 启动图标底色不随主题变（桌面图标是同一张），保持白底深青哑铃 -->
+    <color name="ic_launcher_background">#FFFFFFFF</color>
+</resources>

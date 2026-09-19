@@ -3,8 +3,10 @@ package com.ironhabit.app.ui.theme
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ironhabit.app.domain.model.AppSettings
@@ -60,10 +62,20 @@ fun IronHabitTheme(
 
     val colorScheme = if (useDarkTheme) IronHabitDarkColorScheme else IronHabitLightColorScheme
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = IronHabitTypography,
-        shapes = IronHabitShapesSpec,
-        content = content,
-    )
+    CompositionLocalProvider(LocalIsDarkTheme provides useDarkTheme) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = IronHabitTypography,
+            shapes = IronHabitShapesSpec,
+            content = content,
+        )
+    }
 }
+
+/**
+ * 当前是否深色。由 [IronHabitTheme] 提供，值来自它**实际解析**出来的主题。
+ *
+ * 别用 `isSystemInDarkTheme()` 代替它：本 app 允许用户在设置里显式选浅色/深色，
+ * 那时系统值和实际渲染的主题会不一致。
+ */
+val LocalIsDarkTheme = staticCompositionLocalOf { false }

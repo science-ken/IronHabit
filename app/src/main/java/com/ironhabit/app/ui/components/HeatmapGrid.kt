@@ -18,7 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.ironhabit.app.R
-import com.ironhabit.app.ui.theme.HeatmapLevels
+import com.ironhabit.app.ui.theme.heatmapLevels
 import com.ironhabit.app.ui.theme.IronHabitShapes
 import com.ironhabit.app.domain.model.HeatmapCell
 import com.ironhabit.app.domain.util.DateUtils
@@ -84,11 +84,12 @@ private fun buildColumns(cells: List<HeatmapCell>): List<List<HeatmapCell?>> {
     return columns
 }
 
-/** 单元格颜色：直接查 [HeatmapLevels] 密度表（线性插值会让 0 档和 1 档糊成一片）。 */
+/** 单元格颜色：查当前主题的密度表（线性插值会让 0 档和 1 档糊成一片）。 */
 @Composable
 internal fun cellColor(cell: HeatmapCell?): Color {
+    val levels: List<Color> = heatmapLevels()
     val level: Int = cell?.level ?: 0
-    return HeatmapLevels[level.coerceIn(0, HeatmapLevels.lastIndex)]
+    return levels[level.coerceIn(0, levels.lastIndex)]
 }
 
 private const val DAYS_PER_WEEK = 7

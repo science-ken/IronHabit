@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  深色模式下的宿主主题。只改必须随主题翻转的两项：
+  父主题换成 Material（暗），状态栏图标改回浅色 —— 浅底深图标那套是 values/themes.xml 给浅色用的。
+  Compose 界面本身由 IronHabitTheme 负责，运行期窗口由 MainActivity.enableEdgeToEdge() 处理，
+  这里只管 Compose 起来**之前**的那段窗口。
+-->
+<resources>
+    <style name="Theme.IronHabit" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/splash_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>

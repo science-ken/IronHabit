@@ -2,6 +2,7 @@ package com.ironhabit.app.ui.theme
 
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
 /**
@@ -183,17 +184,42 @@ val IronHabitDarkColorScheme = darkColorScheme(
 )
 
 /**
- * 热力图密度色阶（索引 = `HeatmapCell.level`，`0` = 当天没有打卡）。
+ * 热力图密度色阶 · 浅色（索引 = `HeatmapCell.level`，`0` = 当天没有打卡）。
  *
  * ⚠️ **不要用线性插值代替这张表。** 之前 `cellColor` 是在 `surfaceVariant → primary`
- * 之间按 `level / 4` 插值，结果 1 档只比 0 档深一点点（实测两者对磁贴底色分别只有
- * 1.13:1 与 1.27:1），肉眼上"有打卡"和"没打卡"几乎一样 —— 热力图就白画了。
+ * 之间按 `level / 4` 插值，结果 1 档只比 0 档深一点点（实测对磁贴底只有 1.13:1 与 1.27:1），
+ * 肉眼上"有打卡"和"没打卡"几乎一样 —— 热力图就白画了。
  * 这里把相邻档的间距手动拉开：0→1 是最关键的一跳。
+ *
+ * 对磁贴底 `surfaceContainerHigh` 的对比度依次 1.20 / 1.37 / 1.90 / 3.01 / 5.43。
  */
-internal val HeatmapLevels: List<Color> = listOf(
+private val HeatmapLevelsLight: List<Color> = listOf(
     Color(0xFFDCDCDC), // 0 无数据：安静，但要能看出是一格
     Color(0xFFA7D9CC), // 1
     Color(0xFF6FBFA9), // 2
     Color(0xFF3A9A80), // 3
-    Color(0xFF0B6E5B), // 4 高密度：与 primary 同色
+    Color(0xFF0B6E5B), // 4 高密度：与浅色 primary 同色
 )
+
+/**
+ * 热力图密度色阶 · 深色。**方向与浅色相反：越练越亮。**
+ *
+ * 深色底上"更深的颜色"等于"更看不见"，所以直接复用浅色那张表会把明暗关系整个倒过来 ——
+ * 实测浅色的 0 档 `#DCDCDC` 对深底是 13.77:1（最扎眼），而 4 档 `#0B6E5B` 只有 3.05:1，
+ * 空格子在喊、满格子在 whisper。
+ *
+ * 对磁贴底 `surfaceContainerHigh #1D1D1D` 的对比度依次 1.28 / 2.83 / 4.95 / 7.79 / 9.90，
+ * 明度单调递增；4 档取深色 `primary`。
+ */
+private val HeatmapLevelsDark: List<Color> = listOf(
+    Color(0xFF303030), // 0 无数据
+    Color(0xFF2F6E60), // 1
+    Color(0xFF479985), // 2
+    Color(0xFF6FBFA9), // 3
+    Color(0xFF84D5C8), // 4 高密度：与深色 primary 同色
+)
+
+/** 当前主题下的热力密度色阶。分主题是因为深浅底上"深=显眼"的直觉是反的。 */
+@Composable
+fun heatmapLevels(): List<Color> =
+    if (LocalIsDarkTheme.current) HeatmapLevelsDark else HeatmapLevelsLight
