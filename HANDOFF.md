@@ -60,7 +60,22 @@
 **两段都要留，顺序是先校验后防抖**，属于手工可解的小冲突。`strings.xml` 两边加在不同区段，可自动合。
 
 **本树已做的网络动作**：只 `ls-remote` 和 `fetch`（对远端只读），本地多出一个 `refs/remotes/origin/main`。
-**没有 push、没有 merge、没有 rebase，`main` 仍是 `4e1f87c`。**
+**当时没有 push、没有 merge，`main` 仍是 `4e1f87c`** —— 下面那次合并是用户拍板"方案 A"之后才做的。
+
+#### 已按方案 A 合并（同一晚，用户拍板"A"）
+
+| 项 | 结果 |
+|---|---|
+| 合并提交 | `42bc526`（parent = `c91f521` + `origin/main 3dd3597`）；版本让位另笔 `7e69227` |
+| 冲突 | **只有 `HANDOFF.md`**（§0/§1/§9/§10 四段，按"远端更新"取再补回本树事实）。代码 3 个重叠文件全自动合上 |
+| 合出来的顺序 | 正好对：`AddEditHabitViewModel` 里"目标值必须配单位"在前、P0-4 的 `isSaving` 防抖在后；习惯测试两边 10 条都在 |
+| 两边修复共存（逐条 grep 核过） | 本树 `IconButton(onClick = onCreateHabit)` 1 处；远端 `isSaving` 在 habit/plan/exercise 三个 Screen 各 1 处；`carriesMeals` 4 处 |
+| 全量单测 | **48 类 / 447 用例 / 0 失败**（`--rerun-tasks`） |
+| 构建 | `assembleDebug` + `assembleRelease` 同一趟 BUILD SUCCESSFUL（1m01s），release 仍是未签名包 |
+| 装机 | 已装合并包，崩溃缓冲为空；今日页（磁贴 + 钉顶日期栏 + 热力条）与「我的」页渲染正常 |
+
+**签名的事澄清**：`§8` 约定"本机不打 tag"——CI 的 `android-release.yml` 在 tag 时用 4 个 secret 出签名 APK。
+所以本机 `assembleRelease` 出未签名包**不是缺陷**，是分工；要出包得推 tag，那是主理人的活。
 
 ### 本会话两条踩坑记录（下一个人别再踩）
 
