@@ -98,6 +98,7 @@ class TrainViewModel @Inject constructor(
                 TrainUiState(
                     isLoading = false,
                     selectedDay = dayPlans.first,
+                    weekStartEpochDay = currentWeekStart,
                     plans = dayPlans.second,
                     exercises = exercises,
                     exerciseNameById = exercises.associate { exercise -> exercise.id to exercise.name },

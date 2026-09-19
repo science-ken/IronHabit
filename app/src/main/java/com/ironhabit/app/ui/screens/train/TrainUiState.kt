@@ -21,6 +21,7 @@ data class HistoryEntry(
  *
  * @property isLoading 加载中
  * @property selectedDay 当前选中星期（`1` = 周一 … `7` = 周日）
+ * @property weekStartEpochDay 这一页显示的是**哪一周**（周一 epochDay），归属标签用
  * @property plans 所选星期的计划条目
  * @property exercises 动作（动作库；v6 起动作无"停用"概念，全量可见）
  * @property exerciseNameById `exerciseId → name` 查表（计划列表展示动作名用）
@@ -35,6 +36,7 @@ data class HistoryEntry(
 data class TrainUiState(
     val isLoading: Boolean = true,
     val selectedDay: Int = 1,
+    val weekStartEpochDay: Long = 0L,
     val plans: List<WeekPlan> = emptyList(),
     val exercises: List<Exercise> = emptyList(),
     val exerciseNameById: Map<Long, String> = emptyMap(),

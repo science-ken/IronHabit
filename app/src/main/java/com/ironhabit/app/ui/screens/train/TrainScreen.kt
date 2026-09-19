@@ -57,6 +57,7 @@ import com.ironhabit.app.ui.components.EmptyState
 import com.ironhabit.app.ui.components.LoadingSkeleton
 import com.ironhabit.app.ui.components.LocalSnackbarHostState
 import com.ironhabit.app.ui.components.planGoalText
+import com.ironhabit.app.ui.components.weekRangeText
 import com.ironhabit.app.ui.theme.IronHabitSpacing
 import kotlinx.datetime.LocalDate
 
@@ -225,6 +226,13 @@ private fun PlanSection(
                 )
             }
         }
+
+        // 这一页编辑的永远是当前周，但页面上以前一个字都没写 —— 从别处翻着周跳过来时看不出来。
+        Text(
+            text = stringResource(R.string.label_week_this, weekRangeText(uiState.weekStartEpochDay)),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
 
         if (uiState.plans.isEmpty()) {
             EmptyState(

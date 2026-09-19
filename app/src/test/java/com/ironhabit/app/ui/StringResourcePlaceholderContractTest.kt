@@ -113,6 +113,8 @@ class StringResourcePlaceholderContractTest {
         entry("title_week_plan_by_day", ArgKind.STRING)
         // AddEditPlanScreen:90-96（weekRangeText 产出的「9/21–9/27」区间文本）
         entry("scope_plan_this_week", ArgKind.STRING)
+        // TrainScreen PlanSection（同一个 weekRangeText 的产出）
+        entry("label_week_this", ArgKind.STRING)
         entry("label_sets_progress", ArgKind.NUMERIC, ArgKind.NUMERIC)
         entry("label_rpe_short", ArgKind.NUMERIC)
         entry("ai_explain_injury_swap", ArgKind.STRING)
