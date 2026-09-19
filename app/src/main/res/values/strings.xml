@@ -224,6 +224,7 @@
     <string name="error_name_empty">名称不能为空</string>
     <string name="error_name_exists">该名称已存在</string>
     <string name="error_invalid_number">请输入有效的数字</string>
+    <string name="error_target_unit_required">填了目标值就要填单位（如 杯 / 分钟 / 步）</string>
     <string name="error_generic">出错了，请稍后再试</string>
 
     <!-- ===== 无障碍 / 通用 ===== -->
@@ -237,7 +238,7 @@
     <string name="hint_exercise_note">动作备注（可选）</string>
     <string name="hint_habit_note">习惯备注（可选）</string>
     <string name="hint_target_value">目标值（可选，如 8）</string>
-    <string name="hint_target_unit">目标单位（可选，如 杯/分钟/步）</string>
+    <string name="hint_target_unit">目标单位（有目标值时必填，如 杯/分钟/步）</string>
     <string name="hint_rpe">RPE 强度（1-10，可选）</string>
     <string name="label_sets_progress">%1$d / %2$d 组</string>
     <string name="label_rpe_short">RPE %1$d</string>

@@ -202,6 +202,12 @@ class AddEditHabitViewModel @Inject constructor(
             return
         }
         val targetUnit = state.targetUnit.trim().takeIf { it.isNotEmpty() }
+        // 计量型习惯必须带单位：光有数字的「8」在列表里读不出是什么，
+        // 而且和纯勾选型长得一样，用户分不清自己究竟设没设目标。
+        if (targetValue != null && targetUnit == null) {
+            _uiState.update { it.copy(snackbarRes = R.string.error_target_unit_required) }
+            return
+        }
 
         viewModelScope.launch {
             try {

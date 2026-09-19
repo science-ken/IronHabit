@@ -1,6 +1,7 @@
 package com.ironhabit.app.ui.screens.habit
 
 import androidx.lifecycle.SavedStateHandle
+import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.Habit
 import com.ironhabit.app.domain.model.HabitFrequency
 import com.ironhabit.app.domain.repository.HabitRepository
@@ -16,6 +17,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Rule
 import org.junit.Test
@@ -161,6 +163,20 @@ class AddEditHabitViewModelTest {
         val saved = savedHabit.captured
         assertNull("清空目标值应写 NULL", saved.targetValue)
         assertNull("无目标值时单位必须清空", saved.targetUnit)
+    }
+
+    @Test
+    fun targetValueWithoutUnitIsRejectedAndNeverSaved() = runTest(mainDispatcherRule.testDispatcher) {
+        val repo = repositoryWith(listOf(measurableHabit))
+        val vm = viewModel(repo, habitId = 42L)
+        advanceUntilIdle()
+
+        vm.onTargetUnitChange("")
+        vm.onSave()
+        advanceUntilIdle()
+
+        assertEquals(R.string.error_target_unit_required, vm.uiState.value.snackbarRes)
+        assertFalse("被拒的保存绝不能落库", savedHabit.isCaptured)
     }
 
     @Test
