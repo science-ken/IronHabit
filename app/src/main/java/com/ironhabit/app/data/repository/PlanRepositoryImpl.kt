@@ -70,6 +70,9 @@ class PlanRepositoryImpl @Inject constructor(
     override suspend fun getRowsForWeek(weekStartEpochDay: Long): List<WeekPlan> =
         weekPlanDao.getRowsForWeek(weekStartEpochDay).map(PlanMapper::toDomain)
 
+    override suspend fun getRepeatRows(): List<WeekPlan> =
+        weekPlanDao.getRepeatRows().map(PlanMapper::toDomain)
+
     /**
      * 勾选 / 取消「每周相同」。
      *

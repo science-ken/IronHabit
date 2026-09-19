@@ -42,6 +42,7 @@ import kotlinx.datetime.Clock
  * @property numberErrorRes 数字校验错误资源 id
  * @property errorRes 页面级错误资源 id（读取失败）
  * @property snackbarRes 一次性 Snackbar 资源 id（保存结果）
+ * @property isSaving 写入中（P0-4 防抖：进入即置位，按钮据此禁用，避免连点产生重复数据）
  * @property saved 保存成功标志（UI 据此 `popBackStack()`）
  */
 data class AddEditExerciseUiState(
@@ -60,6 +61,7 @@ data class AddEditExerciseUiState(
     @StringRes val numberErrorRes: Int? = null,
     @StringRes val errorRes: Int? = null,
     @StringRes val snackbarRes: Int? = null,
+    val isSaving: Boolean = false,
     val saved: Boolean = false,
 )
 
@@ -200,6 +202,9 @@ class AddEditExerciseViewModel @Inject constructor(
             return
         }
 
+        // 🔒 P0-4 防抖：连点「保存」会读到同一个 `exerciseId = 0` → 同一个动作被插两次。
+        if (_uiState.value.isSaving) return
+        _uiState.update { it.copy(isSaving = true) }
         viewModelScope.launch {
             try {
                 val existing = if (exerciseId != 0L) exerciseRepository.getById(exerciseId) else null
@@ -233,6 +238,9 @@ class AddEditExerciseViewModel @Inject constructor(
                 }
             } catch (throwable: Throwable) {
                 _uiState.update { it.copy(snackbarRes = R.string.error_save_failed) }
+            } finally {
+                // 必须复位：否则保存失败（或重名被拦）后按钮永久禁用，用户只能退出页面重来。
+                _uiState.update { it.copy(isSaving = false) }
             }
         }
     }

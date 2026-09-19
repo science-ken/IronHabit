@@ -580,6 +580,8 @@ class P1AdversarialTest {
         every { exerciseRepository.observeActive() } returns flowOf(builtIn)
         // P3：生成改为**按周**取现有行（getRowsForWeek），旧桩（全表）已不适用。
         coEvery { planRepository.getRowsForWeek(any()) } returns emptyList()
+        // P0-3：生成还会读「每周相同」模板行做保护（getRepeatRows），此处没有模板。
+        coEvery { planRepository.getRepeatRows() } returns emptyList()
         every { checkInRepository.latestProgressPerExercise() } returns flowOf(emptyList())
         coEvery { bodyMetricRepository.latest(BodyMetricType.WEIGHT) } returns null
 
@@ -666,6 +668,8 @@ class P1AdversarialTest {
         every { exerciseRepository.observeActive() } returns flowOf(builtIn)
         // P3：生成改为**按周**取现有行（getRowsForWeek），旧桩（全表）已不适用。
         coEvery { planRepository.getRowsForWeek(any()) } returns existing
+        // P0-3：生成还会读「每周相同」模板行做保护（getRepeatRows），此处没有模板。
+        coEvery { planRepository.getRepeatRows() } returns emptyList()
         every { checkInRepository.latestProgressPerExercise() } returns flowOf(emptyList())
         coEvery { bodyMetricRepository.latest(BodyMetricType.WEIGHT) } returns null
 

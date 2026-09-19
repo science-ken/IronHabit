@@ -242,6 +242,8 @@ fun AddEditHabitScreen(
                     }
                     Button(
                         onClick = viewModel::onSave,
+                        // P0-4：写入中禁用，避免连点产生重复数据（VM 侧另有 in-flight 守卫兜底）。
+                        enabled = !uiState.isSaving,
                         modifier = Modifier.padding(start = IronHabitSpacing.sm),
                     ) {
                         Text(text = stringResource(R.string.action_save))

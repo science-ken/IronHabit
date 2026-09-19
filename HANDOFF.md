@@ -460,12 +460,13 @@ non-ASCII 会**直接失败**（连编译都不开始，24 秒内报错）：
 
 ## 0. 三分钟开工
 
-1. **源码在哪**（二选一）：
-   - 带 git 的工作副本：`D:\dsh data\ironhabit-v3`（HEAD = `6a80932`，与远端 `main` 一致，工作区干净）
-   - 免 git 的纯源码快照：`D:\Workbuddy data\2026-09-14-09-31-06\fitness-app-v204`
-     （`versionCode = 15` / `versionName = "2.0.4"`；已实测能独立跑通全量测试）
-2. **跑一次全量测试**确认环境没问题（命令见 §2），**期望：43 个测试类 / 395 用例 / 0 失败**。
-3. **读 §3 和 §4** 再动代码 —— 这两节是"不知道就会写出 bug"的部分。
+1. **源码在哪**：**带 git 的活动树 = `D:\fitness-app-v204 1`（本文件所在处）**，今日页改版在这里。
+   另有两份**别当最新**的副本：`D:\Workbuddy data\2026-09-14-09-31-06\fitness-app-v204`
+   是 09-18 那轮的免 git 镜像（**不含 09-19 今日页改版**）；`D:\ih-check` 是更早的无 git 镜像。
+2. **跑一次全量测试**确认环境没问题（命令见 §2），**期望以 §9 的实测数为准**。
+3. **读 §3（红线）和 §4（数据模型）**，再动代码。这两节是"不知道就会踩雷"的部分。
+
+产出的东西（APK / 报告）放哪、怎么交付，见 §8。
 
 ---
 
@@ -477,11 +478,11 @@ non-ASCII 会**直接失败**（连编译都不开始，24 秒内报错）：
 | 项 | 值 |
 |---|---|
 | 远端仓库 | `git@github.com:science-ken/IronHabit.git`，分支 `main` |
-| 远端 HEAD | `6a80932`（本地与远端一致，已用 `git ls-remote` 校验） |
-| 版本 | `versionCode = 15` / `versionName = "2.0.4"`（**debug 签名**，只用于自装/侧载） |
-| 当前 APK | `D:\dsh data\deliverables\IronHabit-v2.0.4-debug.apk` |
-| 测试 | 43 个测试类 / 395 用例 / 0 失败 |
-| 模拟器（已在用） | MuMu 实例「软件测试」，`adb 127.0.0.1:16448`，Android 12，1080×1920，里面装着 2.0.4 与一份真实数据 |
+| 远端 HEAD | `origin/main` = `3dd3597`（P0 修复 + 17/2.0.6 发版，tag `v2.0.6`）。**本树另有 09-19 的 28 笔未推**，见文首分叉记录 |
+| 版本 | `versionCode = 18` / `versionName = "2.0.7"`（17 / 2.0.6 已被远端发版占用，不再复用） |
+| 当前 APK | GitHub Release `v2.0.6` 的 `app-release.apk`（**签名由 CI 在打 tag 时产出**，本机 `assembleRelease` 只能出未签名包） |
+| 测试 | 见 §9 的实测数（合并后以本机跑出来的为准，不要抄历史数字） |
+| 模拟器 | MuMu 实例「软件测试」，`adb 127.0.0.1:16448`，Android 12，1080×1920 |
 
 ### 各阶段做到哪了
 
@@ -702,9 +703,16 @@ F-6 过期 KDoc、F-7 桶下标负数截断 —— 都已修；那轮加的 41 �
 
 ## 9. 测试与证据现状
 
-- 全量：**43 类 / 395 用例 / 0 失败**。
-- `app/src/test/java/com/ironhabit/app/verify/`：**41 条对抗性用例**，专打边界（极端档案 3840 组组合、脏数据、幂等、手改行保护、JSON 字段集合冻结、无密钥泄漏等）。**改动 P1/P2 相关代码后建议跑一遍。**
-- 真机证据（截图 + UI dump）：`D:\dsh data\shots\`（`p1-basis-local-rules.png`、`p2-week-package.png`、`p3-empty-week-card.png`、`p3-repeat-weekly-switch.png`、`p3-v203-today.png`）。
+- 全量：**2026-09-18 在 tag `v2.0.5` 上是 47 类 / 435 用例 / 0 失败**（历史交接文里写的 43/395 是 v2.0.4 时代的数字）。
+- **合并后实测（2026-09-19，`--rerun-tasks`）：48 类 / 447 用例 / 0 失败** —— 两边的新增用例都在里面
+  （远端那 13 条 P0 测试 + 本树的 `coversTargetSets` 3 条、`weeklyReviewReachesUiState` 1 条、
+  目标值必须配单位 1 条，以及本树更早补的日期游标回归）。
+  **别抄任何一个旧数字**，历史值只用于判断"少跑了/被缓存"。
+- `app/src/test/java/com/ironhabit/app/verify/`：**41 条对抗性用例**（另一位 agent 写的，已收进主仓）。
+  它们专门打边界：极端档案（3840 组组合）、脏数据、幂等、手改行保护、JSON 字段集合冻结、无密钥泄漏等。
+  **改动 P1/P2 相关代码后必须跑它们。**
+- 真机证据（截图 + UI dump）：`D:\dsh data\shots\`（`p1-basis-local-rules.png`、`p2-week-package.png`、
+  `p3-empty-week-card.png`、`p3-repeat-weekly-switch.png`、`p3-v203-today.png`）。
 - 设计文档：仓库 `docs/ai-coach-local.md`（§12 是 P1/P2 的落地记录）、`docs/ARCHITECTURE.md`、`docs/schema-v3-meals.md`。
 - 复核报告全文：`D:\Workbuddy data\2026-09-14-09-31-06\fitness-app-v202\REVIEW-p1p2.md`。
 
@@ -712,5 +720,59 @@ F-6 过期 KDoc、F-7 桶下标负数截断 —— 都已修；那轮加的 41 �
 
 ## 10. 需要用户拍板的事
 
-1. **先做哪块**：§6 的 A（P3 收尾）价值最高，但它依赖远端 AI 路径（需要 Key）；B/C/D/E 都能纯本地做。
-2. **涉及产品行为的改动要先问**：例如"AI 能不能自动改计划""伤病替代的粒度""计划是否默认每周相同"这类，用户都已经拍过板（见 §3 / §4），要改先问。
+1. **这一轮做哪块**：§6 的 A（P3 收尾）是最有价值的，但它依赖远端 AI 路径（需要 Key）；B/C/D/E 都可以纯本地做。
+2. **谁能 push / 谁能 bump 版本**：目前约定"只有主理人（上一任 agent）"。你要是也需要推，先说清楚，避免两边同时推。
+   **这条已经失守过一次**：09-18 晚上另一棵树推了 4 个 P0 修复并把版本占到 17 / 2.0.6，本树不知道、
+   同一天又把版本 bump 成 17 / 2.0.6 → 同号两份内容（见文首分叉记录）。
+   **落地规矩**：动 `versionCode` 前先 `git fetch` + `git ls-remote --tags`，确认号没被占用。
+3. **是否要改产品行为**：涉及"AI 能不能自动改计划""伤病替代的粒度""计划是否默认每周相同"这类，
+   都已经由用户拍过板（见 §3 / §4），**要改先问用户**。
+
+
+---
+
+## 11. P0 缺陷修复记录（2026-09-18 · 基线 tag `v2.0.5`）
+
+来源：资料库《IronHabit 审查报告与功能补齐工作单》（逐条复核为属实，复核文档见
+`deliverables/IronHabit-v2.0.5-审查复核与修复方案.md`）。本轮只做 **§2.1 的 4 个 P0**，
+分支 `fix/p0-round1`，未 bump 版本（发布前统一 bump）。
+
+| 编号 | 缺陷 | 修复要点 |
+|---|---|---|
+| P0-1 | 导入 v1–v3 老备份会**静默清空本机全部饮食记录** | `BackupRestoreRules` 增 `MEALS_SCHEMA_VERSION=4` + `carriesMeals()`；`BackupRepositoryImpl` 的 `mealDao.clearAll()/insertAll()` 改为仅当备份确实携带 `meals` 时执行。判据用**版本号**而非 `isEmpty()`（用户真的没记录时列表同样为空） |
+| P0-2 | Keystore 异常 → 设置页/AI 页**一进就崩且无法自恢复** | `AiCredentialsStore` 初始化 `runCatching` 兜底（失败 = 未配置，不抛）；`setKey` 返回 `Boolean` 让 UI 如实报错；新增「重置加密存储」入口（`resetStorage()` + 设置页按钮 + 4 条新文案）；**禁止降级明文**。`SettingsViewModel.init` 的同步读取也加了兜底 |
+| P0-3 | 「每周相同」模板里的手改/删除在**生成本周计划时被绕过** | `GenerateTrainingPlanUseCase` 拆成 `weekRows`（喂 advisor + 陈旧行回收，保持"只看本周"）与 `templateEditedRows`（只做保护）。新增**日级保护**：模板手改过、且本周没有启用专属行的天，本周整日不写专属行。新增 `PlanRepository.getRepeatRows()`（含软删行的一次性快照） |
+| P0-4 | 保存按钮无防抖，连点产生重复数据 | `AddEditHabit/Plan/Exercise` 三个 ViewModel 的 UiState 增 `isSaving`，`onSave` 进入即守卫 + `finally` 复位；三个 Screen 的保存按钮绑 `enabled`。`TrainViewModel.onSubmitAddToPlan` **原本就有**守卫，未改 |
+
+### ⚠️ P0-3 的两条重要结论（别按审查报告的字面改）
+
+1. **槽位级保护不够**：`WeekPlanWeekResolver` 的生效规则是**日级**的（"该天有启用专属行 → 用专属行；
+   否则回落模板"）。所以只把模板手改槽位并进 `blockedSlots` 仍会绕过用户改动 —— 必须**整日不写**。
+2. **不能把模板行并进 `existing`**：`existing` 同时喂 `deactivateGenerated` 的输入，
+   合并写法会把整份「每周相同」计划当成陈旧 AI 行**停用**（比原缺陷更严重）。
+   `GenerateTrainingPlanUseCaseTest.generateTrainingPlan_neverRetiresRepeatTemplateRows` 就是钉这条的。
+
+### 本轮验证现状
+
+- JVM 全量：**47 类 / 435 例 / 0 失败**（`gradle :app:testDebugUnitTest`；新增 13 条：
+  `carriesMeals` 2 条、`AiCredentialsStoreTest` 6 条、生成计划模板保护 3 条、保存防抖 2 条）。
+- 既有 41 条对抗性用例同步补了 `getRepeatRows()` 桩（严格 mockk 会因新接口方法未打桩而失败）。
+- **未做**：真机/模拟器手工验收（P0-1 的导入、P0-3 的"模板删一条 → 重新生成"仍需在真机上走一遍）。
+  出包前必须补，单测证明不了界面上的东西。
+
+
+---
+
+## 12. v2.0.6 发布记录（2026-09-18）
+
+**范围**：§2.1 的 4 个 P0 修复（详见 §11），无其他功能改动。
+
+| 项 | 值 |
+|---|---|
+| 版本 | `versionCode = 17` / `versionName = "2.0.6"` |
+| 单测 | `gradle :app:testDebugUnitTest` → **47 类 / 435 例 / 0 失败** |
+| 真机验收 | **P0-1 通过**（3 轮真实导入：v3 老备份 meals 8→8；v4 备份 meals→2 对照；再还原→8，全程崩溃 0）<br>**P0-3 通过**（模板手改本周周一后重新生成 → 周一 `is_active` 全 0 整日未写；周三/周五照常写入；UI 显示「已保留 18 条」）<br>覆盖安装时 Room schema **v5 → v6 迁移成功、无崩溃** |
+| 未在真机覆盖 | P0-2 的"Keystore 损坏"路径、P0-4 的真机连点 —— 均由 JVM 单测覆盖（6 条 + 2 条） |
+
+**发版方式**：bump + 推 tag `v2.0.6` → `android-release.yml` 自动构建签名 APK 并挂到新 Release（与 v2.0.5 同一条流水线）。
+**给下一位的提醒**：`today` 页的星期条只显示 4 个 chip，切"五/六/日"要先横向滑动；训练页同理（滑动起点避开右侧「新增」按钮）。

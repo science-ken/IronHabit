@@ -473,6 +473,10 @@
     <string name="settings_ai_key_saved">Key 已保存</string>
     <string name="settings_ai_key_cleared">已清除 Key</string>
     <string name="settings_ai_key_invalid">Key 格式不对：应以 sk- 开头</string>
+    <string name="settings_ai_storage_unavailable">API Key 存储不可用（系统密钥库异常）：现在既存不进也读不到 Key。可先重置加密存储再重新配置。</string>
+    <string name="action_reset_ai_storage">重置加密存储</string>
+    <string name="settings_ai_storage_reset_done">加密存储已重置，请重新填入 API Key</string>
+    <string name="settings_ai_key_storage_failed">保存失败：API Key 存储不可用</string>
     <string name="settings_ai_privacy">隐私说明：开启后，你的身体档案（性别/年龄/身高/体重/伤病/目标）与动作库信息会发送给 DeepSeek 用于生成建议；关闭或断网时数据不出设备。是否发送由这个开关控制。</string>
 
     <!-- AI 页动态徽标 -->

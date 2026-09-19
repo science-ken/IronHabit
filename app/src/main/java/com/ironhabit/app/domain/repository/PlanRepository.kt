@@ -38,6 +38,22 @@ interface PlanRepository {
     suspend fun getRowsForWeek(weekStartEpochDay: Long): List<WeekPlan>
 
     /**
+     * **「每周相同」那份计划的全部行**（一次性快照，**含软删除行**）。
+     *
+     * 🔒 用途只有一个：**保护**。某天在本周没有启用专属行时，本周的生效计划来自模板
+     * （见 [com.ironhabit.app.domain.usecase.WeekPlanWeekResolver]）→ 模板里被用户手改过的
+     * 日期/槽位必须一并受保护，否则"本周重新生成"会写入专属行、从此不再回落模板，
+     * 用户的手改（含删掉的动作）在本周被静默绕过。
+     *
+     * ⚠️ **绝不能**拿它去算陈旧行回收：模板行不是"本周的行"，一旦并入
+     * [deactivateGenerated] 的输入，整份「每周相同」计划会被判成陈旧 AI 行而停用。
+     *
+     * 与 [observeRepeatPlan] 的区别：那个是**流**且只含启用行（界面展示用）；
+     * 本方法是**一次性快照且含软删行**（判定"用户是否动过这一天"必须看得到软删行）。
+     */
+    suspend fun getRepeatRows(): List<WeekPlan>
+
+    /**
      * 勾选 / 取消「每周相同」（把某一周的计划变成"以后每周都用这份"/取消它）。
      *
      * @return 复制 / 停用的行数（`0` = 该周本来没有自己的计划，勾选无意义）

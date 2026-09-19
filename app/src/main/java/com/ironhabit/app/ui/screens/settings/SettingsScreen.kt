@@ -386,6 +386,18 @@ private fun AiSettingsSection(
             Text(text = stringResource(R.string.action_clear_key))
         }
     }
+    // P0-2：Keystore / 加密存储不可用时的**可自恢复**出口。
+    // 没有这个入口时，用户既存不进 Key 也读不到 Key，设置页只会一直是"未配置"，无从补救。
+    if (uiState.aiStorageUnavailable) {
+        Text(
+            text = stringResource(R.string.settings_ai_storage_unavailable),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+        )
+        TextButton(onClick = viewModel::onAiStorageReset) {
+            Text(text = stringResource(R.string.action_reset_ai_storage))
+        }
+    }
 
     Text(
         text = stringResource(R.string.settings_ai_privacy),
