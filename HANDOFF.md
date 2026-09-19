@@ -77,7 +77,30 @@
 **签名的事澄清**：`§8` 约定"本机不打 tag"——CI 的 `android-release.yml` 在 tag 时用 4 个 secret 出签名 APK。
 所以本机 `assembleRelease` 出未签名包**不是缺陷**，是分工；要出包得推 tag，那是主理人的活。
 
-### 本会话两条踩坑记录（下一个人别再踩）
+#### ③ `D:\ih-check` 已删除（09-19，删前逐文件核过）
+
+不是"更早的无 git 镜像"，是 **09-18 那次被中断的工作树**：它自己的 `HANDOFF.md` 顶部写着
+「阶段 1 · WIP，被中断 · 这一版代码从来没有编译过、也没有跑过任何一次测试」。
+
+**diff 的坑**：跟 `8903ec0` 直接比报 72 个文件不同，其中 **63 个只是 CRLF 行尾噪声**。
+加 `--strip-trailing-cr` 后真差异只剩 **12 个文件**（9 源文件 + 1 测试 + `HANDOFF.md` + `.gitignore`）。
+**下次跨目录比源码，一律带 `--strip-trailing-cr`，否则会把行尾差异当成内容差异。**
+
+独有内容与价值判定：
+
+| 东西 | 有没有价值 |
+|---|---|
+| `CheckInSetMaskTest.kt` 的另一版 7 条用例 | **零** —— 用例名与活动树逐字相同，活动树是 7 条 + 今天新增 3 条 `coversTargetSets` 的超集 |
+| 9 个源文件的 WIP 改法（`CheckIn`/`DetailedCheckInUseCase`/`BackfillCheckInUseCase`/`ExerciseCheckCard`/`PlanDateStrip`/`AppRoot`/`CheckInSheet`/`TodayScreen`/`Color`） | **零** —— 未编译未测试，同一批文件今天已重做并真机验过 |
+| 那份从未入库的 WIP 快照文本（`git log --all -S'WIP，被中断'` 零命中） | 低，但**已留档** |
+| `.scratch` 里早期版 `spec.md` / `prototype.html` | 低，活动树是更新版，**已留档** |
+| 4 张原型截图 `shot-comp/comp2/drill/fprime.png` | **零** —— 与活动树**字节相同**（`cmp` 核过） |
+
+留档位置（`.scratch/` 下，gitignored，共 116KB）：`ih-check-wip-vs-v205.patch`（12 文件全量差异 52KB）、
+`ih-check-HANDOFF-20260918.md`（24KB）、`ih-check-scratch-20260918/`（早期 spec + prototype 40KB）。
+**目录本身已 `rm -rf`，释放 90MB**（其中 ~87MB 是 `build/` + `.gradle/` + `.kotlin/` 缓存）。
+
+### 本会话三条踩坑记录（下一个人别再踩）
 
 - **结构性改动不要交给"按花括号猜边界"的脚本**。日期栏移顶时我用脚本找块的右括号，
   多吞了 69 行，把整个 `else ->` 分支（含 `TodayBento` 和三个常驻入口）删掉了。
@@ -85,6 +108,9 @@
 - **误触写库第三次**。`adb input tap` 打在训练弹窗的动作卡片上就是打卡 ——
   整张卡是 `combinedClickable(onClick = { if (completed) onUndo() else onQuickCheckIn() })`。
   本次 总组数 24→27，靠「撤销」复原。**点之前必须重新截图定位**，滚动位置会跨页面保留。
+- **跨目录比源码必须带 `--strip-trailing-cr`**。删 `D:\ih-check` 前的 diff 第一版报 72 个文件不同，
+  真差异只有 12 个 —— 其余 60 个全是 CRLF/LF 噪声。不带这个参数就会把"两份树不一样"夸大 6 倍，
+  足以让人放弃清理、或误判"那边有独有工作"。（详见上面 ③ 那节）
 
 ---
 
@@ -477,7 +503,9 @@ non-ASCII 会**直接失败**（连编译都不开始，24 秒内报错）：
 
 1. **源码在哪**：**带 git 的活动树 = `D:\fitness-app-v204 1`（本文件所在处）**，今日页改版在这里。
    另有两份**别当最新**的副本：`D:\Workbuddy data\2026-09-14-09-31-06\fitness-app-v204`
-   是 09-18 那轮的免 git 镜像（**不含 09-19 今日页改版**）；`D:\ih-check` 是更早的无 git 镜像。
+   是 09-18 那轮的免 git 镜像（**不含 09-19 今日页改版**）。
+   第三份 `D:\ih-check` **已于 09-19 删除**（90MB）—— 它是 09-18 那次"阶段 1 WIP、从未编译从未测试"
+   的中断工作树，独有内容已全部留档在 `.scratch/ih-check-*`（见文末③的记录）。
 2. **跑一次全量测试**确认环境没问题（命令见 §2），**期望以 §9 的实测数为准**。
 3. **读 §3（红线）和 §4（数据模型）**，再动代码。这两节是"不知道就会踩雷"的部分。
 
