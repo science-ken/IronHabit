@@ -106,6 +106,26 @@
 留一份"从未编译过的旧写法"diff 没有任何后续用途。要找回那段 WIP 的思路，只能从本节这段记录里读结论。
 **目录本身已 `rm -rf`，释放 90MB**（其中 ~87MB 是 `build/` + `.gradle/` + `.kotlin/` 缓存）。
 
+#### 3 已做：本周总组数补上分母（`af44c4b`）
+
+**不需要新写按周 SQL 聚合** —— `GetTodayOverviewUseCase` 早就把
+`observeEffectivePlanForWeek(weekStart)` combine 进来了，只是把生效行丢掉、只留下星期。
+现在让这条流把行交出来，`sumOf { targetSets }` 就是分母。
+**为什么坚持走 resolver 而不是 `SUM(week_plans)`**：模板回落、逐天覆盖、软删行三条规则
+只在 `WeekPlanWeekResolver` 有一份，绕开它磁贴的分母就会和清单对不上。
+
+顺手统一了一处口径不一致：分母会剔掉「动作已不在活跃动作表里」的行（清单压根不显示它们，
+留在分母里就是虚高、永远练不满），`plannedWeekdays` 现在和分母共用同一份 `usable` 列表。
+
+- 真机读数 **「总组数 24 / 52」**，并用一条照 resolver 规则写的 SQL 独立复算过：
+  周一3 周二3 周三20 周四3 周五20 周六3 周日休 = **52**，完成 **24**。
+- ⚠️ **已知语义，别当 bug 修**：分子是本周 `check_ins.completed_sets` 之和，
+  **含没进计划的临时打卡**（9/16 那天 5 行 `plan_id` 全 NULL、共 7 组），
+  所以练得比计划多时会看到 `60 / 52` 这种超 100% 的读数 —— 那是事实，不做截断。
+- 字段链：`TodayOverview.plannedSetsThisWeek` → `toUiState()` → **`applyData`** → `TodayUiState`。
+  `applyData` 逐字段搬运这个坑**第三次**踩到（前两次是 `weeklyReview`、`weekHeatmap`），
+  已补一条 `plannedSetsThisWeekReachesUiState` 回归。分母为 `0`（这周没排课）时磁贴**不挂分母**。
+
 ### 本会话三条踩坑记录（下一个人别再踩）
 
 - **结构性改动不要交给"按花括号猜边界"的脚本**。日期栏移顶时我用脚本找块的右括号，
@@ -265,11 +285,12 @@
 
 ### 仍然开着的（等用户定）
 
-1. **「本周 12 / 35」里的 35 仍未实现** —— 只显示已完成的组数。35 需要新增一路
-   按周聚合 `WeekPlan.targetSets` 的查询（`WeekPlanDao` 里确认没有任何 `target_sets` 求和）。
-   → 2026-09-19 收工时**仍开着**（一类清账时按建议缓办）。
+1. **「本周 12 / 35」里的 35** —— 曾长期未实现（只显示已完成的组数）。
+   → **已做（`af44c4b`）**：不新增 SQL 聚合，改用 `GetTodayOverviewUseCase` 里已 combine 进来的
+   `observeEffectivePlanForWeek` 生效行求和，真机读数「24 / 52」。详见文首快照。
 2. **动效全部推迟**（spec §5 的 7 项）。→ 已做磁贴按压缩放（`d98f375`），其余 6 项仍推迟。
-3. **版本号仍是 16 / 2.0.5**，改版后没 bump、没跑 release 构建。→ 已 bump 到 17 / 2.0.6 并跑过 release。
+3. **版本号仍是 16 / 2.0.5**，改版后没 bump、没跑 release 构建。→ 先 bump 到 17 / 2.0.6，
+   合并后发现远端已用 17/2.0.6 发过版并打标签，**本树最终落在 18 / 2.0.7**。
 4. 习惯目标值缺单位时的裸数字显示（见上）。→ 已修（`6e64524`）。
 
 ### 环境提醒（仍然有效）
