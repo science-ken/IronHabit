@@ -11,6 +11,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
@@ -101,99 +102,108 @@ fun TodayScreen(
         }
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            // `verticalScroll` 没有 `contentPadding`：侧边与顶部内缩写在容器**外**（常驻，
-            // 不会随内容滚走），底部留白写在容器**内**（滚到末尾时才有呼吸空间）。
-            .padding(start = IronHabitSpacing.lg, top = IronHabitSpacing.lg, end = IronHabitSpacing.lg)
-            .verticalScroll(rememberScrollState())
-            .padding(bottom = IronHabitSpacing.lg),
-        verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.lg),
-    ) {
-        val errorRes: Int? = uiState.errorRes
-        when {
-            uiState.isLoading -> {
-                LoadingSkeleton()
-                SkeletonCard()
-                SkeletonCard()
-            }
+    Column(modifier = modifier.fillMaxSize()) {
+        // ---- 日期栏钉顶：放在滚动容器**外**，翻周不必先把页面滚回顶部 ----
+        val selectedEpochDay = uiState.dateEpochDay
+        if (selectedEpochDay > 0L) {
+            val weekStartEpochDay =
+                selectedEpochDay - (DateUtils.weekdayMon1(selectedEpochDay) - 1)
+            PlanDateStrip(
+                weekStartEpochDay = weekStartEpochDay,
+                selectedEpochDay = selectedEpochDay,
+                todayEpochDay = uiState.todayEpochDay,
+                plannedWeekdays = uiState.plannedWeekdays,
+                onSelectEpochDay = viewModel::onSelectEpochDay,
+                onPreviousWeek = {
+                    viewModel.onSelectEpochDay(selectedEpochDay - DAYS_PER_WEEK)
+                },
+                onNextWeek = {
+                    viewModel.onSelectEpochDay(selectedEpochDay + DAYS_PER_WEEK)
+                },
+                modifier = Modifier.padding(horizontal = IronHabitSpacing.lg),
+            )
+            // 钉住的表头要有边界，否则磁贴从它下面滚过去时像穿模（训练页同款处理）。
+            HorizontalDivider(
+                modifier = Modifier.padding(top = IronHabitSpacing.sm),
+                color = MaterialTheme.colorScheme.outlineVariant,
+            )
+        }
 
-            errorRes != null -> {
-                EmptyState(
-                    text = stringResource(errorRes),
-                    actionText = stringResource(R.string.action_retry),
-                    onAction = viewModel::onRetry,
-                )
-            }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                // `verticalScroll` 没有 `contentPadding`：侧边与顶部内缩写在容器**外**（常驻，
+                // 不会随内容滚走），底部留白写在容器**内**（滚到末尾时才有呼吸空间）。
+                .padding(start = IronHabitSpacing.lg, top = IronHabitSpacing.lg, end = IronHabitSpacing.lg)
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = IronHabitSpacing.lg),
+            verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.lg),
+        ) {
+            val errorRes: Int? = uiState.errorRes
+            when {
+                uiState.isLoading -> {
+                    LoadingSkeleton()
+                    SkeletonCard()
+                    SkeletonCard()
+                }
 
-            else -> {
-                // ---- 日期栏置顶：它决定下面每一块磁贴读的是哪一天，先选日子再看数 ----
-                val selectedEpochDay = uiState.dateEpochDay
-                if (selectedEpochDay > 0L) {
-                    val weekStartEpochDay =
-                        selectedEpochDay - (DateUtils.weekdayMon1(selectedEpochDay) - 1)
-                    PlanDateStrip(
-                        weekStartEpochDay = weekStartEpochDay,
-                        selectedEpochDay = selectedEpochDay,
-                        todayEpochDay = uiState.todayEpochDay,
-                        plannedWeekdays = uiState.plannedWeekdays,
-                        onSelectEpochDay = viewModel::onSelectEpochDay,
-                        onPreviousWeek = {
-                            viewModel.onSelectEpochDay(selectedEpochDay - DAYS_PER_WEEK)
-                        },
-                        onNextWeek = {
-                            viewModel.onSelectEpochDay(selectedEpochDay + DAYS_PER_WEEK)
-                        },
+                errorRes != null -> {
+                    EmptyState(
+                        text = stringResource(errorRes),
+                        actionText = stringResource(R.string.action_retry),
+                        onAction = viewModel::onRetry,
                     )
                 }
 
-                // ---- 所选日的状态提示：紧跟日期栏，说的是"这一天" ----
-                if (isFutureDay) {
-                    Text(
-                        text = stringResource(R.string.msg_future_day_readonly),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.tertiary,
-                    )
-                }
-
-                if (uiState.isRestDay) {
-                    Text(
-                        text = stringResource(R.string.msg_rest_day),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-
-                // ---- 磁贴概览（① 形态：整屏只有磁贴，清单在点开的弹窗里）----
-                TodayBento(
-                    state = uiState,
-                    onOpenTrain = { sheetTarget = TodaySheetTarget.TRAIN },
-                    onOpenMeal = { sheetTarget = TodaySheetTarget.MEAL },
-                    onOpenHabit = { sheetTarget = TodaySheetTarget.HABIT },
-                )
-
-                // ---- 三个常驻入口：不塞进弹窗，页面上一眼能点到 ----
-                Row(horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm)) {
-                    TextButton(
-                        onClick = viewModel::onCreatePlanByAi,
-                        enabled = !uiState.isCreatingPlan && !isFutureDay,
-                    ) {
+                else -> {
+                    // ---- 所选日的状态提示：紧跟钉顶的日期栏，说的是"这一天" ----
+                    if (isFutureDay) {
                         Text(
-                            text = stringResource(
-                                if (uiState.isCreatingPlan) R.string.msg_plan_creating
-                                else R.string.action_create_plan_ai,
-                            ),
+                            text = stringResource(R.string.msg_future_day_readonly),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.tertiary,
                         )
                     }
-                    TextButton(
-                        onClick = viewModel::onGenerateDiet,
-                        enabled = !isFutureDay,
-                    ) {
-                        Text(text = stringResource(R.string.action_generate_diet))
+
+                    if (uiState.isRestDay) {
+                        Text(
+                            text = stringResource(R.string.msg_rest_day),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
-                    TextButton(onClick = onCreatePlan) {
-                        Text(text = stringResource(R.string.action_create))
+
+                    // ---- 磁贴概览（① 形态：整屏只有磁贴，清单在点开的弹窗里）----
+                    TodayBento(
+                        state = uiState,
+                        onOpenTrain = { sheetTarget = TodaySheetTarget.TRAIN },
+                        onOpenMeal = { sheetTarget = TodaySheetTarget.MEAL },
+                        onOpenHabit = { sheetTarget = TodaySheetTarget.HABIT },
+                    )
+
+                    // ---- 三个常驻入口：不塞进弹窗，页面上一眼能点到 ----
+                    Row(horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm)) {
+                        TextButton(
+                            onClick = viewModel::onCreatePlanByAi,
+                            enabled = !uiState.isCreatingPlan && !isFutureDay,
+                        ) {
+                            Text(
+                                text = stringResource(
+                                    if (uiState.isCreatingPlan) R.string.msg_plan_creating
+                                    else R.string.action_create_plan_ai,
+                                ),
+                            )
+                        }
+                        TextButton(
+                            onClick = viewModel::onGenerateDiet,
+                            enabled = !isFutureDay,
+                        ) {
+                            Text(text = stringResource(R.string.action_generate_diet))
+                        }
+                        TextButton(onClick = onCreatePlan) {
+                            Text(text = stringResource(R.string.action_create))
+                        }
                     }
                 }
             }
