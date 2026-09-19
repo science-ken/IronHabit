@@ -15,10 +15,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.ironhabit.app.R
+import com.ironhabit.app.ui.theme.HeatmapLevels
 import com.ironhabit.app.ui.theme.IronHabitShapes
 import com.ironhabit.app.domain.model.HeatmapCell
 import com.ironhabit.app.domain.util.DateUtils
@@ -84,18 +84,14 @@ private fun buildColumns(cells: List<HeatmapCell>): List<List<HeatmapCell?>> {
     return columns
 }
 
-/** 单元格颜色：按密度等级 `0..4` 在 `surfaceVariant` → `primary` 之间线性插值。 */
+/** 单元格颜色：直接查 [HeatmapLevels] 密度表（线性插值会让 0 档和 1 档糊成一片）。 */
 @Composable
 internal fun cellColor(cell: HeatmapCell?): Color {
-    val colorScheme = MaterialTheme.colorScheme
-    val level: Int = cell?.level ?: MIN_LEVEL
-    val fraction: Float = level.coerceIn(MIN_LEVEL, MAX_LEVEL).toFloat() / MAX_LEVEL.toFloat()
-    return lerp(colorScheme.surfaceVariant, colorScheme.primary, fraction)
+    val level: Int = cell?.level ?: 0
+    return HeatmapLevels[level.coerceIn(0, HeatmapLevels.lastIndex)]
 }
 
 private const val DAYS_PER_WEEK = 7
-private const val MIN_LEVEL = 0
-private const val MAX_LEVEL = 4
 /** 单元格边长：组件固有尺寸，非布局间距，故就地定义。 */
 private val CELL_SIZE = 14.dp
 

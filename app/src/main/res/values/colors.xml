@@ -2,16 +2,14 @@
 <!--
   IronHabit 基础色值（供启动图、通知小图标等 XML 场景使用）。
   说明：Compose 界面的配色走 M3 colorScheme（见 ui/theme/Color.kt），不在此处硬编码。
+  2026-09-19 配色改版：品牌橙全部退场，启动图与图标跟着主色走深青 + 白底。
 -->
 <resources>
-    <!-- 启动图标背景（深炭黑，衬托橙色哑铃） -->
-    <color name="ic_launcher_background">#FF1B1B1F</color>
+    <!-- 启动图标背景（白底，衬托深青哑铃） -->
+    <color name="ic_launcher_background">#FFFFFFFF</color>
 
-    <!-- 品牌主色（活力橙） -->
-    <color name="brand_orange">#FFFF7043</color>
-
-    <!-- 启动图窗口底色（与图标背景一致，避免白屏闪烁） -->
-    <color name="splash_background">#FF1B1B1F</color>
+    <!-- 启动图窗口底色（与 Compose 的 surface 一致，避免开屏闪一下深色） -->
+    <color name="splash_background">#FFFFFFFF</color>
 
     <!-- 通用黑白 -->
     <color name="white">#FFFFFFFF</color>

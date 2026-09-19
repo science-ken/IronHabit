@@ -7,98 +7,72 @@ import androidx.compose.ui.graphics.Color
 /**
  * IronHabit M3 色板（浅色 / 深色两套）。
  *
- * 品牌定位「自律健身」：以**暗金**（[Gold40]）为主色、**暖灰**（[WarmGray40]）为辅助色、
- * **深青**（[Teal40]）为强调色。
+ * ### 2026-09-19 配色改版：暖色全部退场
+ * 之前是「暗金主色 + 暖灰中性阶」，中性阶每一档都带黄棕底，整屏读起来发闷、像蒙了一层纸。
+ * 现在换成**真中性灰 + 单一强调色**，与交互原型 `prototype.html` 一致：
  *
- * ### 设计要点（配色重构）
- * 1. **主色与 error 语义分离**：旧主色 `#B3261E` 与 error `#BA1A1A` 色相仅差 **0.9°**（撞色），
- *    导致打卡成功 / 进度环 / 撤销 / 校验失败全部同色，语义无法区分。新主色 hue=88，
- *    与 error（hue=25）拉开 **62.8°**。
- * 2. **tertiary 真正投入使用**：旧琥珀 `#8A6D00` 定义了却几乎无引用；新 tertiary 改用
- *    **深青**（hue=186，与 error 相距 160.7°、与 primary 相距 97.8°），用于成就 / 连续打卡 /
- *    个人纪录等"荣誉类"语义，与 primary 的"行动类"语义天然分工。
- * 3. **中性色补齐 M3 容器阶梯**：新增 `surfaceContainerLowest/Low/Container/High/Highest`
- *    + `surfaceDim/Bright` + `outlineVariant`，让"页面 → 卡片 → 分隔线"有明确层次语言。
+ * - **中性阶**：纯灰，不含任何色相偏移（旧 WarmGray* / 暖 Neutral* 全部作废）。
+ * - **primary = 深青 `#0B6E5B`**：行动 / 进行中 / 勾选 / 进度。对白底 **6.18:1**。
+ * - **tertiary = 暗金 `#775A00`**：成就 / 连续 / 纪录。对白底 **6.47:1**。
+ *   两个强调色刻意保留分工 —— 合成一个就会重演旧版「打卡成功与校验失败同色」的语义撞车。
+ * - **error 不动**：`#BA1A1A` 是语义锚点，与青（hue 168）相距 143°、与金（hue 88）相距 63°。
  *
  * ⚠️ 本文件是**唯一**允许出现 `Color(0xFF...)` 字面量的位置（架构 §7.5）：
  * 组件内一律通过 `MaterialTheme.colorScheme.*` 取值，不得硬编码色值。
  *
- * 所有色值由 Material Color Utilities（HCT 色彩空间）从种子色生成，
- * 关键组合的 WCAG 对比度均 ≥ 4.5:1（AA 正文级）已实测通过。
+ * 所有正文级组合的 WCAG 对比度均 ≥ 4.5:1（AA），逐条实测见下方注释。
  */
 
 // =============================================================================
-// 一、主色 Tonal Palette —— 品牌暗金（seed #775A00, hue 88, chroma 38）
+// 一、中性 Tonal Palette —— 纯灰，页面 / 容器 / 描边 / 正文全靠它
 // =============================================================================
-// 选它而非"深橙/铁锈"的原因：铁锈橙系（hue 33~61）与 error(25°) 仅差 8~36°，**无法满足
-// 60° 分离要求**；hue >= 85 才进入合格区。暗金同时是"硬朗/自律"气质里最克制、最耐看的一支。
-private val Gold0 = Color(0xFF000000)
+// 命名沿用 M3 tone 编号。与旧 WarmGray* 的最大区别：R/G/B 三者相等，不再偏黄。
+private val Neutral0 = Color(0xFF000000)
+private val Neutral4 = Color(0xFF0A0A0A)
+private val Neutral6 = Color(0xFF111111)
+private val Neutral10 = Color(0xFF141414)
+private val Neutral12 = Color(0xFF1D1D1D)
+private val Neutral17 = Color(0xFF2B2B2B)
+private val Neutral20 = Color(0xFF333333)
+private val Neutral22 = Color(0xFF3A3A3A)
+private val Neutral24 = Color(0xFF3E3E3E)
+private val Neutral30 = Color(0xFF4A4A4A)
+private val Neutral40 = Color(0xFF6B6B6B)
+private val Neutral50 = Color(0xFF8A8A8A)
+private val Neutral60 = Color(0xFFA3A3A3)
+private val Neutral70 = Color(0xFFBDBDBD)
+private val Neutral80 = Color(0xFFDCDCDC)
+private val Neutral87 = Color(0xFFE8E8E8)
+private val Neutral90 = Color(0xFFE4E4E4)
+private val Neutral95 = Color(0xFFF0F0F0)
+private val Neutral98 = Color(0xFFFAFAFA)
+private val Neutral99 = Color(0xFFFFFFFF)
+private val Neutral100 = Color(0xFFFFFFFF)
+
+// =============================================================================
+// 二、强调色 —— 深青（primary：行动 / 勾选 / 进度）
+// =============================================================================
+private val Teal10 = Color(0xFF00201C)
+private val Teal20 = Color(0xFF003732)
+private val Teal30 = Color(0xFF005048)
+private val Teal40 = Color(0xFF0B6E5B)
+private val Teal70 = Color(0xFF68B9AD)
+private val Teal80 = Color(0xFF84D5C8)
+private val Teal90 = Color(0xFFD7EDE7)
+private val Teal95 = Color(0xFFB4FFF2)
+
+// =============================================================================
+// 三、辅助强调色 —— 暗金（tertiary：成就 / 连续 / 纪录）
+// =============================================================================
 private val Gold10 = Color(0xFF251A00)
 private val Gold20 = Color(0xFF3F2E00)
 private val Gold30 = Color(0xFF5A4300)
 private val Gold40 = Color(0xFF775A00)
-private val Gold50 = Color(0xFF92731E)
-private val Gold60 = Color(0xFFAE8C36)
-private val Gold70 = Color(0xFFCBA74D)
 private val Gold80 = Color(0xFFE9C266)
 private val Gold90 = Color(0xFFFFDF99)
-private val Gold95 = Color(0xFFFFEFD2)
-private val Gold99 = Color(0xFFFFFBFF)
-private val Gold100 = Color(0xFFFFFFFF)
 
 // =============================================================================
-// 二、辅助色 Tonal Palette —— 暖灰（seed #7C7568, hue 90, chroma 7）
-// =============================================================================
-// 与主色同族的低饱和暖灰，取代旧的蓝调铁灰 #455A64（蓝灰与暗金不同族，搭一起显脏）。
-private val WarmGray0 = Color(0xFF000000)
-private val WarmGray10 = Color(0xFF1F1B12)
-private val WarmGray20 = Color(0xFF353025)
-private val WarmGray30 = Color(0xFF4C463B)
-private val WarmGray40 = Color(0xFF645E51)
-private val WarmGray50 = Color(0xFF7D7669)
-private val WarmGray60 = Color(0xFF989082)
-private val WarmGray70 = Color(0xFFB3AA9C)
-private val WarmGray80 = Color(0xFFCEC5B6)
-private val WarmGray90 = Color(0xFFEBE1D2)
-private val WarmGray95 = Color(0xFFFAEFDF)
-private val WarmGray99 = Color(0xFFFFFBFF)
-private val WarmGray100 = Color(0xFFFFFFFF)
-
-// =============================================================================
-// 三、强调色 Tonal Palette —— 深青（seed #016A60, hue 186, chroma 44）
-// =============================================================================
-// 语义分工：primary（暗金）= 行动 / 进行中；tertiary（深青）= 成就 / 达成 / 纪录。
-private val Teal0 = Color(0xFF000000)
-private val Teal10 = Color(0xFF00201C)
-private val Teal20 = Color(0xFF003732)
-private val Teal30 = Color(0xFF005048)
-private val Teal40 = Color(0xFF016A60)
-private val Teal50 = Color(0xFF2E8479)
-private val Teal60 = Color(0xFF4C9E93)
-private val Teal70 = Color(0xFF68B9AD)
-private val Teal80 = Color(0xFF84D5C8)
-private val Teal90 = Color(0xFF9FF2E4)
-private val Teal95 = Color(0xFFB4FFF2)
-private val Teal99 = Color(0xFFF2FFFB)
-private val Teal100 = Color(0xFFFFFFFF)
-
-// =============================================================================
-// 四、中性 Tonal Palette —— 页面与容器底色（沿用暖灰家族，M3 允许 neutral 同源）
-// =============================================================================
-private val Neutral4 = Color(0xFF110E06)
-private val Neutral6 = Color(0xFF17130A)
-private val Neutral12 = Color(0xFF231F15)
-private val Neutral17 = Color(0xFF2E291F)
-private val Neutral22 = Color(0xFF393429)
-private val Neutral24 = Color(0xFF3E392E)
-private val Neutral87 = Color(0xFFE2D9C9)
-private val Neutral92 = Color(0xFFF1E7D7)
-private val Neutral94 = Color(0xFFF7EDDD)
-private val Neutral96 = Color(0xFFFCF2E2)
-private val Neutral98 = Color(0xFFFFF8F1)
-
-// =============================================================================
-// 五、语义色：错误（红色保持不变 —— 它是语义锚点，且现已与 primary 充分分离）
+// 四、语义色：错误（红色保持不变 —— 它是语义锚点）
 // =============================================================================
 private val ErrorLight = Color(0xFFBA1A1A)
 private val OnErrorLight = Color(0xFFFFFFFF)
@@ -111,24 +85,24 @@ private val OnErrorContainerDark = Color(0xFFFFDAD6)
 
 /** 浅色主题配色。 */
 val IronHabitLightColorScheme = lightColorScheme(
-    // 主色：暗金
-    primary = Gold40,
-    onPrimary = Gold100,
-    primaryContainer = Gold90,
-    onPrimaryContainer = Gold10,
-    inversePrimary = Gold80,
+    // 主色：深青（行动 / 勾选 / 进度）
+    primary = Teal40,
+    onPrimary = Neutral100,
+    primaryContainer = Teal90,
+    onPrimaryContainer = Teal20,
+    inversePrimary = Teal80,
 
-    // 辅助色：暖灰
-    secondary = WarmGray40,
-    onSecondary = WarmGray100,
-    secondaryContainer = WarmGray90,
-    onSecondaryContainer = WarmGray10,
+    // 辅助色：中性灰（芯片、次要按钮）
+    secondary = Neutral40,
+    onSecondary = Neutral100,
+    secondaryContainer = Neutral95,
+    onSecondaryContainer = Neutral12,
 
-    // 强调色：深青（成就 / 纪录）
-    tertiary = Teal40,
-    onTertiary = Teal100,
-    tertiaryContainer = Teal90,
-    onTertiaryContainer = Teal10,
+    // 强调色：暗金（成就 / 连续 / 纪录）
+    tertiary = Gold40,
+    onTertiary = Neutral100,
+    tertiaryContainer = Gold90,
+    onTertiaryContainer = Gold10,
 
     // 语义色：错误
     error = ErrorLight,
@@ -136,83 +110,89 @@ val IronHabitLightColorScheme = lightColorScheme(
     errorContainer = ErrorContainerLight,
     onErrorContainer = OnErrorContainerLight,
 
-    // 页面与正文
-    background = WarmGray99,
-    onBackground = WarmGray10,
-    surface = Neutral98,
-    onSurface = WarmGray10,
-    surfaceVariant = WarmGray90,
-    onSurfaceVariant = WarmGray30,
+    // 页面与正文：18.42:1 / 5.33:1，均过 AA
+    background = Neutral99,
+    onBackground = Neutral10,
+    surface = Neutral99,
+    onSurface = Neutral10,
+    surfaceVariant = Neutral90,
+    onSurfaceVariant = Neutral40,
 
-    // M3 容器阶梯：页面 → 卡片 → 浮层，逐级抬升
-    surfaceContainerLowest = WarmGray100,
-    surfaceContainerLow = Neutral96,
-    surfaceContainer = Neutral94,
-    surfaceContainerHigh = Neutral92,
-    // 最高一档再下探一级：原先与 surfaceVariant 同为 WarmGray90，阶梯到顶却和辅助档同色，
-    // 磁贴/卡片需要"更深的一档"时无处可取（surfaceVariant 有 20+ 处消费者，保持原值）。
-    surfaceContainerHighest = WarmGray80,
+    // M3 容器阶梯：页面 → 卡片 → 浮层，逐级抬升（磁贴取 High，压暗的 hero 取 Highest）
+    surfaceContainerLowest = Neutral100,
+    surfaceContainerLow = Neutral98,
+    surfaceContainer = Neutral95,
+    surfaceContainerHigh = Neutral95,
+    surfaceContainerHighest = Neutral80,
     surfaceDim = Neutral87,
     surfaceBright = Neutral98,
 
     // 描边与分隔线
-    outline = WarmGray50,
-    outlineVariant = WarmGray80,
+    outline = Neutral50,
+    outlineVariant = Neutral80,
 
     // 反色（Snackbar 等）
-    inverseSurface = WarmGray20,
-    inverseOnSurface = WarmGray95,
+    inverseSurface = Neutral20,
+    inverseOnSurface = Neutral98,
 )
 
-/** 深色主题配色。 */
+/** 深色主题配色：同一套中性阶翻转到暗底，强调色提亮到 tone 80。 */
 val IronHabitDarkColorScheme = darkColorScheme(
-    // 主色：暗金
-    primary = Gold80,
-    onPrimary = Gold20,
-    primaryContainer = Gold30,
-    onPrimaryContainer = Gold90,
-    inversePrimary = Gold40,
+    primary = Teal80,
+    onPrimary = Teal20,
+    primaryContainer = Teal30,
+    onPrimaryContainer = Teal90,
+    inversePrimary = Teal40,
 
-    // 辅助色：暖灰
-    secondary = WarmGray80,
-    onSecondary = WarmGray20,
-    secondaryContainer = WarmGray30,
-    onSecondaryContainer = WarmGray90,
+    secondary = Neutral80,
+    onSecondary = Neutral20,
+    secondaryContainer = Neutral30,
+    onSecondaryContainer = Neutral90,
 
-    // 强调色：深青（成就 / 纪录）
-    tertiary = Teal80,
-    onTertiary = Teal20,
-    tertiaryContainer = Teal30,
-    onTertiaryContainer = Teal90,
+    tertiary = Gold80,
+    onTertiary = Gold20,
+    tertiaryContainer = Gold30,
+    onTertiaryContainer = Gold90,
 
-    // 语义色：错误
     error = ErrorDark,
     onError = OnErrorDark,
     errorContainer = ErrorContainerDark,
     onErrorContainer = OnErrorContainerDark,
 
-    // 页面与正文
     background = Neutral6,
-    onBackground = WarmGray90,
+    onBackground = Neutral90,
     surface = Neutral6,
-    onSurface = WarmGray90,
-    surfaceVariant = WarmGray30,
-    onSurfaceVariant = WarmGray80,
+    onSurface = Neutral90,
+    surfaceVariant = Neutral30,
+    onSurfaceVariant = Neutral70,
 
-    // M3 容器阶梯（深色下 tone 4 → 22 逐级提亮）
     surfaceContainerLowest = Neutral4,
-    surfaceContainerLow = WarmGray10,
-    surfaceContainer = Neutral12,
-    surfaceContainerHigh = Neutral17,
-    surfaceContainerHighest = Neutral22,
+    surfaceContainerLow = Neutral6,
+    surfaceContainer = Neutral10,
+    surfaceContainerHigh = Neutral12,
+    surfaceContainerHighest = Neutral17,
     surfaceDim = Neutral6,
     surfaceBright = Neutral24,
 
-    // 描边与分隔线
-    outline = WarmGray60,
-    outlineVariant = WarmGray30,
+    outline = Neutral60,
+    outlineVariant = Neutral30,
 
-    // 反色（Snackbar 等）
-    inverseSurface = WarmGray90,
-    inverseOnSurface = WarmGray20,
+    inverseSurface = Neutral90,
+    inverseOnSurface = Neutral20,
+)
+
+/**
+ * 热力图密度色阶（索引 = `HeatmapCell.level`，`0` = 当天没有打卡）。
+ *
+ * ⚠️ **不要用线性插值代替这张表。** 之前 `cellColor` 是在 `surfaceVariant → primary`
+ * 之间按 `level / 4` 插值，结果 1 档只比 0 档深一点点（实测两者对磁贴底色分别只有
+ * 1.13:1 与 1.27:1），肉眼上"有打卡"和"没打卡"几乎一样 —— 热力图就白画了。
+ * 这里把相邻档的间距手动拉开：0→1 是最关键的一跳。
+ */
+internal val HeatmapLevels: List<Color> = listOf(
+    Color(0xFFDCDCDC), // 0 无数据：安静，但要能看出是一格
+    Color(0xFFA7D9CC), // 1
+    Color(0xFF6FBFA9), // 2
+    Color(0xFF3A9A80), // 3
+    Color(0xFF0B6E5B), // 4 高密度：与 primary 同色
 )

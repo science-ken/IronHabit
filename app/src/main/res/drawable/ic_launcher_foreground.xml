@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  自适应图标前景：一只哑铃（活力橙），置于 108x108 画布的安全区中心。
+  自适应图标前景：一只哑铃（深青），置于 108x108 画布的安全区中心。
   同时复用为启动图图标（windowSplashScreenAnimatedIcon）。
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
@@ -11,23 +11,23 @@
 
     <!-- 左侧外片 -->
     <path
-        android:fillColor="#FF7043"
+        android:fillColor="#FF0B6E5B"
         android:pathData="M26,46 h6 v16 h-6 z" />
     <!-- 左侧主片 -->
     <path
-        android:fillColor="#FF7043"
+        android:fillColor="#FF0B6E5B"
         android:pathData="M34,40 h8 v28 h-8 z" />
     <!-- 中间横杠 -->
     <path
-        android:fillColor="#FFA270"
+        android:fillColor="#FF6FBFA9"
         android:pathData="M42,51 h24 v6 h-24 z" />
     <!-- 右侧主片 -->
     <path
-        android:fillColor="#FF7043"
+        android:fillColor="#FF0B6E5B"
         android:pathData="M66,40 h8 v28 h-8 z" />
     <!-- 右侧外片 -->
     <path
-        android:fillColor="#FF7043"
+        android:fillColor="#FF0B6E5B"
         android:pathData="M76,46 h6 v16 h-6 z" />
 
 </vector>
