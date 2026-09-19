@@ -16,7 +16,6 @@ import com.ironhabit.app.domain.util.DateUtils
 import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.map
 
 /**
  * 组装「今日」聚合视图（架构 §3.2 / §4.2）。
@@ -46,9 +45,10 @@ class GetTodayOverviewUseCase @Inject constructor(
         val activeDaysFlow = checkInRepository.observeActiveDaysSince(SINCE_EPOCH_DAY)
         val habitsFlow = habitRepository.observeActiveHabits()
         val habitLogsFlow = habitRepository.observeLogsBetween(SINCE_EPOCH_DAY, epochDay)
-        // 「应做日」来源：**那一周**已排计划里的星期（休息日不打断连续训练记录）。
-        val plannedWeekdaysFlow = planRepository.observeEffectivePlanForWeek(weekStart)
-            .map { plans -> plans.map { plan -> plan.dayOfWeek }.distinct().sorted() }
+        // 「应做日」与「本周计划总组数」**同源**：都取那一周的生效行。
+        // ⚠️ 分母必须走 resolver，不能对 `week_plans` 直接 SQL SUM —— 模板回落、逐天覆盖、
+        // 软删行这三条规则只在 `WeekPlanWeekResolver` 有一份，绕开它磁贴就会和清单对不上。
+        val plannedWeekRowsFlow = planRepository.observeEffectivePlanForWeek(weekStart)
 
         val coreFlow: Flow<OverviewCore> = combine(
             plansFlow,
@@ -68,8 +68,15 @@ class GetTodayOverviewUseCase @Inject constructor(
         }
 
         val withWeekdaysFlow: Flow<OverviewCore> =
-            combine(coreFlow, plannedWeekdaysFlow) { core, weekdays ->
-                core.copy(plannedWeekdays = weekdays)
+            combine(coreFlow, plannedWeekRowsFlow) { core, weekRows ->
+                // 动作已被删/不在活跃动作表里的行要剔掉：清单压根不会显示它，
+                // 留在分母里就是「24 / 35」虚高、永远练不满。
+                val exerciseIds: Set<Long> = core.exercises.map { exercise -> exercise.id }.toSet()
+                val usable: List<WeekPlan> = weekRows.filter { row -> row.exerciseId in exerciseIds }
+                core.copy(
+                    plannedWeekdays = usable.map { row -> row.dayOfWeek }.distinct().sorted(),
+                    plannedSetsThisWeek = usable.sumOf { row -> row.targetSets },
+                )
             }
 
         return combine(withWeekdaysFlow, habitLogsFlow) { core, habitLogs ->
@@ -136,6 +143,7 @@ class GetTodayOverviewUseCase @Inject constructor(
             // 回归修复：把「那一周排了哪几天」随视图带出去 —— ViewModel P3 起不再单独
             // combine `observePlannedWeekdays()`，日期栏 chip 与 hasPlanThisWeek 全靠这里。
             plannedWeekdays = core.plannedWeekdays,
+            plannedSetsThisWeek = core.plannedSetsThisWeek,
         )
     }
 
@@ -149,6 +157,8 @@ class GetTodayOverviewUseCase @Inject constructor(
         val habits: List<Habit>,
         /** 已排计划的星期（`1..7`，升序）；空 = 无计划。 */
         val plannedWeekdays: List<Int> = emptyList(),
+        /** 该周生效计划的目标组数之和（分母）；`0` = 这周没排课。 */
+        val plannedSetsThisWeek: Int = 0,
     )
 
     private companion object {

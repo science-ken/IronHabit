@@ -120,7 +120,17 @@ fun TodayBento(
                 Row(horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.md)) {
                     TileStat(
                         label = stringResource(R.string.label_week_total_sets),
-                        value = review.training.totalSets.toString(),
+                        // 分母 = 本周生效计划的目标组数。为 0（没排课）时不挂分母：
+                        // 「24 / 0」里的 0 是编出来的对比，不是事实。
+                        value = if (state.plannedSetsThisWeek > 0) {
+                            stringResource(
+                                R.string.label_progress_ratio,
+                                review.training.totalSets,
+                                state.plannedSetsThisWeek,
+                            )
+                        } else {
+                            review.training.totalSets.toString()
+                        },
                     )
                     TileStat(
                         label = stringResource(R.string.ai_review_stat_weight),

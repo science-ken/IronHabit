@@ -108,9 +108,13 @@ class TodayViewModelDateCursorTest {
     private val planItem = TodayPlanItem(plan = plan, exercise = exercise, isCompleted = false)
     private val habitItem = HabitItem(habit = Habit(id = 5L, name = "喝水"), isCompletedToday = false)
 
+    /** 喂给 mock overview 的分母，供 `plannedSetsThisWeekReachesUiState` 断言。 */
+    private val plannedSets: Int = 7
+
     private fun newViewModel(): TodayViewModel {
         // 日期游标驱动聚合视图：overview.dateEpochDay 必须回显被请求的那一天。
-        every { getTodayOverview.invoke(today) } returns flowOf(TodayOverview(dateEpochDay = today))
+        every { getTodayOverview.invoke(today) } returns
+            flowOf(TodayOverview(dateEpochDay = today, plannedSetsThisWeek = plannedSets))
         every { getTodayOverview.invoke(futureDay) } returns flowOf(TodayOverview(dateEpochDay = futureDay))
         every { getTodayMeals.invoke(today) } returns flowOf(TodayMeals())
         every { getTodayMeals.invoke(futureDay) } returns flowOf(TodayMeals())
@@ -171,6 +175,22 @@ class TodayViewModelDateCursorTest {
             "本周热力同样要逐字段搬进 uiState（applyData 漏一个字段那格就永远是初始值）",
             7,
             vm.uiState.value.weekHeatmap.size,
+        )
+    }
+
+    @Test
+    fun plannedSetsThisWeekReachesUiState() = runTest(mainDispatcherRule.testDispatcher) {
+        // applyData 逐字段搬运，漏一个字段那格就永远是初始值 —— weeklyReview / weekHeatmap
+        // 已经各踩过一次，这条守住「本周 24 / 35」的分母。
+        // 注：本用例的 GetTodayOverviewUseCase 是 mock 的，分母从 newViewModel() 那份
+        // overview 里喂进来（在这里改 stub 仓库不会走到 ViewModel）。
+        val vm = newViewModel()
+        advanceUntilIdle()
+
+        assertEquals(
+            "overview 的 plannedSetsThisWeek 必须搬进 uiState，否则磁贴永远只显示完成数",
+            plannedSets,
+            vm.uiState.value.plannedSetsThisWeek,
         )
     }
 

@@ -547,6 +547,8 @@ class TodayViewModel @Inject constructor(
                 // 漏掉它时「本周」磁贴在任何一周都不出现（真机实测踩到）。
                 weeklyReview = data.weeklyReview,
                 weekHeatmap = data.weekHeatmap,
+                // 同一个坑的第三处：漏掉它「总组数」就永远只显示完成数、不显示 / 35。
+                plannedSetsThisWeek = data.plannedSetsThisWeek,
                 todayEpochDay = todayEpochDay(),
                 errorRes = null,
                 snackbarRes = streakRes ?: state.snackbarRes,
@@ -583,4 +585,5 @@ private fun TodayOverview.toUiState(): TodayUiState = TodayUiState(
     // 回归修复：必须把"那一周排了哪几天"搬进来，否则日期栏 chip 消失、
     // hasPlanThisWeek 恒为 false（本周明明有课，休息日却显示「这一周还没有训练计划」）。
     plannedWeekdays = plannedWeekdays,
+    plannedSetsThisWeek = plannedSetsThisWeek,
 )

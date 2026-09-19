@@ -13,6 +13,9 @@ package com.ironhabit.app.domain.model
  *   日期栏 chip 与「这一周有没有计划」的判定都吃它 —— 回归修复：P3 重构时 ViewModel
  *   退掉了独立的 `observePlannedWeekdays()` 流并指望这里带回，但本模型此前并没有这个字段，
  *   导致日期条 chip 消失、休息日被误判成「这一周还没有训练计划」。
+ * @property plannedSetsThisWeek **所选日所在周**计划要做的总组数（生效行的 `targetSets` 之和）。
+ *   「本周 24 / 35」的分母。`0` = 这一周没排课（不是"不知道"），此时界面只报完成数、不加分母。
+ *   口径与清单一致：走 `WeekPlanWeekResolver` 的生效行，且剔掉动作已被删的行。
  */
 data class TodayOverview(
     val dateEpochDay: Long = 0L,
@@ -22,6 +25,7 @@ data class TodayOverview(
     val totalCount: Int = 0,
     val trainingStreak: StreakInfo = StreakInfo(),
     val plannedWeekdays: List<Int> = emptyList(),
+    val plannedSetsThisWeek: Int = 0,
 )
 
 /**

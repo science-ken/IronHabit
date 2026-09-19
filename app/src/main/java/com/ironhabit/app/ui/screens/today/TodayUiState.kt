@@ -89,6 +89,13 @@ data class TodayUiState(
      * 空列表 = 未加载或取数失败 → 热力条整条不渲染。
      */
     val weekHeatmap: List<HeatmapCell> = emptyList(),
+    /**
+     * 所选日**所在周**计划要做的总组数 —— 「总组数 24 / 35」的分母。
+     *
+     * 与 [weeklyReview] 不同，**`0` 是真答案**（这周没排课），不是"没取到数"：
+     * 它由生效计划行直接求和得到，没排课就是 0。为 0 时磁贴只显示完成数、不挂分母。
+     */
+    val plannedSetsThisWeek: Int = 0,
     val errorRes: Int? = null,
     val snackbarRes: Int? = null,
     val snackbarArgs: List<String> = emptyList(),

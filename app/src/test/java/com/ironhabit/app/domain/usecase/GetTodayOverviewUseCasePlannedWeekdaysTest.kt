@@ -66,20 +66,26 @@ class GetTodayOverviewUseCasePlannedWeekdaysTest {
     private fun stubAll(
         weekPlans: List<WeekPlan>,
         dayPlans: List<WeekPlan> = emptyList(),
+        /** 活跃动作集合；默认"计划里出现的动作都还在"。留空即模拟动作被删。 */
+        exerciseIds: Set<Long>? = null,
     ) {
+        val ids: Set<Long> = exerciseIds ?: (weekPlans + dayPlans).map { row -> row.exerciseId }.toSet()
         every { planRepository.observeEffectivePlanForDay(any(), any()) } returns flowOf(dayPlans)
         every { planRepository.observeEffectivePlanForWeek(any()) } returns flowOf(weekPlans)
         every { checkInRepository.observeByDate(any()) } returns flowOf(emptyList<CheckIn>())
-        every { exerciseRepository.observeActive() } returns flowOf(emptyList<Exercise>())
+        every { exerciseRepository.observeActive() } returns flowOf(ids.map { id -> exercise(id) })
         every { checkInRepository.observeActiveDaysSince(any()) } returns flowOf(emptyList())
         every { habitRepository.observeActiveHabits() } returns flowOf(emptyList<Habit>())
         every { habitRepository.observeLogsBetween(any(), any()) } returns flowOf(emptyList<HabitLog>())
     }
 
-    private fun plan(weekday: Int, exerciseId: Long): WeekPlan = WeekPlan(
+    private fun exercise(id: Long): Exercise = Exercise(id = id, name = "动作$id")
+
+    private fun plan(weekday: Int, exerciseId: Long, targetSets: Int = 3): WeekPlan = WeekPlan(
         id = exerciseId,
         exerciseId = exerciseId,
         dayOfWeek = weekday,
+        targetSets = targetSets,
         weekStartEpochDay = 0L, // 「每周相同」形态即可，UseCase 不关心
     )
 
@@ -128,5 +134,54 @@ class GetTodayOverviewUseCasePlannedWeekdaysTest {
         verify(exactly = 1) {
             planRepository.observeEffectivePlanForDay(any(), any())
         }
+    }
+
+    // ---- 「本周 24 / 35」的分母：与清单同源的生效行求和 ----
+
+    @Test
+    fun plannedSetsThisWeek_sumsTargetSetsAcrossEffectiveRows() = runTest {
+        stubAll(
+            weekPlans = listOf(
+                plan(weekday = 1, exerciseId = 11L, targetSets = 4),
+                plan(weekday = 1, exerciseId = 12L, targetSets = 3),
+                plan(weekday = 3, exerciseId = 21L, targetSets = 5),
+            ),
+        )
+
+        val overview = useCase(cursor).first()
+
+        assertEquals("分母 = 该周生效行的 targetSets 之和", 12, overview.plannedSetsThisWeek)
+    }
+
+    @Test
+    fun plannedSetsThisWeek_dropsRowsWhoseExerciseIsGone() = runTest {
+        // 动作被删（备份恢复 / 手删）之后，清单里根本不会出现这一行：
+        // 计入分母就是虚高，用户永远练不到"满"。
+        stubAll(
+            weekPlans = listOf(
+                plan(weekday = 1, exerciseId = 11L, targetSets = 4),
+                plan(weekday = 5, exerciseId = 99L, targetSets = 6),
+            ),
+            exerciseIds = setOf(11L),
+        )
+
+        val overview = useCase(cursor).first()
+
+        assertEquals("动作已删的行不得进分母", 4, overview.plannedSetsThisWeek)
+        assertEquals(
+            "同一天只剩被删的行 → 这天也不算应做日（与分母同一份 usable 列表）",
+            listOf(1),
+            overview.plannedWeekdays,
+        )
+    }
+
+    @Test
+    fun plannedSetsThisWeek_unscheduledWeekIsZeroNotUnknown() = runTest {
+        // 没排课 = 真 0，不是"没取到数"。UI 靠 0 决定不挂分母（不显示「24 / 0」）。
+        stubAll(weekPlans = emptyList())
+
+        val overview = useCase(cursor).first()
+
+        assertEquals(0, overview.plannedSetsThisWeek)
     }
 }
