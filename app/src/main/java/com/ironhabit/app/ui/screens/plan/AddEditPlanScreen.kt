@@ -32,6 +32,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.Exercise
 import com.ironhabit.app.ui.components.EmptyState
+import com.ironhabit.app.ui.components.weekRangeText
 import com.ironhabit.app.ui.components.LoadingSkeleton
 import com.ironhabit.app.ui.components.LocalSnackbarHostState
 import com.ironhabit.app.ui.screens.train.distinctMuscleGroups
@@ -82,6 +83,19 @@ fun AddEditPlanScreen(
             ),
             style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.onSurface,
+        )
+
+        // 「你在改哪一周」：这一条落库时属于哪一份计划，必须在动手前看得见 ——
+        // 以前新增路径不显示归属，从「下周」那页点进来会以为在改下周、实际写进本周。
+        val weekRange: String = weekRangeText(uiState.weekStartEpochDay)
+        Text(
+            text = if (weekRange.isEmpty()) {
+                stringResource(R.string.scope_plan_template)
+            } else {
+                stringResource(R.string.scope_plan_this_week, weekRange)
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
         // 普通本地 val：委托属性不支持智能转换，需先取出再在分支内使用。

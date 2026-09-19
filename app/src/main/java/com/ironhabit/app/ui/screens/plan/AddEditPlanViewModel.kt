@@ -35,6 +35,7 @@ import kotlinx.datetime.TimeZone
  * @property exercises 可选动作（启用动作库）
  * @property selectedExerciseId 已选动作 id（`0` = 未选）
  * @property dayOfWeek 星期（`1` = 周一 … `7` = 周日）
+ * @property weekStartEpochDay 这一条属于哪一周（周一 epochDay）；`0` = 「每周相同」那份
  * @property targetSets 目标组数（文本）
  * @property targetReps 目标每组次数（文本）
  * @property targetWeightKg 目标重量 kg（文本，可空）
@@ -52,6 +53,7 @@ data class AddEditPlanUiState(
     val exercises: List<Exercise> = emptyList(),
     val selectedExerciseId: Long = 0L,
     val dayOfWeek: Int = 1,
+    val weekStartEpochDay: Long = 0L,
     val targetSets: String = DEFAULT_SETS_TEXT,
     val targetReps: String = DEFAULT_REPS_TEXT,
     val targetWeightKg: String = "",
@@ -90,8 +92,29 @@ class AddEditPlanViewModel @Inject constructor(
         (savedStateHandle.get<Int>(Destinations.PLAN_ARG_DAY) ?: DEFAULT_DAY)
             .coerceIn(MIN_DAY, MAX_DAY)
 
+    /**
+     * 这条计划属于哪一周（周一 epochDay）。
+     *
+     * 🔒 P3 的口径：`0` 是「每周相同」那份的哨兵值，所以路由的"未指定"必须用 `-1`，
+     * 不能用 `0` —— 否则"给下周加一个动作"会写进模板，变成"以后每周都多这一条"。
+     */
+    private val routeWeek: Long =
+        savedStateHandle.get<Long>(Destinations.PLAN_ARG_WEEK) ?: Destinations.PLAN_WEEK_UNSPECIFIED
+
+    /** 新增行的归属周：路由带了就用路由的，没带才是当前这一周。 */
+    private val newRowWeek: Long =
+        if (routeWeek > 0L) {
+            routeWeek
+        } else {
+            DateUtils.weekStartMon1(DateUtils.todayEpochDay(clock, timeZone))
+        }
+
     private val _form = MutableStateFlow(
-        AddEditPlanUiState(isEditing = planId != 0L, dayOfWeek = initialDay),
+        AddEditPlanUiState(
+            isEditing = planId != 0L,
+            dayOfWeek = initialDay,
+            weekStartEpochDay = newRowWeek,
+        ),
     )
 
     /** 对外状态：动作列表来自 Room，表单字段来自 [_form]。 */
@@ -105,7 +128,11 @@ class AddEditPlanViewModel @Inject constructor(
             .stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
-                initialValue = AddEditPlanUiState(isEditing = planId != 0L, dayOfWeek = initialDay),
+                initialValue = AddEditPlanUiState(
+                    isEditing = planId != 0L,
+                    dayOfWeek = initialDay,
+                    weekStartEpochDay = newRowWeek,
+                ),
             )
 
     init {
@@ -132,6 +159,7 @@ class AddEditPlanViewModel @Inject constructor(
                                 isEditing = true,
                                 selectedExerciseId = plan.exerciseId,
                                 dayOfWeek = plan.dayOfWeek.coerceIn(MIN_DAY, MAX_DAY),
+                                weekStartEpochDay = plan.weekStartEpochDay,
                                 targetSets = plan.targetSets.toString(),
                                 targetReps = plan.targetReps.toString(),
                                 targetWeightKg = plan.targetWeightKg?.toString().orEmpty(),
@@ -226,12 +254,12 @@ class AddEditPlanViewModel @Inject constructor(
                     targetDurationMin = duration,
                     sortOrder = existing?.sortOrder ?: 0,
                     isActive = existing?.isActive ?: true,
-                    // 🔒 P3：计划按周存放 —— 手动新增/编辑落到**当前这一周**。
+                    // 🔒 P3：计划按周存放 —— 手动新增落到**调用方指定的那一周**（今日页带着
+                    // 光标所在周进来；没指定才是当前这一周）。
                     // 不带这一维就会落到 `0`（=「每周相同」那份），于是"我在下周加一个动作"
                     // 会变成"以后每周都多这个动作"，而且用户在"这一周"里根本看不到它。
                     // 编辑已有行时沿用该行自己的周，避免把行"搬"到别的周。
-                    weekStartEpochDay = existing?.weekStartEpochDay
-                        ?: DateUtils.weekStartMon1(DateUtils.todayEpochDay(clock, timeZone)),
+                    weekStartEpochDay = existing?.weekStartEpochDay ?: newRowWeek,
                     createdAt = existing?.createdAt?.takeIf { it > 0L } ?: nowMillis,
                 )
                 planRepository.upsert(plan)

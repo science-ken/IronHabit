@@ -126,6 +126,18 @@ private fun formatMonthDay(epochDay: Long): String {
     return "${date.monthNumber}/${date.dayOfMonth}"
 }
 
+/**
+ * 周一 epochDay → 「9/21–9/27」这样的周区间文本。
+ *
+ * 「你正在改哪一周」的提示在计划编辑页与训练页都要用，抽这一份避免第三处复制粘贴。
+ * [weekStartEpochDay] 为 `0`（「每周相同」哨兵值）时返回空串 —— 那份不属于任何一周。
+ */
+internal fun weekRangeText(weekStartEpochDay: Long): String {
+    if (weekStartEpochDay <= 0L) return ""
+    val end = weekStartEpochDay + DAYS_PER_WEEK - 1
+    return "${formatMonthDay(weekStartEpochDay)}–${formatMonthDay(end)}"
+}
+
 /** 星期（`1..7`）→ 单字中文标签资源。 */
 @Composable
 internal fun weekdayShortLabel(weekday: Int): String = stringResource(

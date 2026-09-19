@@ -42,14 +42,29 @@ fun IronHabitNavGraph(
     ) {
         composable(Destinations.TODAY) {
             TodayScreen(
-                onCreatePlan = { navController.navigateToTab(Destinations.TRAIN) },
+                // 「自己创建」带着光标所在的那一周进表单 —— 否则在「下周」那页点它，
+                // 落库的却是本周（新增路径不传周就回落到当前周）。
+                onCreatePlan = { week ->
+                    navController.navigate(
+                        Destinations.planAddEdit(
+                            dayOfWeek = 1,
+                            week = if (week > 0L) week else Destinations.PLAN_WEEK_UNSPECIFIED,
+                        ),
+                    )
+                },
                 onCreateHabit = { navController.navigateToTab(Destinations.DISCIPLINE) },
                 onEditHabit = { habitId -> navController.navigate(Destinations.habitAddEdit(habitId)) },
                 onOpenExerciseDetail = { exerciseId ->
                     navController.navigate(Destinations.exerciseDetail(exerciseId))
                 },
-                onEditPlan = { planId, dayOfWeek ->
-                    navController.navigate(Destinations.planAddEdit(planId = planId, dayOfWeek = dayOfWeek))
+                onEditPlan = { planId, dayOfWeek, week ->
+                    navController.navigate(
+                        Destinations.planAddEdit(
+                            planId = planId,
+                            dayOfWeek = dayOfWeek,
+                            week = if (week > 0L) week else Destinations.PLAN_WEEK_UNSPECIFIED,
+                        ),
+                    )
                 },
             )
         }
@@ -145,6 +160,10 @@ fun NavGraphBuilder.registerSecondaryRoutes(navController: NavHostController) {
             navArgument(Destinations.PLAN_ARG_DAY) {
                 type = NavType.IntType
                 defaultValue = 1
+            },
+            navArgument(Destinations.PLAN_ARG_WEEK) {
+                type = NavType.LongType
+                defaultValue = Destinations.PLAN_WEEK_UNSPECIFIED
             },
         ),
     ) {

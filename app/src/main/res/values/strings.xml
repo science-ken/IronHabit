@@ -65,6 +65,9 @@
     <string name="msg_plan_creating">正在生成这一周的计划…</string>
     <string name="label_week_of">%1$s 那一周</string>
     <string name="hint_plan_week_scope">只对这一周生效；想每周都用同一份，可在计划里勾「每周相同」</string>
+    <!-- 「你在改哪一周」：新增/编辑表单与训练页顶部的归属提示 -->
+    <string name="scope_plan_this_week">你正在改：这一周（%1$s）</string>
+    <string name="scope_plan_template">你正在改：「每周相同」那份 —— 所有没单独排计划的周都会跟着变</string>
     <string name="action_repeat_weekly">每周相同</string>
     <string name="hint_repeat_weekly">勾上之后，没有单独排计划的周都会用这一份</string>
     <string name="msg_repeat_weekly_on">已设为「每周相同」：以后没单独排计划的周都会用这一份</string>

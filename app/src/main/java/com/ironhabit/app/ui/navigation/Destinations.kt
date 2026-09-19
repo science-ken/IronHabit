@@ -38,13 +38,18 @@ object Destinations {
         "exercise/detail/$exerciseId"
 
     // ---------------- 二级页：计划新增/编辑 ----------------
-    const val PLAN_ADD_EDIT_PATTERN = "plan/edit?planId={planId}&dayOfWeek={dayOfWeek}"
+    const val PLAN_ADD_EDIT_PATTERN =
+        "plan/edit?planId={planId}&dayOfWeek={dayOfWeek}&week={week}"
     const val PLAN_ARG_ID = "planId"
     const val PLAN_ARG_DAY = "dayOfWeek"
 
+    /** 所属周的周一 epochDay；`-1` = 调用方没指定，由编辑页落到「当前这一周」。 */
+    const val PLAN_ARG_WEEK = "week"
+    const val PLAN_WEEK_UNSPECIFIED = -1L
+
     /** `planId == 0L` 表示新增；[dayOfWeek] 为 `1..7`。 */
-    fun planAddEdit(planId: Long = 0L, dayOfWeek: Int): String =
-        "plan/edit?planId=$planId&dayOfWeek=$dayOfWeek"
+    fun planAddEdit(planId: Long = 0L, dayOfWeek: Int, week: Long = PLAN_WEEK_UNSPECIFIED): String =
+        "plan/edit?planId=$planId&dayOfWeek=$dayOfWeek&week=$week"
 
     // ---------------- 二级页：习惯新增/编辑 ----------------
     const val HABIT_ADD_EDIT_PATTERN = "habit/edit?habitId={habitId}"

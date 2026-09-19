@@ -71,12 +71,12 @@ import com.ironhabit.app.ui.theme.IronHabitSpacing
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TodayScreen(
-    onCreatePlan: () -> Unit,
+    onCreatePlan: (Long) -> Unit,
     onCreateHabit: () -> Unit,
     onEditHabit: (Long) -> Unit = {},
     onOpenExerciseDetail: (Long) -> Unit = {},
     /** 编辑今日某条计划（参数：计划 id、星期 1..7）。今日页此前只能打卡、不能改，这是补上的入口。 */
-    onEditPlan: (Long, Int) -> Unit = { _, _ -> },
+    onEditPlan: (Long, Int, Long) -> Unit = { _, _, _ -> },
     modifier: Modifier = Modifier,
     viewModel: TodayViewModel = hiltViewModel(),
 ) {
@@ -201,7 +201,7 @@ fun TodayScreen(
                         ) {
                             Text(text = stringResource(R.string.action_generate_diet))
                         }
-                        TextButton(onClick = onCreatePlan) {
+                        TextButton(onClick = { onCreatePlan(uiState.selectedWeekStartEpochDay) }) {
                             Text(text = stringResource(R.string.action_create))
                         }
                     }
@@ -233,7 +233,7 @@ fun TodayScreen(
                                     onCreateByAi = viewModel::onCreatePlanByAi,
                                     onCreateManually = {
                                         sheetTarget = null
-                                        onCreatePlan()
+                                        onCreatePlan(uiState.selectedWeekStartEpochDay)
                                     },
                                 )
                             }
@@ -244,7 +244,7 @@ fun TodayScreen(
                                     actionText = stringResource(R.string.action_create),
                                     onAction = {
                                         sheetTarget = null
-                                        onCreatePlan()
+                                        onCreatePlan(uiState.selectedWeekStartEpochDay)
                                     },
                                 )
                             }
@@ -268,7 +268,7 @@ fun TodayScreen(
                                         onSetRpe = { rpe -> viewModel.onSetRpe(item, rpe) },
                                         onEditPlan = {
                                             sheetTarget = null
-                                            onEditPlan(item.plan.id, item.plan.dayOfWeek)
+                                            onEditPlan(item.plan.id, item.plan.dayOfWeek, item.plan.weekStartEpochDay)
                                         },
                                         enabled = !isFutureDay,
                                     )

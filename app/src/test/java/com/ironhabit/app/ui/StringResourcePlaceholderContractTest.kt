@@ -111,6 +111,8 @@ class StringResourcePlaceholderContractTest {
         // ---------------- 【未使用】strings.xml 有占位符、代码暂无引用 ----------------
         entry("label_week_of", ArgKind.STRING)
         entry("title_week_plan_by_day", ArgKind.STRING)
+        // AddEditPlanScreen:90-96（weekRangeText 产出的「9/21–9/27」区间文本）
+        entry("scope_plan_this_week", ArgKind.STRING)
         entry("label_sets_progress", ArgKind.NUMERIC, ArgKind.NUMERIC)
         entry("label_rpe_short", ArgKind.NUMERIC)
         entry("ai_explain_injury_swap", ArgKind.STRING)
