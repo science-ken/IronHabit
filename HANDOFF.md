@@ -32,6 +32,36 @@
 产物 `app/build/outputs/apk/release/app-release-unsigned.apk` 2.28 MB。但 `keystore.properties` 不存在
 → `signingConfig` 为 `null` → **产物未签名、装不上机**。这趟只证明 R8 没弄坏东西，不证明可分发。
 
+### ⚠️ ① 查"有没有 push 过"查出来的分叉（2026-09-19 收工后，已核实）
+
+**本树确实一笔都没 push 过**：`git show-ref` 里原本没有任何 `refs/remotes/origin/*`
+（push 成功必然写远端跟踪 ref），本地 `main` 也没有 upstream。
+
+**但 `origin` 不是停在原地**。`git ls-remote` + `git fetch origin main` 实测：
+
+| | 提交 | 内容 |
+|---|---|---|
+| 分叉点 | `8903ec0` | 就是本地标签 **v2.0.5** 指向的那笔 |
+| 只在远端 | `d98964b`（2026-09-18 18:27） | **fix(p0): 修 4 个 P0** —— 老备份清空饮食记录 / 加密存储崩溃 / 模板手改被绕过 / 保存连点。21 文件 +718/−75 |
+| 只在远端 | `3dd3597`（2026-09-18 21:45） | **chore: bump versionCode 17 / versionName 2.0.6**，并打了 `v2.0.6` 标签 |
+| 只在本地 | 28 笔 | `db3eee6`（09-18 22:39）起，到今天页改版全部工作 |
+
+`git rev-list --left-right --count HEAD...origin/main` = **28 / 2**，两边互不为祖先 → 真分叉。
+
+**两个直接后果：**
+
+1. **本树缺那 4 个 P0 修复**，包括一个会清空饮食记录的数据丢失 bug。今天所有走查都是在**没有 P0 修复的代码**上做的。
+2. **`17 / 2.0.6` 这个号已经被远端占用并打了标签**（`v2.0.6` → `3dd3597`）。本树 `4e1f87c` 又 bump 了一次 17/2.0.6，
+   同号不同内容。合并后应改成 **18 / 2.0.7**。
+
+**合并代价已量过**：两边都改的文件只有 5 个（`HANDOFF.md`、`app/build.gradle.kts`、`strings.xml`、
+`AddEditHabitViewModel.kt`、`AddEditHabitViewModelTest.kt`）。真正冲突的只有习惯那一处：
+远端在 `val targetUnit = ...` 之后插了 `isSaving` 防抖，本树在同一行之后插了"目标值必须有单位"的校验 ——
+**两段都要留，顺序是先校验后防抖**，属于手工可解的小冲突。`strings.xml` 两边加在不同区段，可自动合。
+
+**本树已做的网络动作**：只 `ls-remote` 和 `fetch`（对远端只读），本地多出一个 `refs/remotes/origin/main`。
+**没有 push、没有 merge、没有 rebase，`main` 仍是 `4e1f87c`。**
+
 ### 本会话两条踩坑记录（下一个人别再踩）
 
 - **结构性改动不要交给"按花括号猜边界"的脚本**。日期栏移顶时我用脚本找块的右括号，
