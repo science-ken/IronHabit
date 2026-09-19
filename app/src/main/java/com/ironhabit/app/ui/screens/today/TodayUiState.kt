@@ -6,6 +6,7 @@ import com.ironhabit.app.domain.model.Meal
 import com.ironhabit.app.domain.model.MealTotals
 import com.ironhabit.app.domain.model.StreakInfo
 import com.ironhabit.app.domain.model.TodayPlanItem
+import com.ironhabit.app.domain.model.WeeklyReview
 
 /**
  * 「今日」页 UI 状态（不可变）。
@@ -74,6 +75,13 @@ data class TodayUiState(
     /** 正在切换「每周相同」（开关禁用，避免连点）。 */
     val isTogglingRepeatWeekly: Boolean = false,
     val todayEpochDay: Long = 0L,
+    /**
+     * 所选日**所在周**的复盘（喂给「本周」与「体重变化」两块磁贴）。
+     *
+     * `null` = 未加载或取数失败 → 对应磁贴**整块不渲染**。这里不用 `null→0` 兜底：
+     * `0` 会被读成"这周没练"，那是编出来的结论（与 [WeeklyReview] 的诚实边界同一口径）。
+     */
+    val weeklyReview: WeeklyReview? = null,
     val errorRes: Int? = null,
     val snackbarRes: Int? = null,
     val snackbarArgs: List<String> = emptyList(),

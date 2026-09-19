@@ -8,8 +8,10 @@ import com.ironhabit.app.domain.model.Meal
 import com.ironhabit.app.domain.model.MealType
 import com.ironhabit.app.domain.model.TodayOverview
 import com.ironhabit.app.domain.model.TodayPlanItem
+import com.ironhabit.app.domain.model.WeeklyReview
 import com.ironhabit.app.domain.repository.CheckInRepository
 import com.ironhabit.app.domain.repository.PlanRepository
+import com.ironhabit.app.domain.usecase.BuildWeeklyReviewUseCase
 import com.ironhabit.app.domain.usecase.DeleteMealUseCase
 import com.ironhabit.app.domain.usecase.DetailedCheckInUseCase
 import com.ironhabit.app.domain.usecase.GenerateDietPlanUseCase
@@ -73,6 +75,7 @@ class TodayViewModel @Inject constructor(
     private val upsertMeal: UpsertMealUseCase,
     private val checkInRepository: CheckInRepository,
     private val planRepository: PlanRepository,
+    private val buildWeeklyReview: BuildWeeklyReviewUseCase,
     private val clock: Clock,
     private val timeZone: TimeZone,
 ) : ViewModel() {
@@ -104,11 +107,17 @@ class TodayViewModel @Inject constructor(
                             getTodayMeals(day),
                             repeatWeeklyFlow,
                         ) { overview, meals, repeatOn ->
+                            // 周复盘挂在同一次触发里取：写库之后整屏（含本周磁贴）一起刷新。
+                            // 取整周用 BuildWeeklyReviewUseCase 自己的规则，避免和 AI 教练页口径分叉。
+                            val review: WeeklyReview? = weeklyReviewOrNull(
+                                BuildWeeklyReviewUseCase.weekStartOf(day),
+                            )
                             overview.toUiState().copy(
                                 meals = meals.meals,
                                 mealTotals = meals.totals,
                                 dietTarget = meals.target,
                                 isRepeatWeeklyOn = repeatOn,
+                                weeklyReview = review,
                             )
                         }
                     }
@@ -134,6 +143,21 @@ class TodayViewModel @Inject constructor(
             overviewState.collect { data -> applyData(data) }
         }
     }
+
+    /**
+     * 取某一周的复盘；失败**只让本周那两块磁贴缺席**，不把整页打成错误态。
+     *
+     * ⚠️ 必须原样重抛 [CancellationException]：`ViewModel` 清理与页面切走都靠它，
+     * 一旦被当成普通失败吞掉，协程取消会静默失效。
+     */
+    private suspend fun weeklyReviewOrNull(weekStartEpochDay: Long): WeeklyReview? =
+        try {
+            buildWeeklyReview(weekStartEpochDay)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (failure: Exception) {
+            null
+        }
 
     /** 一键打卡。 */
     fun onQuickCheckIn(item: TodayPlanItem) {
@@ -499,6 +523,9 @@ class TodayViewModel @Inject constructor(
                 // 「每周相同」开关就会永远显示"关"（真机上就是这么踩到的：点了、库里也写了，
                 // 但开关弹回去，看着像"点了没反应"）。
                 isRepeatWeeklyOn = data.isRepeatWeeklyOn,
+                // 同一个坑的第二处：本函数逐字段搬运，漏一个字段那格就永远是初始值。
+                // 漏掉它时「本周」磁贴在任何一周都不出现（真机实测踩到）。
+                weeklyReview = data.weeklyReview,
                 todayEpochDay = todayEpochDay(),
                 errorRes = null,
                 snackbarRes = streakRes ?: state.snackbarRes,

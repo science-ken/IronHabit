@@ -44,6 +44,7 @@
     <string name="title_today_train">今日训练</string>
     <string name="title_today_habits">今日习惯</string>
     <string name="title_progress">今日完成</string>
+    <string name="label_week_total_sets">总组数</string>
     <string name="label_streak_days">连续 %1$d 天</string>
     <string name="label_streak_best">历史最长 %1$d 天</string>
     <string name="label_progress_ratio">%1$d / %2$d</string>

@@ -7,6 +7,12 @@ import com.ironhabit.app.domain.model.HabitItem
 import com.ironhabit.app.domain.model.TodayOverview
 import com.ironhabit.app.domain.model.TodayMeals
 import com.ironhabit.app.domain.model.TodayPlanItem
+import com.ironhabit.app.domain.model.BodyReview
+import com.ironhabit.app.domain.model.DietReview
+import com.ironhabit.app.domain.model.TrainingReview
+import com.ironhabit.app.domain.model.WeeklyReview
+import com.ironhabit.app.domain.usecase.BuildWeeklyReviewUseCase
+import io.mockk.coEvery
 import com.ironhabit.app.domain.model.WeekPlan
 import com.ironhabit.app.domain.repository.CheckInRepository
 import com.ironhabit.app.domain.repository.PlanRepository
@@ -35,6 +41,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Rule
 import org.junit.Test
 
@@ -64,6 +71,24 @@ class TodayViewModelDateCursorTest {
     private val upsertMeal = mockk<UpsertMealUseCase>(relaxed = true)
     private val checkInRepository = mockk<CheckInRepository>(relaxed = true)
     private val planRepository = mockk<PlanRepository>(relaxed = true)
+    private val buildWeeklyReview = mockk<BuildWeeklyReviewUseCase>()
+
+    /** 与周磁贴无关的用例：一份「本周什么都没练」的复盘 → 两块周磁贴都不渲染。 */
+    private fun emptyWeekReview(): WeeklyReview = WeeklyReview(
+        weekStartEpochDay = 0L,
+        weekEndEpochDay = 6L,
+        training = TrainingReview(
+            plannedDays = 0,
+            completedDays = 0,
+            totalVolumeKg = 0f,
+            totalSets = 0,
+            avgRpe = null,
+            progressed = emptyList(),
+            stalled = emptyList(),
+        ),
+        body = BodyReview(startWeightKg = null, latestWeightKg = null),
+        diet = DietReview(loggedDays = 0, avgKcal = null, avgProteinG = null),
+    )
 
     private val clock = Clock.System
     private val timeZone = TimeZone.UTC
@@ -85,6 +110,8 @@ class TodayViewModelDateCursorTest {
         // P3：今日页会读「每周相同」那份是否存在（开关状态）。
         every { planRepository.observeRepeatPlan() } returns flowOf(emptyList())
         every { checkInRepository.observeActiveDaysSince(any()) } returns flowOf(emptyList())
+        // 本用例不验证周磁贴：给一份「本周什么都没练」的复盘 → 磁贴整块不渲染。
+        coEvery { buildWeeklyReview.invoke(any()) } returns emptyWeekReview()
 
         return TodayViewModel(
             getTodayOverview = getTodayOverview,
@@ -102,6 +129,7 @@ class TodayViewModelDateCursorTest {
             upsertMeal = upsertMeal,
             checkInRepository = checkInRepository,
             planRepository = planRepository,
+            buildWeeklyReview = buildWeeklyReview,
             clock = clock,
             timeZone = timeZone,
         )
@@ -114,6 +142,21 @@ class TodayViewModelDateCursorTest {
 
         assertEquals("默认日期游标 = 今天", today, vm.uiState.value.dateEpochDay)
         assertEquals("todayEpochDay 与游标分离（高亮用）", today, vm.uiState.value.todayEpochDay)
+    }
+
+    /**
+     * 回归：`applyData` 逐字段搬运，漏掉 `weeklyReview` 时「本周」磁贴在**任何一周都不出现**
+     * （真机实测踩到，与 `isRepeatWeeklyOn` 是同一类坑 —— 数据流算好了却没落到 `_uiState`）。
+     */
+    @Test
+    fun weeklyReviewReachesUiState() = runTest(mainDispatcherRule.testDispatcher) {
+        val vm = newViewModel()
+        advanceUntilIdle()
+
+        assertNotNull(
+            "周复盘必须搬进 uiState，否则本周磁贴永远拿不到数据",
+            vm.uiState.value.weeklyReview,
+        )
     }
 
     @Test

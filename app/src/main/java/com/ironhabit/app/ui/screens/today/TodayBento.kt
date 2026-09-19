@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -23,7 +24,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.TodayPlanItem
+import com.ironhabit.app.domain.model.WeeklyReview
 import com.ironhabit.app.ui.components.planGoalText
+import com.ironhabit.app.ui.screens.ai.formatKg
 import com.ironhabit.app.ui.theme.IronHabitShapes
 import com.ironhabit.app.ui.theme.IronHabitSpacing
 import kotlin.math.roundToInt
@@ -74,6 +77,37 @@ fun TodayBento(
                 TileTitle(stringResource(R.string.title_progress))
                 TileValue(stringResource(R.string.label_progress_ratio, state.completedCount, state.totalCount))
                 ProgressPips(done = state.completedCount, total = state.totalCount)
+            }
+        }
+
+        // ---- 本周复盘（周总容量 / 平均 RPE / 总组数 / 体重变化）----
+        val review: WeeklyReview? = state.weeklyReview
+        if (review != null && (review.training.completedDays > 0 || review.body.deltaKg != null)) {
+            val missing: String = stringResource(R.string.ai_review_value_missing)
+            BentoTile(modifier = Modifier.fillMaxWidth()) {
+                TileTitle(stringResource(R.string.ai_review_title))
+                Row(horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.md)) {
+                    TileStat(
+                        label = stringResource(R.string.ai_review_stat_volume),
+                        value = formatKg(review.training.totalVolumeKg),
+                    )
+                    TileStat(
+                        label = stringResource(R.string.ai_review_stat_rpe),
+                        value = review.training.avgRpe?.let { formatKg(it) } ?: missing,
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.md)) {
+                    TileStat(
+                        label = stringResource(R.string.label_week_total_sets),
+                        value = review.training.totalSets.toString(),
+                    )
+                    TileStat(
+                        label = stringResource(R.string.ai_review_stat_weight),
+                        value = review.body.deltaKg?.let { delta ->
+                            (if (delta > 0f) "+" else "") + formatKg(delta)
+                        } ?: missing,
+                    )
+                }
             }
         }
 
@@ -177,6 +211,26 @@ private fun TileValue(text: String) {
         style = MaterialTheme.typography.titleLarge,
         color = MaterialTheme.colorScheme.onSurface,
     )
+}
+
+/** 磁贴内的一列「标签 + 数值」，与同排其他列平分宽度。 */
+@Composable
+private fun RowScope.TileStat(label: String, value: String) {
+    Column(
+        modifier = Modifier.weight(1f),
+        verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.xxs),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+    }
 }
 
 /**
