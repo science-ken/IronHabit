@@ -128,15 +128,7 @@ fun TodayScreen(
             }
 
             else -> {
-                // ---- 磁贴概览（① 形态：整屏只有磁贴，清单在点开的弹窗里）----
-                TodayBento(
-                    state = uiState,
-                    onOpenTrain = { sheetTarget = TodaySheetTarget.TRAIN },
-                    onOpenMeal = { sheetTarget = TodaySheetTarget.MEAL },
-                    onOpenHabit = { sheetTarget = TodaySheetTarget.HABIT },
-                )
-
-                // ---- 日期栏：切换查看日期（`‹ ›` 跨周；chip = 有计划的星期模板）----
+                // ---- 日期栏置顶：它决定下面每一块磁贴读的是哪一天，先选日子再看数 ----
                 val selectedEpochDay = uiState.dateEpochDay
                 if (selectedEpochDay > 0L) {
                     val weekStartEpochDay =
@@ -156,7 +148,7 @@ fun TodayScreen(
                     )
                 }
 
-                // ---- 未来日只读提示（可见反馈，避免「点了没反应」）----
+                // ---- 所选日的状态提示：紧跟日期栏，说的是"这一天" ----
                 if (isFutureDay) {
                     Text(
                         text = stringResource(R.string.msg_future_day_readonly),
@@ -172,6 +164,14 @@ fun TodayScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+
+                // ---- 磁贴概览（① 形态：整屏只有磁贴，清单在点开的弹窗里）----
+                TodayBento(
+                    state = uiState,
+                    onOpenTrain = { sheetTarget = TodaySheetTarget.TRAIN },
+                    onOpenMeal = { sheetTarget = TodaySheetTarget.MEAL },
+                    onOpenHabit = { sheetTarget = TodaySheetTarget.HABIT },
+                )
 
                 // ---- 三个常驻入口：不塞进弹窗，页面上一眼能点到 ----
                 Row(horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm)) {
