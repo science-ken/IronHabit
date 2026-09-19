@@ -49,6 +49,37 @@ data class GeneratedPlanSummary(
 )
 
 /**
+ * 生成结果的**预览态**：草案已经算完、保护规则已经跑过，但**一条都没写进库**。
+ *
+ * 界面把它摊开给用户看，用户挑完哪几天要，再交给
+ * [GenerateTrainingPlanUseCase.commit] 落库。它只是内存里的一份快照，
+ * 跨一次页面跳转够用，杀进程就没了 —— 这正是"撤销只在本次会话有效"的口径。
+ *
+ * @property weekStartEpochDay 这批草案属于哪一周（周一 epochDay；`0` = 「每周相同」那份，生成路径不会出现）
+ * @property draftsByDay `星期(1..7) → 该天可写的草案行`；已经被手改槽位和整日模板保护过滤过
+ * @property weekRowsForRetirement 生成时读到的**该周现有行快照**，只用于回收陈旧 AI 行
+ * @property templateOwnedDays 由「每周相同」模板（含用户手改）负责、本周整日不写的天，对应界面「已保留」
+ */
+data class PlanPreview(
+    val weekStartEpochDay: Long,
+    val draftsByDay: Map<Int, List<WeekPlan>>,
+    val weekRowsForRetirement: List<WeekPlan>,
+    val templateOwnedDays: Set<Int>,
+    val preservedCount: Int = 0,
+    val notes: List<PlanNote> = emptyList(),
+    val source: AdviceSource = AdviceSource.LOCAL_RULES,
+    val fallbackReason: RemoteFallbackReason? = null,
+    val analysis: String? = null,
+    val basis: List<PlanBasisItem> = emptyList(),
+) {
+    /** 这次生成排了课的天（有草案可采纳的）。 */
+    val writableDays: Set<Int> get() = draftsByDay.keys
+
+    /** 全部草案（按天、按 sortOrder 摊平）。 */
+    val allDrafts: List<WeekPlan> get() = draftsByDay.toSortedMap().values.flatten()
+}
+
+/**
  * **生成一周训练计划**（对应预览 `doPlan()`，`docs/ai-coach-local.md` §4.5）。
  *
  * 职责：组装输入 → 调 [PlanAdvisor.planWeek] → **只对可写槽位显式 upsert**。
@@ -108,7 +139,7 @@ class GenerateTrainingPlanUseCase @Inject constructor(
      *
      * @param weekStartEpochDay 目标周的周一；`null` = 今天所在的那一周
      */
-    suspend operator fun invoke(weekStartEpochDay: Long? = null): GeneratedPlanSummary {
+    suspend fun preview(weekStartEpochDay: Long? = null): PlanPreview {
         val profile = settingsRepository.profile().first()
         val library = exerciseRepository.observeActive().first()
         val today: LocalDate = clock.now().toLocalDateTime(timeZone).date
@@ -184,9 +215,39 @@ class GenerateTrainingPlanUseCase @Inject constructor(
                 }
             }
         }
-        // B-3：草案为空（远端 AI 幻觉被全部过滤 / 本地无可排内容）→ **绝不回收现有行**。
-        // 空草案只说明"本次没有可写入的内容"，绝不是"用户这周什么都不练"；
-        // 若照旧走回收，staleRows 会包含全部启用非手改行 → 一次空结果清空用户整周计划。
+        return PlanPreview(
+            weekStartEpochDay = targetWeek,
+            draftsByDay = drafts.groupBy { plan -> plan.dayOfWeek },
+            // 回收陈旧行要用到它，但**不在 commit 时回读数据库**：预览期间再读一次会让
+            // `invoke()` 变成两次 `getRowsForWeek`，而"只读一次"是既有单测钉住的口径。
+            weekRowsForRetirement = weekRows,
+            templateOwnedDays = userOwnedDays,
+            preservedCount = proposal.preservedUserEditedIds.size,
+            notes = proposal.notes,
+            source = proposal.source,
+            fallbackReason = advisor.lastFallbackReason,
+            analysis = proposal.analysis,
+            basis = proposal.basis,
+        )
+    }
+
+    /**
+     * 把预览里**被采纳的那几天**写进库；未采纳的天一行都不碰。
+     *
+     * 陈旧行回收同样**只在 [days] 范围内**做 —— 只采纳周三，就不能把周一上版生成的
+     * 那几条当成"本次不再出现"给停用掉。
+     *
+     * B-3：草案为空（远端 AI 幻觉被全部过滤 / 本地无可排内容）→ **绝不回收现有行**。
+     * 空草案只说明"本次没有可写入的内容"，绝不是"用户这周什么都不练"；
+     * 若照旧走回收，staleRows 会包含全部启用非手改行 → 一次空结果清空用户整周计划。
+     */
+    suspend fun commit(preview: PlanPreview, days: Set<Int>): GeneratedPlanSummary {
+        val drafts: List<WeekPlan> = preview.draftsByDay
+            .filterKeys { day -> day in days }
+            .toSortedMap()
+            .values
+            .flatten()
+
         val writtenCount: Int
         val retiredCount: Int
         if (drafts.isNotEmpty()) {
@@ -195,12 +256,14 @@ class GenerateTrainingPlanUseCase @Inject constructor(
             writtenCount = drafts.size
 
             // ③ 修复 C2：回收**上版生成、本次不再出现**的陈旧 AI 行（只停用，不删除）。
-            //    过滤：已启用 + 非用户手改 + 本次未写入；用户手改行（含软删除行）永不淘汰。
+            //    过滤：已启用 + 非用户手改 + 本次未写入 + 落在本次采纳的天里；
+            //    用户手改行（含软删除行）永不淘汰。
             val writtenSlots: Set<Pair<Int, Long>> =
-                drafts.map { it.dayOfWeek to it.exerciseId }.toSet()
-            val staleRows: List<WeekPlan> = weekRows.filter { row ->
+                drafts.map { plan -> plan.dayOfWeek to plan.exerciseId }.toSet()
+            val staleRows: List<WeekPlan> = preview.weekRowsForRetirement.filter { row ->
                 row.isActive &&
                     !row.isUserEdited &&
+                    row.dayOfWeek in days &&
                     (row.dayOfWeek to row.exerciseId) !in writtenSlots
             }
             retiredCount = planRepository.deactivateGenerated(staleRows)
@@ -211,14 +274,30 @@ class GenerateTrainingPlanUseCase @Inject constructor(
 
         return GeneratedPlanSummary(
             writtenCount = writtenCount,
-            preservedCount = proposal.preservedUserEditedIds.size,
+            preservedCount = preview.preservedCount,
             retiredCount = retiredCount,
-            notes = proposal.notes,
-            source = proposal.source,
-            fallbackReason = advisor.lastFallbackReason,
+            notes = preview.notes,
+            source = preview.source,
+            fallbackReason = preview.fallbackReason,
             plans = drafts,
-            analysis = proposal.analysis,
-            basis = proposal.basis,
+            analysis = preview.analysis,
+            basis = preview.basis,
         )
+    }
+
+    /**
+     * 生成 + **整周写入**（拆分前的旧口径，等价于预览之后不挑、直接全部采纳）。
+     *
+     * 界面走的是 [preview] → 用户挑 → [commit] 这条有闸门的链路；
+     * 这里留给不需要预览的调用点，行为与逐条等价。
+     */
+    suspend operator fun invoke(weekStartEpochDay: Long? = null): GeneratedPlanSummary {
+        val plan: PlanPreview = preview(weekStartEpochDay)
+        return commit(plan, ALL_DAYS)
+    }
+
+    private companion object {
+        /** 整周采纳（`1..7`）：与拆分前"生成即写全周"逐条等价。 */
+        val ALL_DAYS: Set<Int> = (1..7).toSet()
     }
 }
