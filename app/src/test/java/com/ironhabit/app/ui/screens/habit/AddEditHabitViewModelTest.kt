@@ -8,6 +8,7 @@ import com.ironhabit.app.domain.repository.HabitRepository
 import com.ironhabit.app.domain.repository.ReminderScheduler
 import com.ironhabit.app.test.MainDispatcherRule
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -238,5 +239,71 @@ class AddEditHabitViewModelTest {
         advanceUntilIdle()
 
         assertEquals("失败后必须复位，否则用户只能退出页面重来", false, vm.uiState.value.isSaving)
+    }
+
+    // ---------------- 2.0.9：每个习惯各占一个提醒槽 ----------------
+
+    /**
+     * 开启提醒 → 只排**这一个**习惯的槽。
+     *
+     * 2.0.8 这里调的是全局 `schedule(HABIT, …)`：保存第二个习惯会把第一个的闹钟顶掉。
+     * 所以"没碰全局槽"和"没去 cancel 全局槽"这两条断言才是这次的回归防线，
+     * 光断言 scheduleHabit 被调用，旧代码改个名也能过。
+     */
+    @Test
+    fun enablingReminder_schedulesThisHabitAndNeverTouchesTheGlobalSlot() =
+        runTest(mainDispatcherRule.testDispatcher) {
+            val repo = repositoryWith(listOf(measurableHabit))
+            val vm = viewModel(repo, habitId = 42L)
+            advanceUntilIdle()
+
+            vm.onReminderEnabledChange(true)
+            vm.onReminderTimeChange(7, 30)
+            vm.onSave()
+            advanceUntilIdle()
+
+            coVerify { scheduler.scheduleHabit(42L, 7, 30) }
+            coVerify(exactly = 0) { scheduler.schedule(any(), any(), any()) }
+            coVerify(exactly = 0) { scheduler.cancel(any()) }
+        }
+
+    /** 关掉这一个习惯的提醒 → 只撤它的槽，不能把别的习惯的闹钟一起撤了。 */
+    @Test
+    fun disablingReminder_cancelsOnlyThisHabit() = runTest(mainDispatcherRule.testDispatcher) {
+        val repo = repositoryWith(listOf(measurableHabit.copy(reminderEnabled = true, reminderHour = 7, reminderMinute = 30)))
+        val vm = viewModel(repo, habitId = 42L)
+        advanceUntilIdle()
+
+        vm.onReminderEnabledChange(false)
+        vm.onSave()
+        advanceUntilIdle()
+
+        coVerify { scheduler.cancelHabit(42L) }
+        coVerify(exactly = 0) { scheduler.cancel(any()) }
+        coVerify(exactly = 0) { scheduler.scheduleHabit(any(), any(), any()) }
+    }
+
+    /**
+     * **新建**习惯：槽号必须用落库后返回的 id，不能用还是 0 的 `habit.id`。
+     *
+     * 用 0 的话，所有新建习惯都抢同一个槽 —— 表面上"设了提醒"，实际只有最后一个会响，
+     * 而且这个坑只在新增路径上出现（编辑路径 id 本来就有），很容易漏测。
+     */
+    @Test
+    fun newHabit_schedulesUnderTheIdTheDatabaseGaveBack() = runTest(mainDispatcherRule.testDispatcher) {
+        val repo = mockk<HabitRepository>(relaxed = true)
+        every { repo.observeActiveHabits() } returns flowOf(emptyList())
+        coEvery { repo.upsertHabit(any()) } returns 99L
+
+        val vm = viewModel(repo, habitId = 0L)
+        advanceUntilIdle()
+        vm.onNameChange("晨跑")
+        vm.onReminderEnabledChange(true)
+        vm.onReminderTimeChange(6, 45)
+        vm.onSave()
+        advanceUntilIdle()
+
+        coVerify { scheduler.scheduleHabit(99L, 6, 45) }
+        coVerify(exactly = 0) { scheduler.scheduleHabit(0L, any(), any()) }
     }
 }

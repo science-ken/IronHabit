@@ -9,7 +9,6 @@ import com.ironhabit.app.domain.model.Habit
 import com.ironhabit.app.domain.model.HabitFrequency
 import com.ironhabit.app.domain.repository.HabitRepository
 import com.ironhabit.app.domain.repository.ReminderScheduler
-import com.ironhabit.app.domain.repository.ReminderType
 import com.ironhabit.app.ui.navigation.Destinations
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -241,16 +240,21 @@ class AddEditHabitViewModel @Inject constructor(
                     sortOrder = existing?.sortOrder ?: 0,
                     createdAt = existing?.createdAt?.takeIf { it > 0L } ?: nowMillis,
                 )
-                habitRepository.upsertHabit(habit)
+                // 必须用 upsert 返回的 id：新建时 habit.id 还是 0，拿 0 去排槽
+                // 会让所有新建习惯抢同一个 requestCode —— 又退回"只有一个会响"。
+                val savedId = habitRepository.upsertHabit(habit)
 
+                // 只动**这一个**习惯的槽。原来这里调的是 schedule(HABIT)/cancel(HABIT)，
+                // 那是全局槽：保存第二个习惯会顶掉第一个的闹钟，关掉第三个的开关
+                // 会把前两个的闹钟一起撤掉。
                 if (state.reminderEnabled) {
-                    reminderScheduler.schedule(
-                        ReminderType.HABIT,
+                    reminderScheduler.scheduleHabit(
+                        savedId,
                         state.reminderHour,
                         state.reminderMinute,
                     )
                 } else {
-                    reminderScheduler.cancel(ReminderType.HABIT)
+                    reminderScheduler.cancelHabit(savedId)
                 }
 
                 _uiState.update { it.copy(snackbarRes = R.string.msg_saved, saved = true) }

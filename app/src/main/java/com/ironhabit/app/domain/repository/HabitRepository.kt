@@ -12,6 +12,17 @@ interface HabitRepository {
     /** 观察全部启用习惯。 */
     fun observeActiveHabits(): Flow<List<Habit>>
 
+    /**
+     * 一次性快照：**含已停用 / 已软删**的全部习惯。
+     *
+     * 只给提醒重排用 —— 重排必须能把"曾经排过、现在不该再响"的那些槽撤掉，
+     * 只看启用中的习惯就找不到它们了。界面不要用它（会把已删习惯渲染出来）。
+     */
+    suspend fun allHabits(): List<Habit>
+
+    /** 按 id 取单个习惯（提醒通知里要写习惯名，所以广播侧要用）。不存在返回 `null`。 */
+    suspend fun getHabit(habitId: Long): Habit?
+
     /** 观察日期区间内的习惯日志。 */
     fun observeLogsBetween(startEpochDay: Long, endEpochDay: Long): Flow<List<HabitLog>>
 

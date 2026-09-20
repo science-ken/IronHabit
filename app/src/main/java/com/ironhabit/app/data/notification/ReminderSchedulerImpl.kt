@@ -40,21 +40,43 @@ class ReminderSchedulerImpl @Inject constructor(
 ) : ReminderScheduler {
 
     override suspend fun schedule(type: ReminderType, hour: Int, minute: Int) {
-        var triggerAtMillis = triggerAt(hour, minute, daysAhead = 0L)
-        if (triggerAtMillis <= nowMillis()) {
-            // 今天该时刻已过 → 顺延到明天
-            triggerAtMillis = triggerAt(hour, minute, daysAhead = 1L)
-        }
-        setAlarm(triggerAtMillis, type, hour, minute)
+        setAlarm(nextTriggerMillis(hour, minute), type, hour, minute, habitId = null)
     }
 
     override suspend fun scheduleNext(type: ReminderType, hour: Int, minute: Int) {
         // 触发后自续期：始终排「明天」同一时刻
-        setAlarm(triggerAt(hour, minute, daysAhead = 1L), type, hour, minute)
+        setAlarm(triggerAt(hour, minute, daysAhead = 1L), type, hour, minute, habitId = null)
+    }
+
+    override suspend fun scheduleHabit(habitId: Long, hour: Int, minute: Int) {
+        setAlarm(
+            nextTriggerMillis(hour, minute),
+            ReminderType.HABIT,
+            hour,
+            minute,
+            habitId = habitId,
+        )
+    }
+
+    override suspend fun scheduleHabitNext(habitId: Long, hour: Int, minute: Int) {
+        setAlarm(
+            triggerAt(hour, minute, daysAhead = 1L),
+            ReminderType.HABIT,
+            hour,
+            minute,
+            habitId = habitId,
+        )
     }
 
     override suspend fun cancel(type: ReminderType) {
-        val pendingIntent = pendingIntent(type, hour = 0, minute = 0)
+        val pendingIntent = pendingIntent(type, hour = 0, minute = 0, habitId = null)
+        alarmManager.cancel(pendingIntent)
+        pendingIntent.cancel()
+    }
+
+    override suspend fun cancelHabit(habitId: Long) {
+        val pendingIntent =
+            pendingIntent(ReminderType.HABIT, hour = 0, minute = 0, habitId = habitId)
         alarmManager.cancel(pendingIntent)
         pendingIntent.cancel()
     }
@@ -62,6 +84,9 @@ class ReminderSchedulerImpl @Inject constructor(
     override suspend fun cancelAll() {
         cancel(ReminderType.TRAINING)
         cancel(ReminderType.HABIT)
+        for (habit in habitRepository.allHabits()) {
+            cancelHabit(habit.id)
+        }
     }
 
     override suspend fun rescheduleAll() {
@@ -73,33 +98,38 @@ class ReminderSchedulerImpl @Inject constructor(
             cancel(ReminderType.TRAINING)
         }
 
-        // 习惯提醒：取最早的一条（单 requestCode 约束下只保留一个习惯提醒槽）
-        val earliestHabitTime = earliestHabitReminder()
-        if (earliestHabitTime != null) {
-            schedule(ReminderType.HABIT, earliestHabitTime.first, earliestHabitTime.second)
-        } else {
-            cancel(ReminderType.HABIT)
-        }
-    }
+        // 遗留的「习惯共用一个槽」闹钟：无论现在有没有习惯要提醒，一律撤掉。
+        // 2.0.9 起不再往这个槽排，但**升级前**排进去的会一直留着，
+        // 不主动撤的话老用户会每天收到一条不指认任何习惯的提醒。
+        cancel(ReminderType.HABIT)
 
-    /** 在所有「启用且设定了时间」的习惯里，取一天中最早的那一个（hour, minute）。 */
-    private suspend fun earliestHabitReminder(): Pair<Int, Int>? {
-        val habits = habitRepository.observeActiveHabits().first()
-        var best: HabitReminder? = null
-        for (habit in habits) {
-            val hour = habit.reminderHour ?: continue
-            val minute = habit.reminderMinute ?: continue
-            if (!habit.reminderEnabled) continue
-            val minutesOfDay = hour * MINUTES_PER_HOUR + minute
-            if (best == null || minutesOfDay < best!!.minutesOfDay) {
-                best = HabitReminder(minutesOfDay, hour, minute)
+        // 每个习惯各占一槽。遍历**全部**习惯（含已停用）而不是只遍历该排的，
+        // 这样"上次排了、这次不该排"的槽会被就地撤掉 —— 不需要额外存"上次排了哪些"。
+        for (habit in habitRepository.allHabits()) {
+            val hour = habit.reminderHour
+            val minute = habit.reminderMinute
+            if (habit.isActive && habit.reminderEnabled && hour != null && minute != null) {
+                scheduleHabit(habit.id, hour, minute)
+            } else {
+                cancelHabit(habit.id)
             }
         }
-        return best?.let { it.hour to it.minute }
     }
 
-    private fun setAlarm(triggerAtMillis: Long, type: ReminderType, hour: Int, minute: Int) {
-        val pendingIntent = pendingIntent(type, hour, minute)
+    /** 「今天该时刻还没过就排今天，否则顺延到明天」。 */
+    private fun nextTriggerMillis(hour: Int, minute: Int): Long {
+        val today = triggerAt(hour, minute, daysAhead = 0L)
+        return if (today > nowMillis()) today else triggerAt(hour, minute, daysAhead = 1L)
+    }
+
+    private fun setAlarm(
+        triggerAtMillis: Long,
+        type: ReminderType,
+        hour: Int,
+        minute: Int,
+        habitId: Long?,
+    ) {
+        val pendingIntent = pendingIntent(type, hour, minute, habitId)
         if (canScheduleExactAlarms()) {
             alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
         } else {
@@ -126,23 +156,20 @@ class ReminderSchedulerImpl @Inject constructor(
 
     private fun nowMillis(): Long = clock.now().toEpochMilliseconds()
 
-    private fun pendingIntent(type: ReminderType, hour: Int, minute: Int): PendingIntent =
+    private fun pendingIntent(
+        type: ReminderType,
+        hour: Int,
+        minute: Int,
+        habitId: Long?,
+    ): PendingIntent =
         PendingIntent.getBroadcast(
             context,
-            type.requestCode,
-            ReminderReceiver.reminderIntent(context, type, hour, minute),
+            ReminderType.slotFor(type, habitId),
+            ReminderReceiver.reminderIntent(context, type, hour, minute, habitId),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
-    /** 习惯提醒时间候选。 */
-    private data class HabitReminder(
-        val minutesOfDay: Int,
-        val hour: Int,
-        val minute: Int,
-    )
-
     private companion object {
-        const val MINUTES_PER_HOUR: Int = 60
         const val MILLIS_PER_HOUR: Long = 3_600_000L
         const val MILLIS_PER_MINUTE: Long = 60_000L
     }

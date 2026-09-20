@@ -38,6 +38,12 @@ class HabitRepositoryImpl @Inject constructor(
             .map { entities -> entities.map { entity -> HabitMapper.toDomain(entity) } }
             .flowOn(ioDispatcher)
 
+    override suspend fun allHabits(): List<Habit> =
+        habitDao.getAll().map { entity -> HabitMapper.toDomain(entity) }
+
+    override suspend fun getHabit(habitId: Long): Habit? =
+        habitDao.getById(habitId)?.let { entity -> HabitMapper.toDomain(entity) }
+
     override fun observeLogsBetween(startEpochDay: Long, endEpochDay: Long): Flow<List<HabitLog>> =
         habitLogDao.observeBetween(startEpochDay, endEpochDay)
             .map { entities -> entities.map { entity -> HabitMapper.toDomain(entity) } }
