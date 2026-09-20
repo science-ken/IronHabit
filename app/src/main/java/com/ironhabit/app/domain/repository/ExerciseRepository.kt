@@ -30,6 +30,11 @@ interface ExerciseRepository {
     /** 打卡后累加动作使用次数（供排序）。 */
     suspend fun bumpUsage(exerciseId: Long)
 
-    /** 幂等播种内置动作，返回**本次新插入**的条数（已存在的不计）。 */
+    /**
+     * 幂等播种内置动作，返回**本次新插入**的条数（已存在的不计）。
+     *
+     * 顺带对同名占位行做"只补空、不覆盖"的标注补齐（见 `DatabaseSeeder`），
+     * 那部分不计入返回值。
+     */
     suspend fun seedBuiltIns(): Int
 }

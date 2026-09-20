@@ -50,5 +50,5 @@ class ExerciseRepositoryImpl @Inject constructor(
         exerciseDao.bumpUsage(exerciseId)
     }
 
-    override suspend fun seedBuiltIns(): Int = databaseSeeder.seedIfNeeded()
+    override suspend fun seedBuiltIns(): Int = databaseSeeder.seedIfNeeded().inserted
 }

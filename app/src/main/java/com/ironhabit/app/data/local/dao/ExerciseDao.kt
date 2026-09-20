@@ -41,6 +41,15 @@ interface ExerciseDao {
     @Query("SELECT * FROM exercises WHERE name = :name LIMIT 1")
     suspend fun getByName(name: String): ExerciseEntity?
 
+    /**
+     * 批量按 `name` 取行（播种补空用：一次查询拿回全部占位行，避免逐条内置动作点查）。
+     *
+     * ⚠️ `names` 不能为空 —— 空列表会生成 `IN ()`，SQLite 视为语法错误。调用方
+     * （`DatabaseSeeder`）自己保证非空。
+     */
+    @Query("SELECT * FROM exercises WHERE name IN (:names)")
+    suspend fun getByNames(names: List<String>): List<ExerciseEntity>
+
     /** 单行插入（主键冲突即抛 `ABORT`，**禁用 `REPLACE`**）。仅供 [upsert] 未命中路径使用。 */
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(entity: ExerciseEntity): Long
