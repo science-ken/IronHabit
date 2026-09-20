@@ -1,5 +1,6 @@
 package com.ironhabit.app.data.repository
 
+import com.ironhabit.app.domain.model.BackupPayload
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -138,6 +139,53 @@ class BackupRestoreRulesTest {
                 "两者起始版本若漂移，说明有人只改了其中一处",
             BackupRestoreRules.TRAINING_DAYS_SCHEMA_VERSION,
             BackupRestoreRules.MEALS_SCHEMA_VERSION,
+        )
+    }
+
+    // ---------------- P0-1 的第二张多米诺：v4 备份会靠级联删掉本机明细 ----------------
+
+    /**
+     * `meal_items.meal_id` 对 `meals` 是 `ON DELETE CASCADE`（真机 schema v9 实测：
+     * `DELETE FROM meals` 之后 `meal_items` 归零）。所以"导入 v4 备份时只替换 meals、
+     * 不碰明细"这件事**在物理上做不到** —— 清空 `meals` 本身就是删明细。
+     *
+     * 这条测试守的是：v4 及更早的备份，饮食四张表**一张都不许换**。
+     */
+    @Test
+    fun v4AndOlderBackupsMustNotReplaceDietTables() {
+        assertFalse(BackupRestoreRules.replacesDietTables(0))
+        assertFalse(BackupRestoreRules.replacesDietTables(1))
+        assertFalse(BackupRestoreRules.replacesDietTables(2))
+        assertFalse(BackupRestoreRules.replacesDietTables(3))
+        assertFalse(
+            "v4 携带 meals 但**不**携带 meal_items → 清 meals 会级联清掉本机明细",
+            BackupRestoreRules.replacesDietTables(4),
+        )
+    }
+
+    @Test
+    fun v5BackupsReplaceDietTablesAsAGroup() {
+        assertTrue("v5 起 meals + foods + servings + meal_items 一起换", BackupRestoreRules.replacesDietTables(5))
+        assertTrue("更高版本沿用同一契约（判定单调）", BackupRestoreRules.replacesDietTables(6))
+        assertEquals("饮食明细自 v5 起纳入备份", 5, BackupRestoreRules.DIET_DETAIL_SCHEMA_VERSION)
+        assertTrue(
+            "携带明细必然也携带 meals：两个判据若脱钩，说明有人单独放宽了其中一个",
+            BackupRestoreRules.replacesDietTables(5) ==
+                (BackupRestoreRules.carriesMeals(5) && BackupRestoreRules.carriesDietDetail(5)),
+        )
+    }
+
+    /** 抬版本的人必须同时想到"旧备份从此不再替换饮食表"这条后果。 */
+    @Test
+    fun dietDetailGateIsStrictlyNewerThanMealsGate() {
+        assertTrue(
+            "明细的起始版本必须**晚于** meals —— 否则 replacesDietTables 与 carriesMeals 同值，" +
+                "那条级联红线就没被任何判据挡住",
+            BackupRestoreRules.DIET_DETAIL_SCHEMA_VERSION > BackupRestoreRules.MEALS_SCHEMA_VERSION,
+        )
+        assertTrue(
+            "当前版本必须带明细，否则导出的备份自己就导不回去",
+            BackupRestoreRules.replacesDietTables(BackupPayload.CURRENT_SCHEMA_VERSION),
         )
     }
 }

@@ -82,11 +82,15 @@ class BackupViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val result = importData(uri)
-                val snackbarRes = if (result.isSuccess) {
-                    R.string.msg_import_success
-                } else {
-                    R.string.msg_import_failed
-                }
+                val snackbarRes = result.getOrNull()?.let { report ->
+                    // 备份早于 v5 时饮食四张表**没被替换**（本机记录保住了）。不说的话，
+                    // 用户看到"导入成功"会以为食物库和明细也回来了。
+                    if (report.dietSkipped) {
+                        R.string.msg_import_success_diet_skipped
+                    } else {
+                        R.string.msg_import_success
+                    }
+                } ?: R.string.msg_import_failed
                 _uiState.update {
                     it.copy(isBusy = false, pendingImportUri = null, snackbarRes = snackbarRes)
                 }

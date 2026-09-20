@@ -5,16 +5,22 @@ import com.ironhabit.app.data.local.AppDatabase
 import com.ironhabit.app.data.local.dao.BodyMetricDao
 import com.ironhabit.app.data.local.dao.CheckInDao
 import com.ironhabit.app.data.local.dao.ExerciseDao
+import com.ironhabit.app.data.local.dao.FoodDao
+import com.ironhabit.app.data.local.dao.FoodWithServings
 import com.ironhabit.app.data.local.dao.HabitDao
 import com.ironhabit.app.data.local.dao.HabitLogDao
 import com.ironhabit.app.data.local.dao.MealDao
+import com.ironhabit.app.data.local.dao.MealItemDao
 import com.ironhabit.app.data.local.dao.WeekPlanDao
 import com.ironhabit.app.data.local.entity.BodyMetricEntity
 import com.ironhabit.app.data.local.entity.CheckInEntity
 import com.ironhabit.app.data.local.entity.ExerciseEntity
+import com.ironhabit.app.data.local.entity.FoodEntity
+import com.ironhabit.app.data.local.entity.FoodServingEntity
 import com.ironhabit.app.data.local.entity.HabitEntity
 import com.ironhabit.app.data.local.entity.HabitLogEntity
 import com.ironhabit.app.data.local.entity.MealEntity
+import com.ironhabit.app.data.local.entity.MealItemEntity
 import com.ironhabit.app.data.local.entity.WeekPlanEntity
 import com.ironhabit.app.data.preferences.SettingsDataStore
 import com.ironhabit.app.di.AppVersion
@@ -29,6 +35,8 @@ import com.ironhabit.app.domain.model.Equipment
 import com.ironhabit.app.domain.model.ExerciseBackup
 import com.ironhabit.app.domain.model.ExerciseCategory
 import com.ironhabit.app.domain.model.ExerciseSource
+import com.ironhabit.app.domain.model.FoodBackup
+import com.ironhabit.app.domain.model.FoodServingBackup
 import com.ironhabit.app.domain.model.Gender
 import com.ironhabit.app.domain.model.Goal
 import com.ironhabit.app.domain.model.HabitBackup
@@ -36,6 +44,7 @@ import com.ironhabit.app.domain.model.HabitFrequency
 import com.ironhabit.app.domain.model.HabitLogBackup
 import com.ironhabit.app.domain.model.InjuryArea
 import com.ironhabit.app.domain.model.MealBackup
+import com.ironhabit.app.domain.model.MealItemBackup
 import com.ironhabit.app.domain.model.ProfileLimits
 import com.ironhabit.app.domain.model.SettingsBackup
 import com.ironhabit.app.domain.model.ThemeMode
@@ -45,6 +54,7 @@ import com.ironhabit.app.domain.model.WeekPlanBackup
 import com.ironhabit.app.domain.model.decodeEnum
 import com.ironhabit.app.domain.model.decodeEnumSet
 import com.ironhabit.app.domain.model.encodeEnumSet
+import com.ironhabit.app.domain.repository.BackupImportReport
 import com.ironhabit.app.domain.repository.BackupRepository
 import com.ironhabit.app.domain.repository.ReminderScheduler
 import javax.inject.Inject
@@ -57,7 +67,9 @@ import kotlinx.serialization.json.Json
  * [BackupRepository] 的 data 层实现。
  *
  * 纯本地文件 JSON 导出 / 导入（kotlinx.serialization），**绝不引入任何网络库**。
- * 导入为「整体替换」：在单个 Room 事务内清空 7 张表并保留原 `id` 重建，失败整体回滚。
+ * 导入为「整体替换」：在单个 Room 事务内清空训练侧 6 张表 + 饮食侧 4 张表并保留原 `id` 重建，
+ * 失败整体回滚。⚠️ 饮食那 4 张是**一组**，且只在 v5+ 备份才换 —— 理由见
+ * [BackupRestoreRules.replacesDietTables]。
  *
  * v3 修复：① 备份快照带上**用户档案 + AI 联网开关**（此前恢复会静默抹掉档案）；
  * ② 6 张表全部导出 / 还原真实 `createdAt`（老备份缺失 → 回落导入时刻，不再硬编码 `0L`）；
@@ -77,6 +89,8 @@ class BackupRepositoryImpl @Inject constructor(
     private val habitLogDao: HabitLogDao,
     private val bodyMetricDao: BodyMetricDao,
     private val mealDao: MealDao,
+    private val foodDao: FoodDao,
+    private val mealItemDao: MealItemDao,
     private val settingsDataStore: SettingsDataStore,
     private val reminderScheduler: ReminderScheduler,
     @AppVersion private val appVersion: String,
@@ -106,12 +120,14 @@ class BackupRepositoryImpl @Inject constructor(
             habitLogs = habitLogDao.getAll().map { it.toBackup() },
             bodyMetrics = bodyMetricDao.getAll().map { it.toBackup() },
             meals = mealDao.getAll().map { it.toBackup() },
+            foods = foodDao.getAllWithServings().map { it.toBackup() },
+            mealItems = mealItemDao.getAll().map { it.toBackup() },
             settings = settings.toBackup(profile, aiRemoteEnabled),
         )
         return jsonCodec.encodeToString(BackupPayload.serializer(), payload)
     }
 
-    override suspend fun import(json: String): Result<Unit> = runCatching {
+    override suspend fun import(json: String): Result<BackupImportReport> = runCatching {
         val payload = jsonCodec.decodeFromString(BackupPayload.serializer(), json)
         require(payload.schemaVersion <= BackupPayload.CURRENT_SCHEMA_VERSION) {
             "备份文件版本过高（v${payload.schemaVersion}），请升级 App 后再导入"
@@ -133,8 +149,14 @@ class BackupRepositoryImpl @Inject constructor(
             // （与本文件 B-6 的既有口径自相矛盾：老备份不该覆盖本地已有数据）。
             // 判据用**版本号**而不是 `isEmpty()`：用户确实没有饮食记录时列表同样为空，
             // 那属于"显式携带的空快照"，与"老备份根本没这个键"是两回事。
-            val carriesMeals: Boolean = BackupRestoreRules.carriesMeals(payload.schemaVersion)
-            if (carriesMeals) {
+            val replacesDiet: Boolean = BackupRestoreRules.replacesDietTables(payload.schemaVersion)
+            if (replacesDiet) {
+                // 四张表一起换，且**先删子表**。`meal_items.meal_id` 对 `meals` 是
+                // `ON DELETE CASCADE`（真机 schema v9 实测），只删 `meals` 在效果上也会带走明细 ——
+                // 但恢复是一次性、不可撤销的动作，正确性不该押在"外键恰好开着"这种隐式前提上。
+                mealItemDao.clearAll()
+                foodDao.clearAllServings()
+                foodDao.clearAll()
                 mealDao.clearAll()
             }
 
@@ -144,8 +166,12 @@ class BackupRepositoryImpl @Inject constructor(
             habitDao.insertAll(payload.habits.map { it.toEntity(importMillis) })
             habitLogDao.insertAll(payload.habitLogs.map { it.toEntity(importMillis) })
             bodyMetricDao.insertAll(payload.bodyMetrics.map { it.toEntity(importMillis) })
-            if (carriesMeals) {
+            if (replacesDiet) {
+                // 写入顺序 = 外键方向：`meals` / `foods` 先落，`food_servings` 与 `meal_items` 才有父行可指。
                 mealDao.insertAll(payload.meals.map { it.toEntity(importMillis) })
+                foodDao.insertAll(payload.foods.map { it.toEntity(importMillis) })
+                foodDao.insertAllServings(payload.foods.flatMap { it.toServingEntities() })
+                mealItemDao.insertAll(payload.mealItems.map { it.toEntity(importMillis) })
             }
         }
 
@@ -155,6 +181,10 @@ class BackupRepositoryImpl @Inject constructor(
         // B-7：设置（提醒时间/开关）与习惯提醒可能都变了 → 重排全部 AlarmManager 闹钟。
         // 必须放在事务与设置写回**都成功之后**：此时 DataStore 里才是最终生效的提醒配置。
         reminderScheduler.rescheduleAll()
+
+        BackupImportReport(
+            dietSkipped = !BackupRestoreRules.replacesDietTables(payload.schemaVersion),
+        )
     }
 
     /**
@@ -264,6 +294,29 @@ internal object BackupRestoreRules {
      */
     fun carriesMeals(schemaVersion: Int): Boolean =
         schemaVersion >= MEALS_SCHEMA_VERSION
+
+    /** 备份自 v5 起携带 `foods`（连 `food_servings`）与 `meal_items`。 */
+    const val DIET_DETAIL_SCHEMA_VERSION: Int = 5
+
+    /** 备份是否携带食物库与明细。 */
+    fun carriesDietDetail(schemaVersion: Int): Boolean =
+        schemaVersion >= DIET_DETAIL_SCHEMA_VERSION
+
+    /**
+     * 导入时**能不能**把饮食那四张表（`meals` / `foods` / `food_servings` / `meal_items`）整块替换。
+     *
+     * 两个条件都要满足，缺一不可，而且理由不在字面上：
+     * - 不携带 `meals`（v1–v3）→ 灌空列表会清空本机饮食历史（P0-1，原有那条）。
+     * - 携带 `meals` 但**不携带 `meal_items`**（v4）→ 看着更安全，其实更危险：
+     *   `meal_items.meal_id` 对 `meals` 是 `ON DELETE CASCADE`（真机 schema v9 实测：
+     *   `DELETE FROM meals` 之后 `meal_items` 归零），所以"只替换 meals"这件事
+     *   **在物理上做不到不碰明细**。导入一份 v4 备份会把本机记过的明细连带删干净。
+     *
+     * 所以 v4 备份导入时饮食四张表**一行都不动**，并把这件事回报给用户
+     * （[BackupImportReport.dietSkipped]）。宁可少恢复一张表，不可洗掉用户记过的东西。
+     */
+    fun replacesDietTables(schemaVersion: Int): Boolean =
+        carriesMeals(schemaVersion) && carriesDietDetail(schemaVersion)
 
     /**
      * 备份 `createdAt` → 实体 `createdAt`。
@@ -504,6 +557,95 @@ private fun MealBackup.toEntity(importMillis: Long): MealEntity = MealEntity(
     sortOrder = sortOrder,
     isActive = isActive,
     isUserEdited = isUserEdited,
+    createdAt = BackupRestoreRules.resolveCreatedAt(createdAt, importMillis),
+)
+
+private fun FoodWithServings.toBackup(): FoodBackup = FoodBackup(
+    id = food.id,
+    name = food.name,
+    kcalPer100g = food.kcalPer100g,
+    proteinPer100g = food.proteinPer100g,
+    carbsPer100g = food.carbsPer100g,
+    fatPer100g = food.fatPer100g,
+    dietaryTags = food.dietaryTags,
+    source = food.source,
+    note = food.note,
+    isActive = food.isActive,
+    isUserEdited = food.isUserEdited,
+    sortOrder = food.sortOrder,
+    createdAt = food.createdAt,
+    servings = this@toBackup.servings.map { serving ->
+        FoodServingBackup(
+            id = serving.id,
+            unit = serving.unit,
+            grams = serving.grams,
+            sortOrder = serving.sortOrder,
+        )
+    },
+)
+
+private fun FoodBackup.toEntity(importMillis: Long): FoodEntity = FoodEntity(
+    id = id,
+    name = name,
+    kcalPer100g = kcalPer100g,
+    proteinPer100g = proteinPer100g,
+    carbsPer100g = carbsPer100g,
+    fatPer100g = fatPer100g,
+    dietaryTags = dietaryTags,
+    source = source,
+    note = note,
+    isActive = isActive,
+    isUserEdited = isUserEdited,
+    sortOrder = sortOrder,
+    createdAt = BackupRestoreRules.resolveCreatedAt(createdAt, importMillis),
+)
+
+/**
+ * 子表行按**父行的 id** 重新落。
+ *
+ * 不能原样搬 [FoodServingBackup.id]：备份里的子行 id 与本机现有 `food_servings` 可能撞号，
+ * 而份量定义没有任何东西引用它的 id（引用它的是 `foods` 这一侧的 1—N 关系），
+ * 让它重新自增既避开冲突也无损失。
+ */
+private fun FoodBackup.toServingEntities(): List<FoodServingEntity> = servings.map { serving ->
+    FoodServingEntity(
+        foodId = id,
+        unit = serving.unit,
+        grams = serving.grams,
+        sortOrder = serving.sortOrder,
+    )
+}
+
+private fun MealItemEntity.toBackup(): MealItemBackup = MealItemBackup(
+    id = id,
+    mealId = mealId,
+    foodId = foodId,
+    foodName = foodName,
+    grams = grams,
+    servingUnit = servingUnit,
+    servingCount = servingCount,
+    kcal = kcal,
+    proteinG = proteinG,
+    carbsG = carbsG,
+    fatG = fatG,
+    sortOrder = sortOrder,
+    createdAt = createdAt,
+)
+
+/** 营养四项与 [foodName] **原样透传**：那是快照，回查 `foods` 重算等于让换机改写历史。 */
+private fun MealItemBackup.toEntity(importMillis: Long): MealItemEntity = MealItemEntity(
+    id = id,
+    mealId = mealId,
+    foodId = foodId,
+    foodName = foodName,
+    grams = grams,
+    servingUnit = servingUnit,
+    servingCount = servingCount,
+    kcal = kcal,
+    proteinG = proteinG,
+    carbsG = carbsG,
+    fatG = fatG,
+    sortOrder = sortOrder,
     createdAt = BackupRestoreRules.resolveCreatedAt(createdAt, importMillis),
 )
 

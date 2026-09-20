@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
 import com.ironhabit.app.di.IoDispatcher
+import com.ironhabit.app.domain.repository.BackupImportReport
 import com.ironhabit.app.domain.repository.BackupRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.ByteArrayOutputStream
@@ -25,7 +26,7 @@ class ImportDataUseCase @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
 
-    suspend operator fun invoke(uri: Uri): Result<Unit> = withContext(ioDispatcher) {
+    suspend operator fun invoke(uri: Uri): Result<BackupImportReport> = withContext(ioDispatcher) {
         try {
             // 第一道闸：provider 报了大小就先判（不报的走第二道）。
             val reportedSize: Long = querySize(uri)

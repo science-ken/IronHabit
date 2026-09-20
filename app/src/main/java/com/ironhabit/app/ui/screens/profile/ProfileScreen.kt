@@ -17,6 +17,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -29,11 +32,15 @@ import com.ironhabit.app.ui.components.EmptyState
 import com.ironhabit.app.ui.components.LoadingSkeleton
 import com.ironhabit.app.ui.components.ProfileSummaryCard
 import com.ironhabit.app.ui.components.TrendChart
+import com.ironhabit.app.ui.screens.food.FoodLibrarySheet
 import com.ironhabit.app.ui.theme.IronHabitSpacing
 
 /**
- * Tab4「我的」页面：身体档案概要卡（跳设置页档案区）+ 二级入口（身体数据 / 设置 / 备份）
+ * Tab4「我的」页面：身体档案概要卡（跳设置页档案区）+ 二级入口（身体数据 / 设置 / 备份 / 食物库）
  * + 近 30 天趋势图 + 训练类型占比饼图。
+ *
+ * 食物库这一行**开弹层而不是跳路由**：管理界面与「今日 → 饮食 → 食物库」是同一个
+ * [FoodLibrarySheet]，新开路由就要把列表/搜索/新建/停用再写一遍。
  *
  * @param onOpenBodyMetrics 身体数据入口回调
  * @param onOpenSettings 设置（含「我的档案」区块）入口回调
@@ -48,6 +55,7 @@ fun ProfileScreen(
     viewModel: ProfileViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    var showFoodLibrary by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -76,6 +84,13 @@ fun ProfileScreen(
             onClick = onOpenBackup,
         )
         HorizontalDivider()
+        // 食物库不新开路由：管理界面本来就是 `FoodLibrarySheet`（浏览/搜索/新建/编辑/停用），
+        // 再造一个全屏页就是同一份列表写两遍。
+        EntryRow(
+            text = stringResource(R.string.entry_food_library),
+            onClick = { showFoodLibrary = true },
+        )
+        HorizontalDivider()
 
         val errorRes: Int? = uiState.errorRes
         when {
@@ -100,6 +115,10 @@ fun ProfileScreen(
                 CategoryPieChart(shares = uiState.categoryShare)
             }
         }
+    }
+
+    if (showFoodLibrary) {
+        FoodLibrarySheet(onDismissRequest = { showFoodLibrary = false })
     }
 }
 

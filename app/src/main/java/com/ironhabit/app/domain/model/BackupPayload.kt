@@ -6,16 +6,21 @@ import kotlinx.serialization.Serializable
  * 导出 / 导入根模型（JSON Schema 见架构 §3.4）。
  *
  * 使用 kotlinx.serialization 做纯本地文件 JSON 序列化，**不涉及任何网络**。
- * 导入策略为「整体替换」：清空 7 张表后按 JSON 重建，`id` 保留原值以便外键自洽。
+ * 导入策略为「整体替换」：清空训练侧 6 张表 + 饮食侧 4 张表后按 JSON 重建，
+ * `id` 保留原值以便外键自洽（饮食那组只在 v5+ 备份才替换，见 [BackupPayload] 下方 v5 那条）。
  *
- * **向后兼容契约（v4）**：新增字段一律带默认值，因此「旧备份缺字段 → 解码即默认值」不会抛异常。
+ * **向后兼容契约（v5）**：新增字段一律带默认值，因此「旧备份缺字段 → 解码即默认值」不会抛异常。
  * - 6 张表的备份行自 v3 起携带 `createdAt`；v1/v2 老备份无该字段（解码为 `0`），
  *   导入时由 data 层回落到**导入时刻**，避免 `created_at = 0` 破坏 `ORDER BY created_at DESC` 的历史排序。
  * - `settings` 自 v3 起携带用户档案快照；可空字段 `null` = 「未携带 / 用户未填」，
  *   导入时**跳过而不覆盖**本地已有值（详见 [SettingsBackup]）。
  * - `meals` 表自 **v4** 起纳入备份（B-2 修复：此前换机丢全部饮食记录）；
- *   老备份无该字段（解码为空列表）→ 恢复后饮食为空，与旧版行为一致。
+ *   老备份无该字段（解码为空列表）→ 恢复时**整块饮食表都不动**，见下面 v5 这一条。
  * - `settings.trainingDaysPerWeek` 自 **v4** 起携带（B-6 修复：此前恢复后训练日数回默认 3）。
+ * - `foods` / `meal_items` 自 **v5** 起携带。⚠️ 由此推出一条**不是直觉的**规则：
+ *   导入 v4 及更早的备份时，`meals` 也**不再替换**本机数据 —— 因为
+ *   `meal_items.meal_id` 对 `meals` 是 `ON DELETE CASCADE`，清空 `meals` 会顺手删掉
+ *   本机已记的明细（真机 schema v9 上实测确认）。宁可少恢复一张表，不可洗掉用户记过的东西。
  *
  * @property schemaVersion 结构版本号
  * @property exportedAt 导出时刻（UTC 毫秒）
@@ -27,6 +32,8 @@ import kotlinx.serialization.Serializable
  * @property habitLogs 习惯日志列表
  * @property bodyMetrics 身体数据列表
  * @property meals 饮食记录列表（v4 新增）
+ * @property foods 食物库列表，含已停用与各自份量（v5 新增）
+ * @property mealItems 「实际吃了什么」条目列表（v5 新增）
  * @property settings 设置快照
  */
 @Serializable
@@ -41,6 +48,10 @@ data class BackupPayload(
     val habitLogs: List<HabitLogBackup> = emptyList(),
     val bodyMetrics: List<BodyMetricBackup> = emptyList(),
     val meals: List<MealBackup> = emptyList(),
+    /** 食物库（**含已停用**）+ 各自的份量定义（v5 新增）。 */
+    val foods: List<FoodBackup> = emptyList(),
+    /** 「我实际吃了什么」的条目（v5 新增）。 */
+    val mealItems: List<MealItemBackup> = emptyList(),
     val settings: SettingsBackup = SettingsBackup(),
 ) {
     companion object {
@@ -50,8 +61,13 @@ data class BackupPayload(
          * - v2：逐组 mask / RPE / 三态来源 / 多肌群 / 计划用户改动标记 / 习惯目标值。
          * - v3：备份携带**用户档案快照**（`settings` 内新增 11 项）+ 6 张表全部携带 `createdAt`。
          * - v4：`meals` 表纳入备份（B-2）+ `settings.trainingDaysPerWeek`（B-6）。
+         * - v5：`foods`（含 `food_servings`）与 `meal_items` 纳入备份。
+         *   ⚠️ v5 同时把"能不能整块替换饮食表"的门槛抬到自己身上：`meal_items.meal_id`
+         *   对 `meals` 是 `ON DELETE CASCADE`（已在真机 schema v9 上实测），
+         *   所以导入一份**不含明细**的 v4 备份会把本机已记的明细连带删干净。
+         *   判据见 `BackupRestoreRules.replacesDietTables`。
          */
-        const val CURRENT_SCHEMA_VERSION: Int = 4
+        const val CURRENT_SCHEMA_VERSION: Int = 5
     }
 }
 
@@ -213,6 +229,79 @@ data class MealBackup(
     val sortOrder: Int = 0,
     val isActive: Boolean = true,
     val isUserEdited: Boolean = false,
+    /** 创建时刻（UTC 毫秒）；`0` = 未携带 → 导入时回落到导入时刻。 */
+    val createdAt: Long = 0L,
+)
+
+/**
+ * 一条家用份量备份行（v5 新增），字段与
+ * [com.ironhabit.app.data.local.entity.FoodServingEntity] 一一对应。
+ *
+ * 刻意**嵌在 [FoodBackup] 里面**而不是平铺成一张表：份量行离开所属食物就没有意义，
+ * 平铺会让"恢复完食物但子表没落上"这种半成品状态有可能出现。
+ */
+@Serializable
+data class FoodServingBackup(
+    val id: Long = 0L,
+    /** 单位名："碗 / 盘 / 个 / 勺"。 */
+    val unit: String = "",
+    val grams: Int = 0,
+    val sortOrder: Int = 0,
+)
+
+/**
+ * 食物库备份行（v5 新增），字段与
+ * [com.ironhabit.app.data.local.entity.FoodEntity] 一一对应。
+ *
+ * **含已停用的行**：停用是常规出口，一条停用过的食物可能正被历史条目引用着，
+ * 漏掉它恢复后条目就指向一个不存在的 id（名称快照还在，但点不进详情）。
+ *
+ * @property source [com.ironhabit.app.domain.model.FoodSource.name]；
+ *   解码失败一律按 `CUSTOM` 处理（见 `FoodMapper.decodeSource`）—— 认成 `BUILT_IN`
+ *   会让播种有资格覆盖用户自己建的食物。
+ * @property dietaryTags [com.ironhabit.app.domain.model.DietRestriction.name] 的 CSV，
+ *   与实体列同格式、原样透传，不在备份层重新定义语义。
+ */
+@Serializable
+data class FoodBackup(
+    val id: Long = 0L,
+    val name: String = "",
+    val kcalPer100g: Int = 0,
+    val proteinPer100g: Double = 0.0,
+    val carbsPer100g: Double = 0.0,
+    val fatPer100g: Double = 0.0,
+    val dietaryTags: String? = null,
+    val source: String = "CUSTOM",
+    val note: String? = null,
+    val isActive: Boolean = true,
+    val isUserEdited: Boolean = false,
+    val sortOrder: Int = 0,
+    /** 创建时刻（UTC 毫秒）；`0` = 未携带 → 导入时回落到导入时刻。 */
+    val createdAt: Long = 0L,
+    val servings: List<FoodServingBackup> = emptyList(),
+)
+
+/**
+ * 「我实际吃了这一样」的条目备份行（v5 新增），字段与
+ * [com.ironhabit.app.data.local.entity.MealItemEntity] 一一对应。
+ *
+ * 营养四项是**当时算好的快照**，必须原样搬：回查 `foods` 重算就等于让"换机"改写历史。
+ * [foodId] 可为 `null`（食物被物理删过之后的 SET NULL 态），此时靠 [foodName] 自解释。
+ */
+@Serializable
+data class MealItemBackup(
+    val id: Long = 0L,
+    val mealId: Long = 0L,
+    val foodId: Long? = null,
+    val foodName: String = "",
+    val grams: Double = 0.0,
+    val servingUnit: String? = null,
+    val servingCount: Double? = null,
+    val kcal: Int = 0,
+    val proteinG: Double = 0.0,
+    val carbsG: Double = 0.0,
+    val fatG: Double = 0.0,
+    val sortOrder: Int = 0,
     /** 创建时刻（UTC 毫秒）；`0` = 未携带 → 导入时回落到导入时刻。 */
     val createdAt: Long = 0L,
 )

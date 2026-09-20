@@ -102,6 +102,37 @@ interface FoodDao {
     suspend fun getServings(foodId: Long): List<FoodServingEntity>
 
     /**
+     * 备份导出用：**全部**食物（含已停用）连同一份份量定义，一次取回。
+     *
+     * 必须含停用行 —— 历史条目可能正引用着它们；漏掉就是换机之后点不进详情。
+     * 按 `id` 排序而不是按 `sort_order`：备份要的是**可复现的字节**，
+     * 同一条记录导两次应当得到同一个 JSON。
+     */
+    @Transaction
+    @Query("SELECT * FROM foods ORDER BY id")
+    suspend fun getAllWithServings(): List<FoodWithServings>
+
+    /** 备份恢复用：先 [clearAll] 再整表灌入，所以这里不需要幂等语义。 */
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertAll(entities: List<FoodEntity>): List<Long>
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertAllServings(entities: List<FoodServingEntity>)
+
+    /**
+     * 备份恢复用（清空顺序见 `BackupRepositoryImpl`：先子表后主表）。
+     *
+     * ⚠️ 单列出来是因为 `food_servings` 对 `foods` 是 `ON DELETE CASCADE`：
+     * 只 [clearAll] 主表在效果上等价，但那要靠"外键恰好开着"这个前提才成立。
+     * 恢复是一次性动作，别把正确性押在隐式级联上。
+     */
+    @Query("DELETE FROM food_servings")
+    suspend fun clearAllServings()
+
+    @Query("DELETE FROM foods")
+    suspend fun clearAll()
+
+    /**
      * 停用（= 本表**唯一的**删除出口）。
      *
      * 物理 `DELETE` 在第一刀**不提供**：条目要引用食物，且"能不能真删"取决于有没有吃过它，

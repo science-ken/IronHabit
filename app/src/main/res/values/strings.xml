@@ -182,6 +182,7 @@
     <string name="entry_body_metrics">身体数据</string>
     <string name="entry_settings">设置</string>
     <string name="entry_backup">数据备份</string>
+    <string name="entry_food_library">食物库</string>
     <string name="empty_charts">数据还不够，继续打卡就能看到趋势啦</string>
     <string name="empty_body_metrics">还没有身体数据，点「+」记录第一条</string>
 
@@ -222,6 +223,7 @@
     <string name="msg_export_success">导出成功</string>
     <string name="msg_export_failed">导出失败，请重试</string>
     <string name="msg_import_success">导入成功</string>
+    <string name="msg_import_success_diet_skipped">导入成功；这份备份不含食物库与饮食明细，本机饮食记录未改动</string>
     <string name="msg_import_failed">导入失败：文件格式不正确</string>
     <string name="dialog_import_confirm_title">确认导入？</string>
     <string name="dialog_import_confirm_message">导入会覆盖当前全部数据且不可撤销，确定继续吗？</string>

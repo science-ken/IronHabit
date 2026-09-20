@@ -8,6 +8,8 @@ import com.ironhabit.app.domain.model.DietRestriction
 import com.ironhabit.app.domain.model.Equipment
 import com.ironhabit.app.domain.model.ExerciseBackup
 import com.ironhabit.app.domain.model.ExerciseCategory
+import com.ironhabit.app.domain.model.FoodBackup
+import com.ironhabit.app.domain.model.FoodServingBackup
 import com.ironhabit.app.domain.model.Gender
 import com.ironhabit.app.domain.model.Goal
 import com.ironhabit.app.domain.model.HabitBackup
@@ -15,6 +17,7 @@ import com.ironhabit.app.domain.model.HabitFrequency
 import com.ironhabit.app.domain.model.HabitLogBackup
 import com.ironhabit.app.domain.model.InjuryArea
 import com.ironhabit.app.domain.model.MealBackup
+import com.ironhabit.app.domain.model.MealItemBackup
 import com.ironhabit.app.domain.model.SettingsBackup
 import com.ironhabit.app.domain.model.ThemeMode
 import com.ironhabit.app.domain.model.UnitSystem
@@ -100,6 +103,34 @@ class BackupPayloadSerializationTest {
 
         // B-6：trainingDaysPerWeek 必须随备份往返。
         assertEquals(5, restored.settings.trainingDaysPerWeek)
+
+        // v5：食物库连份量定义一起搬，且**停用行不能漏**。
+        val food = restored.foods.single()
+        assertEquals(21L, food.id)
+        assertEquals("菠菜", food.name)
+        assertEquals("BUILT_IN", food.source)
+        assertEquals("DAIRY", food.dietaryTags)
+        assertFalse("停用的食物也要带走：历史条目可能正引用它", food.isActive)
+        assertTrue(food.isUserEdited)
+        assertEquals(1_690_000_000_008L, food.createdAt)
+        assertEquals("份量定义嵌在主行里：平铺会允许「食物恢复了但份没恢复」这种半成品", 1, food.servings.size)
+        assertEquals("份", food.servings.single().unit)
+        assertEquals(200, food.servings.single().grams)
+
+        // v5：明细存的是**快照**，四项宏量必须逐字回来（回查 foods 重算 = 换机改写历史）。
+        val item = restored.mealItems.single()
+        assertEquals(41L, item.id)
+        assertEquals(1L, item.mealId)
+        assertEquals(21L, item.foodId)
+        assertEquals("菠菜", item.foodName)
+        assertEquals(200.0, item.grams, 0.001)
+        assertEquals("份", item.servingUnit)
+        assertEquals(1.0, item.servingCount!!, 0.001)
+        assertEquals(50, item.kcal)
+        assertEquals(5.6, item.proteinG, 0.001)
+        assertEquals(9.0, item.carbsG, 0.001)
+        assertEquals(0.6, item.fatG, 0.001)
+        assertEquals(1_690_000_000_009L, item.createdAt)
     }
 
     @Test
@@ -121,11 +152,17 @@ class BackupPayloadSerializationTest {
             "\"aiRemoteEnabled\"",
             "\"createdAt\"",
             "\"meals\"",
+            "\"foods\"",
+            "\"mealItems\"",
+            "\"servings\"",
             "\"trainingDaysPerWeek\"",
         ).forEach { key ->
             assertTrue("导出 JSON 必须显式包含 $key（encodeDefaults 已开）", json.contains(key))
         }
-        assertTrue("导出的 schemaVersion 必须是 4", json.contains("\"schemaVersion\": 4"))
+        assertTrue(
+            "导出的 schemaVersion 必须等于 CURRENT_SCHEMA_VERSION",
+            json.contains("\"schemaVersion\": ${BackupPayload.CURRENT_SCHEMA_VERSION}"),
+        )
     }
 
     // ---------------- 2. 向后兼容（v2 老备份） ----------------
@@ -183,7 +220,10 @@ class BackupPayloadSerializationTest {
             "v2 备份必须仍被接受（require(schemaVersion <= CURRENT_SCHEMA_VERSION)）",
             payload.schemaVersion <= BackupPayload.CURRENT_SCHEMA_VERSION,
         )
-        assertEquals(4, BackupPayload.CURRENT_SCHEMA_VERSION)
+        assertTrue(
+            "结构版本只许涨不许降：降下来会让已导出的 v5 备份变成「版本过高、拒绝导入」",
+            BackupPayload.CURRENT_SCHEMA_VERSION >= 5,
+        )
         assertTrue(
             "v2 备份不携带档案快照 → 恢复时必须整体跳过档案字段，避免覆盖本地档案",
             !BackupRestoreRules.carriesProfileSnapshot(payload.schemaVersion),
@@ -257,6 +297,42 @@ class BackupPayloadSerializationTest {
                 isActive = false,
                 isUserEdited = true,
                 createdAt = 1_690_000_000_007L,
+            ),
+        ),
+        // v5：食物库（含停用行 + 份量）与明细条目都要能整份搬回来。
+        foods = listOf(
+            FoodBackup(
+                id = 21L,
+                name = "菠菜",
+                kcalPer100g = 25,
+                proteinPer100g = 2.8,
+                carbsPer100g = 4.5,
+                fatPer100g = 0.3,
+                dietaryTags = "DAIRY",
+                source = "BUILT_IN",
+                note = "焯水后",
+                isActive = false,
+                isUserEdited = true,
+                createdAt = 1_690_000_000_008L,
+                servings = listOf(
+                    FoodServingBackup(id = 31L, unit = "份", grams = 200, sortOrder = 0),
+                ),
+            ),
+        ),
+        mealItems = listOf(
+            MealItemBackup(
+                id = 41L,
+                mealId = 1L,
+                foodId = 21L,
+                foodName = "菠菜",
+                grams = 200.0,
+                servingUnit = "份",
+                servingCount = 1.0,
+                kcal = 50,
+                proteinG = 5.6,
+                carbsG = 9.0,
+                fatG = 0.6,
+                createdAt = 1_690_000_000_009L,
             ),
         ),
         settings = SettingsBackup(
