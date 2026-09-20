@@ -3,17 +3,25 @@ package com.ironhabit.app.ui.screens.today
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ironhabit.app.R
+import com.ironhabit.app.domain.model.Food
+import com.ironhabit.app.domain.model.FoodServing
 import com.ironhabit.app.domain.model.HabitItem
 import com.ironhabit.app.domain.model.HeatmapCell
 import com.ironhabit.app.domain.model.Meal
+import com.ironhabit.app.domain.model.InputLimits
+import com.ironhabit.app.domain.model.MealItem
 import com.ironhabit.app.domain.model.MealType
 import com.ironhabit.app.domain.model.TodayOverview
 import com.ironhabit.app.domain.model.TodayPlanItem
 import com.ironhabit.app.domain.model.WeeklyReview
 import com.ironhabit.app.domain.repository.CheckInRepository
+import com.ironhabit.app.domain.repository.MealItemRepository
 import com.ironhabit.app.domain.repository.PlanRepository
 import com.ironhabit.app.domain.repository.StatsRepository
 import com.ironhabit.app.domain.usecase.BuildWeeklyReviewUseCase
+import com.ironhabit.app.domain.usecase.AddMealItemResult
+import com.ironhabit.app.domain.usecase.AddMealItemUseCase
+import com.ironhabit.app.domain.usecase.ChangeMealItemPortionUseCase
 import com.ironhabit.app.domain.usecase.DeleteMealUseCase
 import com.ironhabit.app.domain.usecase.DetailedCheckInUseCase
 import com.ironhabit.app.domain.usecase.GenerateDietPlanUseCase
@@ -49,6 +57,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 /**
  * 「今日」页 ViewModel。
@@ -78,6 +87,9 @@ class TodayViewModel @Inject constructor(
     private val planPreviewHolder: PlanPreviewHolder,
     private val deleteMeal: DeleteMealUseCase,
     private val upsertMeal: UpsertMealUseCase,
+    private val addMealItem: AddMealItemUseCase,
+    private val changePortion: ChangeMealItemPortionUseCase,
+    private val mealItemRepository: MealItemRepository,
     private val checkInRepository: CheckInRepository,
     private val planRepository: PlanRepository,
     private val buildWeeklyReview: BuildWeeklyReviewUseCase,
@@ -142,6 +154,8 @@ class TodayViewModel @Inject constructor(
                             overview.toUiState().copy(
                                 meals = meals.meals,
                                 mealTotals = meals.totals,
+                                mealItems = meals.items,
+                                mealIntake = meals.intake,
                                 dietTarget = meals.target,
                                 isRepeatWeeklyOn = repeatOn,
                                 weeklyReview = review,
@@ -306,6 +320,106 @@ class TodayViewModel @Inject constructor(
             baseSnackbarRes = R.string.msg_meal_removed,
             block = { deleteMeal(meal.id) },
         )
+    }
+
+    // ---------------- 一餐里"实际吃了什么"的条目 ----------------
+
+    /** 打开食物库**挑选模式**，为哪一餐挑就记进哪一餐。 */
+    fun onOpenFoodPicker(meal: Meal) {
+        _uiState.update { it.copy(pickingMealId = meal.id) }
+    }
+
+    fun onDismissFoodPicker() {
+        _uiState.update { it.copy(pickingMealId = null) }
+    }
+
+    /**
+     * 挑中一样食物 → 记进当前正在挑的那一餐。
+     *
+     * **不关弹层**：一顿饭通常要记好几样，点一样关一次等于逼用户反复进出。
+     * 按克数那条路（[serving] = `null`）先按 100g 起记，真正的克数在条目行上改 ——
+     * 这样"两下点完"的路径不会被一个数字键盘堵住。
+     */
+    fun onPickFood(food: Food, serving: FoodServing?) {
+        val mealId: Long = _uiState.value.pickingMealId ?: return
+        viewModelScope.launch {
+            when (
+                addMealItem(
+                    mealId = mealId,
+                    foodId = food.id,
+                    serving = serving,
+                    servingCount = 1.0,
+                    grams = if (serving == null) DEFAULT_GRAMS_WHEN_NO_SERVING else null,
+                )
+            ) {
+                is AddMealItemResult.Added -> _uiState.update {
+                    it.copy(snackbarRes = R.string.msg_meal_item_added, snackbarArgs = emptyList())
+                }
+                // 到上限：走 %1$s 通道（本项目的 snackbarArgs 恒为 List<String>，
+                // 配 %1$d 会抛 IllegalFormatConversionException —— 见契约测试）。
+                is AddMealItemResult.MealFull -> _uiState.update {
+                    it.copy(
+                        snackbarRes = R.string.msg_meal_item_limit,
+                        snackbarArgs = listOf(InputLimits.MAX_ITEMS_PER_MEAL.toString()),
+                    )
+                }
+                else -> _uiState.update { state -> state.copy(errorRes = R.string.error_generic) }
+            }
+        }
+    }
+
+    /** 删一条已记条目（撤销误记）。 */
+    fun onDeleteMealItem(item: MealItem) {
+        performSilentWrite { mealItemRepository.delete(item.id) }
+    }
+
+    /** 打开「改这一条」弹层。**不写库**，条目本身从 `mealItems` 里按 id 现取。 */
+    fun onOpenItemEditor(item: MealItem) {
+        _uiState.update { it.copy(editingItemId = item.id) }
+    }
+
+    fun onDismissItemEditor() {
+        _uiState.update { it.copy(editingItemId = null) }
+    }
+
+    /**
+     * 份量加减一档。
+     *
+     * 按**记法**决定步长：当时是"几份/几碗"记的就 ±半份（一碗一档太粗，半碗是真实需求），
+     * 按克记的就 ±10 g。每一下都立即落库 —— Q11 要的是"当场改、只影响这一次"，
+     * 而且磁贴数字必须点一下就动，不能藏在一个"保存"后面。
+     */
+    fun onStepItemPortion(up: Boolean) {
+        val itemId: Long = _uiState.value.editingItemId ?: return
+        val item: MealItem = _uiState.value.mealItems.firstOrNull { it.id == itemId } ?: return
+        val unit: String = item.servingUnit?.takeIf { it.isNotBlank() } ?: ""
+        val count: Double = item.servingCount?.takeIf { it > 0.0 } ?: 0.0
+
+        if (unit.isNotEmpty() && count > 0.0) {
+            // 每份多少克从条目自己反推：记的时候已经把它乘进 grams 了。
+            val gramsPerServing: Int = (item.grams / count).roundToInt()
+            val delta: Double = if (up) SERVING_STEP else -SERVING_STEP
+            val next: Double = (count + delta).coerceIn(InputLimits.MIN_SERVINGS, InputLimits.MAX_SERVINGS)
+            performSilentWrite {
+                changePortion(
+                    itemId = itemId,
+                    serving = FoodServing(unit = unit, grams = gramsPerServing),
+                    servingCount = next,
+                )
+            }
+        } else {
+            val delta: Int = if (up) GRAMS_STEP else -GRAMS_STEP
+            val next: Double = (item.grams.roundToInt() + delta)
+                .coerceIn(InputLimits.MIN_SERVING_GRAMS, InputLimits.MAX_SERVING_GRAMS)
+                .toDouble()
+            performSilentWrite { changePortion(itemId = itemId, serving = null, grams = next) }
+        }
+    }
+
+    /** 记错了餐次（早餐记成午餐）：只挪归属，快照与时间一律不动。 */
+    fun onMoveItemToMeal(item: MealItem, meal: Meal) {
+        if (item.mealId == meal.id) return
+        performSilentWrite { mealItemRepository.moveTo(item.id, meal.id) }
     }
 
     /**
@@ -565,6 +679,11 @@ class TodayViewModel @Inject constructor(
                 habits = data.habits,
                 meals = data.meals,
                 mealTotals = data.mealTotals,
+                // ⚠️ 这两个必须一起搬。`applyData` 是逐字段手写复制的，
+                // 漏一个就会被静默钉回默认值 —— 表现是"记了条目但数字不动"，
+                // 而且编译、单测全绿。本项目已经在这上面栽过三次。
+                mealItems = data.mealItems,
+                mealIntake = data.mealIntake,
                 dietTarget = data.dietTarget,
                 completedCount = data.completedCount,
                 totalCount = data.totalCount,
@@ -602,6 +721,18 @@ class TodayViewModel @Inject constructor(
 
         /** 热力条一周 7 格。 */
         private const val WEEK_DAYS: Long = 7L
+
+        /**
+         * 挑中一个**没有"份"**的食物时先记这么多克。
+         *
+         * 100g 是这类食物定义本身的基准量 —— 记完用户可以在条目行上改成实际吃的量。
+         * 之所以不在这里弹数字键盘：那会把"两下记完一顿"变成"每样都要打一遍数字"。
+         */
+        private const val DEFAULT_GRAMS_WHEN_NO_SERVING: Double = 100.0
+
+        /** 「改这一条」的一档：按份记的走半份，按克记的走 10 g。 */
+        private const val SERVING_STEP: Double = 0.5
+        private const val GRAMS_STEP: Int = 10
     }
 }
 

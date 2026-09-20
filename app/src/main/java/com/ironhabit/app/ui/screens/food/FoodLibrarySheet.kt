@@ -96,11 +96,24 @@ fun FoodLibraryEntry(
     }
 }
 
+/**
+ * 食物库弹层：浏览 / 搜索 / 新建 / 编辑 / 停用，**或**给某一餐挑食物。
+ *
+ * ## 两种模式
+ * [onPick] 为 `null` 时是"管库"：点条目 = 打开编辑。
+ * 传了 [onPick] 就是"挑食物记进这一餐"：每行下面摊出它的份（一碗 / 一盘）当按钮，
+ * **点一下就记进去**，弹层不关（一顿饭通常要记好几样）。
+ * 没有份的食物走 [onPick] 的 `serving = null` 分支，由调用方按克数处理。
+ *
+ * 为什么点一下就加、不要"选完再确定"：用户 Q1 选的是"每天真的要记"，
+ * 一顿三样东西的代价必须是三下，不能变成 3×2 + 1 下。
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FoodLibrarySheet(
     onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier,
+    onPick: ((Food, FoodServing?) -> Unit)? = null,
     viewModel: FoodLibraryViewModel = hiltViewModel(),
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -131,6 +144,7 @@ fun FoodLibrarySheet(
                 FoodListSection(
                     uiState = uiState,
                     viewModel = viewModel,
+                    onPick = onPick,
                 )
             }
         }
@@ -141,9 +155,14 @@ fun FoodLibrarySheet(
 private fun FoodListSection(
     uiState: FoodLibraryUiState,
     viewModel: FoodLibraryViewModel,
+    onPick: ((Food, FoodServing?) -> Unit)? = null,
 ) {
+    val picking: Boolean = onPick != null
+
     Text(
-        text = stringResource(R.string.title_food_library),
+        text = stringResource(
+            if (picking) R.string.title_pick_food_for_meal else R.string.title_food_library
+        ),
         style = MaterialTheme.typography.titleLarge,
         color = MaterialTheme.colorScheme.onSurface,
     )
@@ -174,14 +193,64 @@ private fun FoodListSection(
     }
 
     uiState.visibleFoods.forEach { food ->
-        FoodRow(
-            food = food,
-            onEdit = { viewModel.onOpenEdit(food) },
-            onDeactivate = { viewModel.onDeactivate(food.id) },
-        )
+        if (onPick != null) {
+            FoodPickRow(food = food, onPick = onPick)
+        } else {
+            FoodRow(
+                food = food,
+                onEdit = { viewModel.onOpenEdit(food) },
+                onDeactivate = { viewModel.onDeactivate(food.id) },
+            )
+        }
     }
 
     Box(modifier = Modifier.padding(bottom = IronHabitSpacing.lg))
+}
+
+/**
+ * 挑选模式的一行：名称 + 每 100g 热量 + **每个份一个按钮**。
+ *
+ * 点份就直接记进去一份；没有份的食物给一个"按克数"，
+ * 由调用方按 100g 起记（真正的克数编辑在条目行上改）。
+ */
+@Composable
+private fun FoodPickRow(
+    food: Food,
+    onPick: (Food, FoodServing?) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = IronHabitSpacing.xs),
+        verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.xs),
+    ) {
+        Text(
+            text = food.name,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            text = stringResource(R.string.label_food_per_100g_summary, food.kcalPer100g),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
+        ) {
+            if (food.hasServing) {
+                food.servings.forEach { serving ->
+                    OutlinedButton(onClick = { onPick(food, serving) }) {
+                        Text(text = "1" + serving.unit)
+                    }
+                }
+            } else {
+                OutlinedButton(onClick = { onPick(food, null) }) {
+                    Text(text = stringResource(R.string.action_log_by_grams))
+                }
+            }
+        }
+    }
 }
 
 @Composable

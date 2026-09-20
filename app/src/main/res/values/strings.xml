@@ -630,6 +630,22 @@
     <string name="msg_food_saved">已保存</string>
     <string name="label_food_library_count">共 %1$d 条 · 可搜索 / 新建 / 停用</string>
 
+    <!-- ===== 一餐里"实际吃了什么"的条目（第 2 刀）===== -->
+    <string name="action_add_food">加食物</string>
+    <string name="label_meal_suggestion_header">建议（没记就不计入）</string>
+    <string name="label_meal_item_summary">%1$s · %2$s · %3$d kcal</string>
+    <string name="label_meal_kcal_approx">约 %1$d kcal · 蛋白 %2$dg</string>
+    <string name="empty_meal_not_logged">还没记这餐吃了什么</string>
+    <string name="msg_meal_item_added">已记下</string>
+    <string name="msg_meal_item_limit">一餐最多记 %1$s 条</string>
+    <string name="title_pick_food_for_meal">这餐吃了什么</string>
+    <string name="action_log_by_grams">按克数</string>
+    <string name="title_edit_meal_item">改这一条</string>
+    <string name="action_portion_less">少一点</string>
+    <string name="action_portion_more">多一点</string>
+    <string name="label_item_move_to">记错餐了，挪到</string>
+    <string name="action_delete_meal_item">删掉这条</string>
+
     <!-- ===== 动作库「加入计划」（v6）===== -->
     <string name="title_add_to_plan">加入每周训练计划</string>
     <string name="label_pick_days">练哪几天（可多选）</string>

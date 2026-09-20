@@ -4,6 +4,8 @@ import com.ironhabit.app.domain.model.DietTarget
 import com.ironhabit.app.domain.model.HeatmapCell
 import com.ironhabit.app.domain.model.HabitItem
 import com.ironhabit.app.domain.model.Meal
+import com.ironhabit.app.domain.model.MealIntake
+import com.ironhabit.app.domain.model.MealItem
 import com.ironhabit.app.domain.model.MealTotals
 import com.ironhabit.app.domain.model.StreakInfo
 import com.ironhabit.app.domain.model.TodayPlanItem
@@ -44,6 +46,19 @@ data class TodayUiState(
     val meals: List<Meal> = emptyList(),
     val mealTotals: MealTotals = MealTotals(),
     val dietTarget: DietTarget = DietTarget(),
+    /**
+     * 所选日**已记下的条目**（`meal_items`）。
+     *
+     * ⚠️ 与 [meals] 是两件事：`meals` 里可以是 AI 排的计划，
+     * 这个列表里有行才代表"真的吃了"。混用就等于把"排了课"当"练了"。
+     */
+    val mealItems: List<MealItem> = emptyList(),
+    /** 所选日的实际摄入（明细优先，其次打勾的整餐值）。见 [MealIntakeCalculator]。 */
+    val mealIntake: MealIntake = MealIntake(0, 0.0, 0.0, 0.0, 0, emptySet()),
+    /** 正在为哪一餐挑食物；非 `null` 时渲染食物库挑选弹层。 */
+    val pickingMealId: Long? = null,
+    /** 正在改份量的那条条目；非 `null` 时渲染条目编辑弹层。 */
+    val editingItemId: Long? = null,
     /** 正在编辑的那一餐；非 `null` 时页面渲染编辑弹层（未来日只读态不渲染）。 */
     val editingMeal: Meal? = null,
     val completedCount: Int = 0,

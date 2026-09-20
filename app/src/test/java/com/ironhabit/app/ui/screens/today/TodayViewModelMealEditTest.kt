@@ -129,6 +129,10 @@ class TodayViewModelMealEditTest {
             generateTrainingPlan = mockk<GenerateTrainingPlanUseCase>(relaxed = true),
             deleteMeal = deleteMeal,
             upsertMeal = upsertMeal,
+            // 本用例只验证「编辑这一餐」弹层：条目相关的协作者给静默假实现即可。
+            addMealItem = mockk<com.ironhabit.app.domain.usecase.AddMealItemUseCase>(relaxed = true),
+            changePortion = mockk<com.ironhabit.app.domain.usecase.ChangeMealItemPortionUseCase>(relaxed = true),
+            mealItemRepository = mockk<com.ironhabit.app.domain.repository.MealItemRepository>(relaxed = true),
             checkInRepository = checkInRepository,
             planRepository = planRepository,
             buildWeeklyReview = buildWeeklyReview,

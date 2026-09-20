@@ -37,14 +37,22 @@ data class MealTotals(
 )
 
 /**
- * 「今日饮食」聚合视图（餐列表 + 合计 + 目标）。
+ * 「今日饮食」聚合视图（餐列表 + 合计 + 已记条目 + 实际摄入 + 目标）。
  *
  * @property meals 当日启用餐列表（含未完成），按 `sortOrder` 升序
- * @property totals 当日合计（已摄入 / 计划）
+ * @property totals 当日合计（已摄入 / 计划）—— 走的是 `meals` 整餐列的 SQL 聚合
+ * @property items 当日**已记下的条目**（`meal_items`）。有行才代表"真的吃了"。
+ * @property intake 实际摄入：明细优先 → 打勾的整餐值 → 0。见 [MealIntakeCalculator]。
  * @property target 当日营养目标（规则现算）
+ *
+ * ⚠️ **别拿 [totals] 的 `intakeKcal` 当"吃了多少"**：它统计的是"打了勾的那一餐的整餐值"，
+ * 而打了勾可能是粗记、也可能一口都没记（勾是计划完成的标记）。
+ * 真实摄入只看 [intake]。
  */
 data class TodayMeals(
     val meals: List<Meal> = emptyList(),
     val totals: MealTotals = MealTotals(),
+    val items: List<MealItem> = emptyList(),
+    val intake: MealIntake = MealIntake(0, 0.0, 0.0, 0.0, 0, emptySet()),
     val target: DietTarget = DietTarget(),
 )

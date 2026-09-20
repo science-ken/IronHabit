@@ -12,6 +12,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.DietTarget
+import com.ironhabit.app.domain.model.MealIntake
 import com.ironhabit.app.domain.model.MealTotals
 import com.ironhabit.app.ui.theme.IronHabitSpacing
 import kotlin.math.roundToInt
@@ -30,22 +31,31 @@ import kotlin.math.roundToInt
 fun DietTotalsBar(
     totals: MealTotals,
     target: DietTarget,
+    /**
+     * 实际摄入。**刻意不给默认值** —— 给了就会有人漏传，
+     * 而漏传的表现是进度条安安静静地停在 0，看着像"今天还没吃"，
+     * 比编译不过难查得多。
+     */
+    intake: MealIntake,
     modifier: Modifier = Modifier,
 ) {
+    // 分母仍可用 totals 的 plan*（那是"计划要吃多少"，口径没错）；
+    // 但**分子必须走 intake** —— totals.intake* 把"打了勾"当"吃了"，
+    // 而勾可能只是完成计划的标记，AI 生成完也可能一个都没吃。
     val kcalDenominator: Int =
         if (target.targetKcal > 0) target.targetKcal else totals.planKcal
     val proteinDenominator: Int =
         if (target.targetProtein > 0) target.targetProtein else totals.planProtein.roundToInt()
-    val kcalFraction: Float = fraction(totals.intakeKcal.toFloat(), kcalDenominator.toFloat())
+    val kcalFraction: Float = fraction(intake.kcal.toFloat(), kcalDenominator.toFloat())
     val proteinFraction: Float =
-        fraction(totals.intakeProtein.toFloat(), proteinDenominator.toFloat())
+        fraction(intake.proteinG.toFloat(), proteinDenominator.toFloat())
 
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.xs),
     ) {
         Text(
-            text = stringResource(R.string.label_diet_intake_kcal, totals.intakeKcal, kcalDenominator),
+            text = stringResource(R.string.label_diet_intake_kcal, intake.kcal, kcalDenominator),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurface,
         )
@@ -56,7 +66,7 @@ fun DietTotalsBar(
         Text(
             text = stringResource(
                 R.string.label_diet_intake_protein,
-                totals.intakeProtein.roundToInt(),
+                intake.proteinG.roundToInt(),
                 proteinDenominator,
             ),
             style = MaterialTheme.typography.bodyMedium,

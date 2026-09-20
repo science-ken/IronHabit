@@ -155,10 +155,13 @@ fun TodayBento(
                     onClick = onOpenMeal,
                 ) {
                     TileTitle(stringResource(R.string.title_today_meals))
+                    // 分子走 mealIntake（明细优先 → 打勾整餐值 → 0），
+                    // **不再**读 mealTotals.intakeKcal —— 那个口径把"打了勾"当成"吃了"，
+                    // 而勾可能只是完成计划的标记。AI 生成过这一餐在这里贡献 0。
                     Text(
                         text = stringResource(
                             R.string.label_diet_intake_kcal,
-                            state.mealTotals.intakeKcal,
+                            state.mealIntake.kcal,
                             dietDenominatorKcal(state),
                         ),
                         style = MaterialTheme.typography.titleMedium,
@@ -167,7 +170,7 @@ fun TodayBento(
                     Text(
                         text = stringResource(
                             R.string.label_diet_intake_protein,
-                            state.mealTotals.intakeProtein.roundToInt(),
+                            state.mealIntake.proteinG.roundToInt(),
                             dietDenominatorProtein(state),
                         ),
                         style = MaterialTheme.typography.labelMedium,

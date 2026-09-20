@@ -40,6 +40,7 @@ import com.ironhabit.app.ui.components.HabitRow
 import com.ironhabit.app.ui.components.LoadingSkeleton
 import com.ironhabit.app.ui.components.LocalSnackbarHostState
 import com.ironhabit.app.ui.components.MealBlock
+import com.ironhabit.app.ui.components.MealItemEditSheet
 import com.ironhabit.app.ui.components.PlanDateStrip
 import com.ironhabit.app.ui.components.SkeletonCard
 import com.ironhabit.app.ui.screens.checkin.CheckInSheet
@@ -316,10 +317,12 @@ fun TodayScreen(
                             DietTotalsBar(
                                 totals = uiState.mealTotals,
                                 target = uiState.dietTarget,
+                                intake = uiState.mealIntake,
                             )
                             uiState.meals.forEach { meal ->
                                 MealBlock(
                                     meal = meal,
+                                    loggedItems = uiState.mealItems.filter { item -> item.mealId == meal.id },
                                     onToggle = { done -> viewModel.onToggleMeal(meal, done) },
                                     // 编辑弹层是第二层：先收掉清单。
                                     onEdit = {
@@ -327,6 +330,13 @@ fun TodayScreen(
                                         viewModel.onOpenMealEditor(meal)
                                     },
                                     onDelete = { viewModel.onDeleteMeal(meal) },
+                                    onAddFood = { viewModel.onOpenFoodPicker(meal) },
+                                    // 与「编辑这一餐」同一套路：第二层弹层先收掉清单。
+                                    onEditItem = { item ->
+                                        sheetTarget = null
+                                        viewModel.onOpenItemEditor(item)
+                                    },
+                                    onDeleteItem = { item -> viewModel.onDeleteMealItem(item) },
                                     enabled = !isFutureDay,
                                 )
                             }
@@ -415,6 +425,34 @@ fun TodayScreen(
     // 食物库弹层（第 1 刀：浏览 / 搜索 / 新建 / 停用；把食物记进一餐在第 2 刀）。
     if (showFoodLibrary) {
         FoodLibrarySheet(onDismissRequest = { showFoodLibrary = false })
+    }
+
+    // 挑选模式：从某一餐进来，点一下份就记进那一餐，弹层不关。
+    if (uiState.pickingMealId != null) {
+        FoodLibrarySheet(
+            onDismissRequest = viewModel::onDismissFoodPicker,
+            onPick = { food, serving -> viewModel.onPickFood(food, serving) },
+        )
+    }
+
+    // 「改这一条」：条目从 `mealItems` 现取 —— 加减/挪餐写库后流会重新发出，
+    // 弹层里的数字跟着变；条目被删掉时这里取到 null，弹层自己收掉。
+    val editingItemId: Long = uiState.editingItemId ?: 0L
+    if (editingItemId > 0L && !isFutureDay) {
+        val editingItem = uiState.mealItems.firstOrNull { item -> item.id == editingItemId }
+        if (editingItem != null) {
+            MealItemEditSheet(
+                item = editingItem,
+                meals = uiState.meals,
+                onDismissRequest = viewModel::onDismissItemEditor,
+                onStep = viewModel::onStepItemPortion,
+                onMoveTo = { meal -> viewModel.onMoveItemToMeal(editingItem, meal) },
+                onDelete = {
+                    viewModel.onDeleteMealItem(editingItem)
+                    viewModel.onDismissItemEditor()
+                },
+            )
+        }
     }
 }
 
