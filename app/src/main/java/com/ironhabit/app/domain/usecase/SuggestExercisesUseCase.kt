@@ -4,10 +4,12 @@ import com.ironhabit.app.di.IoDispatcher
 import com.ironhabit.app.domain.ai.PlanAdvisor
 import com.ironhabit.app.domain.model.AdoptResult
 import com.ironhabit.app.domain.model.AdviceSource
+import com.ironhabit.app.domain.model.Equipment
 import com.ironhabit.app.domain.model.Exercise
 import com.ironhabit.app.domain.model.ExerciseCategory
 import com.ironhabit.app.domain.model.ExerciseSource
 import com.ironhabit.app.domain.model.ExerciseSuggestion
+import com.ironhabit.app.domain.model.MuscleGroup
 import com.ironhabit.app.domain.model.SuggestionResult
 import com.ironhabit.app.domain.repository.ExerciseRepository
 import com.ironhabit.app.domain.repository.SettingsRepository
@@ -90,6 +92,7 @@ class SuggestExercisesUseCase @Inject constructor(
                 // 与内置 / 自定义**同等可用**：可编辑、可排计划。
                 source = ExerciseSource.AI_SUGGESTED,
                 muscleGroups = suggestion.muscleGroups,
+                equipment = suggestion.equipment,
                 isActive = true,
                 defaultSets = suggestion.defaultSets,
                 defaultReps = suggestion.defaultReps,
@@ -110,15 +113,23 @@ class SuggestExercisesUseCase @Inject constructor(
  *
  * 属**数据预置**（动作名 / 肌群标签），与 `BuiltInExercises` 同类 —— 架构 §7.5 允许直接写在 Kotlin 中。
  * 规则层只消费它的数据结构；所有面向用户的文案由 `noteKey` 指到 `strings.xml`。
+ *
+ * `internal`（而非 `private`）只为让 `MuscleGroupVocabularyTest` 能校验这里的肌群用词没有漂出词表。
  */
-private object SupplementPool {
+internal object SupplementPool {
 
-    /** 候选全集（顺序即默认展示顺序；最终排序由规则层按 `goal` 微调）。 */
+    /**
+     * 候选全集（顺序即默认展示顺序；最终排序由规则层按 `goal` 微调）。
+     *
+     * `equipment` 与 `BuiltInExercises` 同口径按名称如实标注：这个池子存在的意义就是
+     * "伤病时换掉某个动作"，替代动作若比原动作更吃器械，替换本身就是新的不可用。
+     */
     val entries: List<Exercise> = listOf(
         Exercise(
             name = "靠墙静蹲",
             category = ExerciseCategory.BODYWEIGHT,
-            muscleGroups = listOf("腿部"),
+            muscleGroups = listOf(MuscleGroup.LEG),
+            equipment = listOf(Equipment.NONE),
             defaultSets = 3,
             defaultReps = 1,
             defaultDurationSec = 45,
@@ -126,56 +137,64 @@ private object SupplementPool {
         Exercise(
             name = "单腿臀桥",
             category = ExerciseCategory.BODYWEIGHT,
-            muscleGroups = listOf("臀部"),
+            muscleGroups = listOf(MuscleGroup.GLUTE),
+            equipment = listOf(Equipment.NONE),
             defaultSets = 3,
             defaultReps = 12,
         ),
         Exercise(
             name = "鸟狗式",
             category = ExerciseCategory.BODYWEIGHT,
-            muscleGroups = listOf("核心"),
+            muscleGroups = listOf(MuscleGroup.CORE),
+            equipment = listOf(Equipment.NONE),
             defaultSets = 3,
             defaultReps = 12,
         ),
         Exercise(
             name = "死虫式",
             category = ExerciseCategory.BODYWEIGHT,
-            muscleGroups = listOf("腹部"),
+            muscleGroups = listOf(MuscleGroup.ABS),
+            equipment = listOf(Equipment.NONE),
             defaultSets = 3,
             defaultReps = 12,
         ),
         Exercise(
             name = "弹力带臀外展",
             category = ExerciseCategory.STRENGTH,
-            muscleGroups = listOf("臀部"),
+            muscleGroups = listOf(MuscleGroup.GLUTE),
+            equipment = listOf(Equipment.RESISTANCE_BAND),
             defaultSets = 3,
             defaultReps = 15,
         ),
         Exercise(
             name = "弹力带面拉",
             category = ExerciseCategory.STRENGTH,
-            muscleGroups = listOf("后肩"),
+            muscleGroups = listOf(MuscleGroup.REAR_DELT),
+            equipment = listOf(Equipment.RESISTANCE_BAND),
             defaultSets = 3,
             defaultReps = 15,
         ),
         Exercise(
             name = "哑铃肩上推举",
             category = ExerciseCategory.STRENGTH,
-            muscleGroups = listOf("肩部"),
+            muscleGroups = listOf(MuscleGroup.SHOULDER),
+            equipment = listOf(Equipment.DUMBBELL),
             defaultSets = 3,
             defaultReps = 10,
         ),
         Exercise(
             name = "坐姿提踵",
             category = ExerciseCategory.STRENGTH,
-            muscleGroups = listOf("腿部"),
+            muscleGroups = listOf(MuscleGroup.LEG),
+            equipment = listOf(Equipment.MACHINE),
             defaultSets = 3,
             defaultReps = 20,
         ),
         Exercise(
             name = "椭圆机稳态",
             category = ExerciseCategory.CARDIO,
-            muscleGroups = listOf("有氧"),
+            muscleGroups = listOf(MuscleGroup.CARDIO),
+            equipment = listOf(Equipment.MACHINE),
             defaultSets = 1,
             defaultReps = 1,
             defaultDurationSec = 1200,

@@ -86,8 +86,9 @@ class SuggestExercisesUseCaseTest {
 
     @Test
     fun adoptWritesWithAiSuggestedSource() = runTest {
-        // 力量类候选需要"真的有器械"才会进入建议池（空器械集 = 仅自重）。
-        setUp(profile = UserProfile(equipment = setOf(Equipment.DUMBBELL)))
+        // 「弹力带面拉」自带 `equipment = RESISTANCE_BAND`（v7 起动作自己标注器械），
+        // 所以档案里必须有弹力带才会进建议池 —— 只有哑铃的用户不该被推荐它。
+        setUp(profile = UserProfile(equipment = setOf(Equipment.RESISTANCE_BAND)))
 
         val result = useCase.adopt("弹力带面拉")
 
@@ -143,7 +144,7 @@ class SuggestExercisesUseCaseTest {
 
     @Test
     fun suggest_respectsInjuryAndEquipmentFilters() = runTest {
-        // 膝伤 → 排除腿部候选；无器械（空集 → {NONE}）→ 排除力量候选。
+        // 膝伤 → 排除腿部候选；无器械（空集 → {NONE}）→ 排除需要器械的候选。
         setUp(profile = UserProfile(injuryAreas = setOf(InjuryArea.KNEE)))
 
         val suggestions = useCase.suggest().suggestions
@@ -151,6 +152,27 @@ class SuggestExercisesUseCaseTest {
         assertFalse("膝伤 → 排除「靠墙静蹲」（腿部）", suggestions.any { it.name == "靠墙静蹲" })
         assertFalse("膝伤 → 排除「坐姿提踵」（腿部）", suggestions.any { it.name == "坐姿提踵" })
         assertFalse("无器械 → 排除「哑铃肩上推举」", suggestions.any { it.name == "哑铃肩上推举" })
-        assertTrue("有氧候选应保留", suggestions.any { it.name == "椭圆机稳态" })
+        assertTrue("自重 + 非腿部候选应保留", suggestions.any { it.name == "鸟狗式" })
+    }
+
+    /**
+     * v7 起有氧动作也吃器械标注：`椭圆机稳态` 标的是 `MACHINE`。
+     *
+     * 这条断言在 v6 是**反的**（当时 `equipmentAllowed` 只看分类，非 `STRENGTH` 一律放行，
+     * 于是"没有任何器械"的用户会被推荐一台跑步机）。改判据要的就是这个翻转。
+     */
+    @Test
+    fun cardioCandidateNeedsItsOwnEquipment_sinceV7() = runTest {
+        setUp(profile = UserProfile(injuryAreas = setOf(InjuryArea.KNEE)))
+        assertFalse(
+            "无器械 → 排除「椭圆机稳态」（它标的是 MACHINE）",
+            useCase.suggest().suggestions.any { it.name == "椭圆机稳态" },
+        )
+
+        setUp(profile = UserProfile(equipment = setOf(Equipment.MACHINE)))
+        assertTrue(
+            "有器械区 → 「椭圆机稳态」回到候选里",
+            useCase.suggest().suggestions.any { it.name == "椭圆机稳态" },
+        )
     }
 }

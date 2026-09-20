@@ -45,7 +45,10 @@ enum class ExerciseSource {
  * @property category 分类
  * @property source 三态来源（唯一真源，取代 v1 的 `isBuiltIn`）
  * @property muscleGroups **有序**肌群列表：**第一个 = 主肌群**，其后为辅。
- *   由 `exercises.muscle_group`（单数列名，内容为有序 CSV）解析而来。
+ *   由 `exercises.muscle_group`（单数列名，内容为有序 CSV）解析而来。标签取值见
+ *   [MuscleGroup]（唯一真源）。
+ * @property equipment 本动作**需要**的器械，v7 新增。空列表 = **未标注**（存量行 / 自建动作），
+ *   与"不需要器械"（`listOf(Equipment.NONE)`）是**两回事**，不可合并 —— 前者要回落旧判据。
  * @property note 动作要点备注，可空
  * @property isActive 是否启用（`false` = 停用）
  * @property defaultSets 默认组数
@@ -61,6 +64,7 @@ data class Exercise(
     val category: ExerciseCategory = ExerciseCategory.BODYWEIGHT,
     val source: ExerciseSource = ExerciseSource.BUILT_IN,
     val muscleGroups: List<String> = emptyList(),
+    val equipment: List<Equipment> = emptyList(),
     val note: String? = null,
     val isActive: Boolean = true,
     val defaultSets: Int? = 3,

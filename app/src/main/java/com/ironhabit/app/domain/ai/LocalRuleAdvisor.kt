@@ -9,6 +9,7 @@ import com.ironhabit.app.domain.model.ExerciseProgress
 import com.ironhabit.app.domain.model.ExerciseSuggestion
 import com.ironhabit.app.domain.model.Goal
 import com.ironhabit.app.domain.model.InjuryArea
+import com.ironhabit.app.domain.model.MuscleGroup
 import com.ironhabit.app.domain.model.PlanItemDraft
 import com.ironhabit.app.domain.model.PlanNote
 import com.ironhabit.app.domain.model.PlanNoteDetail
@@ -28,16 +29,17 @@ import kotlinx.datetime.LocalDate
  * 同输入必同输出 → JVM 单测可完整覆盖（无需设备），与既有 `StreakCalculator` 同构。
  *
  * ## 本版的两块"知识表"
- * - [MuscleTag]：**肌群标签**数据词汇，与内置动作 `muscleGroups` 的列值一致（属**数据**，非文案）；
+ * - [MuscleGroup]：**肌群标签**数据词汇（唯一真源，与内置动作 `muscleGroups` 的列值一致；属**数据**，非文案）；
  * - [INJURY_AGGRAVATED_TAGS] / [FOCUS_TAGS]：伤病避让与训练重点的机械映射。
  *
  * ⚠️ 上述标签是**数据匹配用**（属 `BuiltInExercises` 那类预置数据，架构 §7.5 允许写在 Kotlin 中的唯一例外）；
  * **所有面向用户的文案**一律不在此出现，由 UI 层经 `strings.xml` 映射。
  *
- * ## 已知精度边界（诚实登记）
- * 实体层**没有**"动作所需器械"字段，因此器械约束按**分类**判定（见 [equipmentAllowed]）：
- * `STRENGTH` 需至少一件力量器械，其余分类无需器械。将来给 `exercises` 增加器械字段后，
- * 只需替换 [equipmentAllowed] 一处，`planWeek` 签名不变。
+ * ## 器械约束的精度（v7 起分两档）
+ * v6 及以前实体层没有"动作所需器械"字段，器械约束只能按**分类**猜（`STRENGTH` 需至少一件力量器械）。
+ * v7 起 [Exercise.equipment] 存在且内置动作全量标注，[equipmentAllowed] 优先按标注判定；
+ * **未标注**的行（用户自建、老备份恢复）继续走旧的分类判据 —— 所以本引擎对内置库是精确的，
+ * 对自建动作仍是粗粒度的。
  */
 object LocalRuleAdvisor : PlanAdvisor {
 
@@ -113,54 +115,40 @@ object LocalRuleAdvisor : PlanAdvisor {
     /** 轮换**相位**：对齐周的起始位置（纯常量；保证同一周稳定、跨周推进一格）。 */
     private const val ROTATION_PHASE: Int = 1
 
-    /** 视为"力量训练所需"的器械集合。 */
+    /**
+     * 视为"力量训练所需"的器械集合（**仅在动作未标注 [Exercise.equipment] 时**用作回落判据）。
+     *
+     * 不含 [Equipment.YOGA_MAT] / [Equipment.TREADMILL]：前者不是力量门槛，后者属于有氧器材。
+     */
     private val STRENGTH_GEAR: Set<Equipment> = setOf(
         Equipment.DUMBBELL,
         Equipment.BARBELL,
         Equipment.MACHINE,
         Equipment.RESISTANCE_BAND,
         Equipment.PULLUP_BAR,
+        Equipment.CABLE,
     )
 
     // ------------------------------------------------------------------
-    // 数据词汇：肌群标签（与内置动作 muscleGroups 的列值一致）
+    // 数据词汇：肌群标签见 `domain/model/MuscleGroup.kt`（唯一真源，本文件只引用不复制）
     // ------------------------------------------------------------------
-
-    /** 肌群标签（**数据**，非文案；集中在此便于与种子数据对齐）。 */
-    private object MuscleTag {
-        const val CHEST: String = "胸部"
-        const val UPPER_CHEST: String = "上胸"
-        const val BACK: String = "背部"
-        const val REAR_DELT: String = "后肩"
-        const val SHOULDER: String = "肩部"
-        const val BICEPS: String = "肱二头肌"
-        const val TRICEPS: String = "肱三头肌"
-        const val LEG: String = "腿部"
-        const val GLUTE: String = "臀部"
-        const val GLUTE_LEG: String = "臀腿"
-        const val HAMSTRING: String = "腿后链"
-        const val CORE: String = "核心"
-        const val ABS: String = "腹部"
-        const val FULL_BODY: String = "全身"
-        const val CARDIO: String = "有氧"
-    }
 
     /** 伤病部位 → **会被刺激到**的肌群标签（用于机械排除）。 */
     private val INJURY_AGGRAVATED_TAGS: Map<InjuryArea, Set<String>> = mapOf(
-        InjuryArea.KNEE to setOf(MuscleTag.LEG, MuscleTag.GLUTE_LEG, MuscleTag.FULL_BODY),
-        InjuryArea.ANKLE to setOf(MuscleTag.LEG, MuscleTag.GLUTE_LEG, MuscleTag.FULL_BODY),
-        InjuryArea.HIP to setOf(MuscleTag.GLUTE, MuscleTag.GLUTE_LEG, MuscleTag.LEG, MuscleTag.FULL_BODY),
-        InjuryArea.LOWER_BACK to setOf(MuscleTag.BACK, MuscleTag.HAMSTRING, MuscleTag.FULL_BODY),
+        InjuryArea.KNEE to setOf(MuscleGroup.LEG, MuscleGroup.GLUTE_LEG, MuscleGroup.FULL_BODY),
+        InjuryArea.ANKLE to setOf(MuscleGroup.LEG, MuscleGroup.GLUTE_LEG, MuscleGroup.FULL_BODY),
+        InjuryArea.HIP to setOf(MuscleGroup.GLUTE, MuscleGroup.GLUTE_LEG, MuscleGroup.LEG, MuscleGroup.FULL_BODY),
+        InjuryArea.LOWER_BACK to setOf(MuscleGroup.BACK, MuscleGroup.HAMSTRING, MuscleGroup.FULL_BODY),
         InjuryArea.SHOULDER to setOf(
-            MuscleTag.SHOULDER,
-            MuscleTag.REAR_DELT,
-            MuscleTag.UPPER_CHEST,
-            MuscleTag.CHEST,
+            MuscleGroup.SHOULDER,
+            MuscleGroup.REAR_DELT,
+            MuscleGroup.UPPER_CHEST,
+            MuscleGroup.CHEST,
         ),
-        InjuryArea.NECK to setOf(MuscleTag.SHOULDER, MuscleTag.REAR_DELT, MuscleTag.UPPER_CHEST),
-        InjuryArea.WRIST to setOf(MuscleTag.CHEST, MuscleTag.SHOULDER),
-        InjuryArea.ELBOW to setOf(MuscleTag.BICEPS, MuscleTag.TRICEPS, MuscleTag.BACK),
-        InjuryArea.CARDIO to setOf(MuscleTag.CARDIO, MuscleTag.FULL_BODY),
+        InjuryArea.NECK to setOf(MuscleGroup.SHOULDER, MuscleGroup.REAR_DELT, MuscleGroup.UPPER_CHEST),
+        InjuryArea.WRIST to setOf(MuscleGroup.CHEST, MuscleGroup.SHOULDER),
+        InjuryArea.ELBOW to setOf(MuscleGroup.BICEPS, MuscleGroup.TRICEPS, MuscleGroup.BACK),
+        InjuryArea.CARDIO to setOf(MuscleGroup.CARDIO, MuscleGroup.FULL_BODY),
     )
 
     /**
@@ -171,21 +159,21 @@ object LocalRuleAdvisor : PlanAdvisor {
      * 不再按肌群白名单挑。留着那张表会让下一个读代码的人以为规则还是白名单式的。
      */
     internal val FOCUS_TAGS: Map<TrainingFocus, Set<String>> = mapOf(
-        TrainingFocus.FULL_BODY to setOf(MuscleTag.FULL_BODY, MuscleTag.CORE, MuscleTag.CARDIO),
+        TrainingFocus.FULL_BODY to setOf(MuscleGroup.FULL_BODY, MuscleGroup.CORE, MuscleGroup.CARDIO),
         TrainingFocus.LOWER_BODY to setOf(
-            MuscleTag.LEG,
-            MuscleTag.GLUTE_LEG,
-            MuscleTag.GLUTE,
-            MuscleTag.HAMSTRING,
+            MuscleGroup.LEG,
+            MuscleGroup.GLUTE_LEG,
+            MuscleGroup.GLUTE,
+            MuscleGroup.HAMSTRING,
         ),
         TrainingFocus.UPPER_PUSH to setOf(
-            MuscleTag.CHEST,
-            MuscleTag.UPPER_CHEST,
-            MuscleTag.SHOULDER,
-            MuscleTag.TRICEPS,
+            MuscleGroup.CHEST,
+            MuscleGroup.UPPER_CHEST,
+            MuscleGroup.SHOULDER,
+            MuscleGroup.TRICEPS,
         ),
-        TrainingFocus.UPPER_PULL to setOf(MuscleTag.BACK, MuscleTag.REAR_DELT, MuscleTag.BICEPS),
-        TrainingFocus.CARDIO_CORE to setOf(MuscleTag.CORE, MuscleTag.ABS, MuscleTag.CARDIO),
+        TrainingFocus.UPPER_PULL to setOf(MuscleGroup.BACK, MuscleGroup.REAR_DELT, MuscleGroup.BICEPS),
+        TrainingFocus.CARDIO_CORE to setOf(MuscleGroup.CORE, MuscleGroup.ABS, MuscleGroup.CARDIO),
     )
 
     /** 目标 → 优先的分类（用于补充动作的排序，`0` 表示最优先）。 */
@@ -784,6 +772,7 @@ object LocalRuleAdvisor : PlanAdvisor {
             name = name.trim(),
             category = category,
             muscleGroups = muscleGroups,
+            equipment = equipment,
             defaultSets = (defaultSets ?: DEFAULT_SETS).coerceAtLeast(MIN_SETS),
             defaultReps = (defaultReps ?: DEFAULT_REPS).coerceAtLeast(MIN_REPS),
             noteKey = noteKeyFor(reason),
@@ -830,11 +819,22 @@ object LocalRuleAdvisor : PlanAdvisor {
         profile.equipment.ifEmpty { setOf(Equipment.NONE) }
 
     /**
-     * 器械可行性：**只有 `STRENGTH` 需要器械**，其余分类（自重 / 有氧 / 自建）无需器械。
+     * 器械可行性。
      *
-     * 实体层无"所需器械"字段，故按分类判定（见类注释的"已知精度边界"）。
+     * **优先看动作自己的标注**（`Exercise.equipment`，v7 起内置动作全量标注）：标注里的每一件
+     * 都必须出现在用户可用清单里（[Equipment.NONE] 恒可用）。于是「绳索下压」不会再排给只有
+     * 哑铃的人，「高位下拉」也不会被当成和「哑铃卧推」等价。
+     *
+     * **未标注**（存量行 / 用户自建动作 / 恢复的老备份）时回落到 v2.0.8 的旧判据：只有
+     * `STRENGTH` 分类要求"至少一件力量器械"，其余分类一律放行。回落是有意的 —— 把"没标注"
+     * 当成"不需要器械"等于让自建动作绕过全部约束，而当成"什么器械都需要"等于让自建动作永远排不进。
      */
     private fun equipmentAllowed(profile: UserProfile, exercise: Exercise): Boolean {
+        val required: Set<Equipment> = exercise.equipment.toSet()
+        if (required.isNotEmpty()) {
+            val owned: Set<Equipment> = effectiveEquipment(profile)
+            return required.all { it == Equipment.NONE || it in owned }
+        }
         if (exercise.category != ExerciseCategory.STRENGTH) return true
         return (effectiveEquipment(profile) intersect STRENGTH_GEAR).isNotEmpty()
     }

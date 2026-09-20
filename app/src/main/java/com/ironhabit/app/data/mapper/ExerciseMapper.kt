@@ -1,13 +1,15 @@
 package com.ironhabit.app.data.mapper
 
 import com.ironhabit.app.data.local.entity.ExerciseEntity
+import com.ironhabit.app.domain.model.Equipment
 import com.ironhabit.app.domain.model.Exercise
 import com.ironhabit.app.domain.model.ExerciseSource
 
 /**
  * `ExerciseEntity ⇄ domain.Exercise` 互转。
  *
- * `exercises.muscle_group` 是**有序 CSV**（首个 = 主肌群），在本地解码为 `List<String>`。
+ * - `exercises.muscle_group` 是**有序 CSV**（首个 = 主肌群），在本地解码为 `List<String>`。
+ * - `exercises.equipment` 同样是**有序 CSV**（v7 新增），解码为 `List<Equipment>`。
  */
 object ExerciseMapper {
 
@@ -20,6 +22,7 @@ object ExerciseMapper {
         category = entity.category,
         source = entity.source,
         muscleGroups = decodeMuscleGroups(entity.muscleGroup),
+        equipment = decodeEquipment(entity.equipment),
         note = entity.note,
         isActive = entity.isActive,
         defaultSets = entity.defaultSets,
@@ -41,6 +44,7 @@ object ExerciseMapper {
         name = domain.name,
         category = domain.category,
         muscleGroup = encodeMuscleGroups(domain.muscleGroups),
+        equipment = encodeEquipment(domain.equipment),
         source = domain.source,
         note = domain.note,
         isBuiltIn = domain.source == ExerciseSource.BUILT_IN,
@@ -65,4 +69,22 @@ object ExerciseMapper {
         val cleaned = groups.map { it.trim() }.filter { it.isNotEmpty() }
         return cleaned.takeIf { it.isNotEmpty() }?.joinToString(CSV_SEPARATOR)
     }
+
+    /**
+     * 器械 CSV → 枚举列表。
+     *
+     * **认不出的名字直接丢掉**（不抛异常）：降级安装（新版本写入 → 老版本读取）或手工改库时，
+     * 一个未知器械名不该让整行动作读不出来；丢完为空即"未标注"，规则引擎自会回落旧判据。
+     */
+    fun decodeEquipment(csv: String?): List<Equipment> =
+        csv.orEmpty()
+            .split(CSV_SEPARATOR)
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .mapNotNull { name -> runCatching { Equipment.valueOf(name) }.getOrNull() }
+            .distinct()
+
+    /** 枚举列表 → CSV；空列表返回 `null`（= 未标注，与"不需要器械"的 `NONE` 区分）。 */
+    fun encodeEquipment(equipment: List<Equipment>): String? =
+        equipment.distinct().takeIf { it.isNotEmpty() }?.joinToString(CSV_SEPARATOR) { it.name }
 }

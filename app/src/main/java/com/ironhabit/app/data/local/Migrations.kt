@@ -225,3 +225,30 @@ val MIGRATION_5_6: Migration = object : Migration(5, 6) {
         db.execSQL("UPDATE exercises SET is_active = 1")
     }
 }
+
+/**
+ * v6 → v7：`exercises` 增加**器械列**（`equipment`），让"这个动作你现在能不能练"有据可依。
+ *
+ * ## 为什么要有这一步
+ * 动作实体此前只有分类（自重/力量/有氧），所以本地规则引擎判断器械约束只能按分类猜：
+ * `STRENGTH` 一律要求"用户至少有一件力量器械"。于是「绳索下压」会排给只有哑铃的人，
+ * 而「哑铃卧推」和「腿举」在规则眼里完全等价。`LocalRuleAdvisor` 自己的类文档里就写着
+ * 「将来给 `exercises` 增加器械字段后，只需替换 `equipmentAllowed` 一处」—— 本次就是那一步。
+ *
+ * ## 这一步做什么
+ * 只有一条 `ADD COLUMN equipment TEXT DEFAULT NULL`，**没有任何 UPDATE / 回填**：
+ * `NULL` 的语义是**未标注**（存量行、用户自建动作），规则引擎遇到未标注就回落到旧的分类判据，
+ * 因此老用户升级后**排出来的计划与升级前逐字一致**（内置动作的标注在启动播种时才补上，
+ * 见 `DatabaseSeeder` 的"只补空、不覆盖"）。
+ *
+ * 约束（与其它迁移同）：`minSdk = 24` → 禁止 `DROP COLUMN` / `RENAME COLUMN`，本次只加列，天然满足。
+ * ⚠️ DDL 必须与 KSP 由 [com.ironhabit.app.data.local.entity.ExerciseEntity] 生成的
+ * `app/schemas/.../7.json` 的 `createSql` 逐字对齐，否则运行时 schema 校验会报
+ * "Migration didn't properly handle exercises"。
+ */
+val MIGRATION_6_7: Migration = object : Migration(6, 7) {
+
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE exercises ADD COLUMN equipment TEXT DEFAULT NULL")
+    }
+}

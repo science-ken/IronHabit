@@ -797,6 +797,7 @@ private fun equipmentLabelRes(equipment: Equipment): Int = when (equipment) {
     Equipment.PULLUP_BAR -> R.string.equipment_pullup_bar
     Equipment.RESISTANCE_BAND -> R.string.equipment_resistance_band
     Equipment.MACHINE -> R.string.equipment_machine
+    Equipment.CABLE -> R.string.equipment_cable
     Equipment.TREADMILL -> R.string.equipment_treadmill
 }
 

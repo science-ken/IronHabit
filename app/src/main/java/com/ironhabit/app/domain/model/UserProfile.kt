@@ -31,9 +31,13 @@ enum class Goal(val kcalFactor: Double) {
 }
 
 /**
- * 可用器械（对齐预览 `EQUIP` 的 8 项）。
+ * 可用器械（初版对齐预览 `EQUIP` 的 8 项，v7 起增补 [CABLE]）。
  *
  * 展示顺序即本枚举声明顺序（UI 不依赖 [Set] 迭代顺序）。
+ *
+ * ⚠️ 本枚举同时被**档案侧**（用户在「我的档案」勾选自己有什么）和**动作侧**
+ * （`exercises.equipment`，本动作需要什么）使用。存进 DataStore / DB 的都是 [name]，
+ * 所以**只能加值，不能改名或删值**（老档案里的名字会解不出来）。
  */
 enum class Equipment {
     /** 无器械（仅自重） */
@@ -56,6 +60,14 @@ enum class Equipment {
 
     /** 器械区 */
     MACHINE,
+
+    /**
+     * 绳索 / 龙门架。
+     *
+     * v7 起也是**动作侧**字段（`exercises.equipment`）的取值之一：内置动作里的「绳索下压」「面拉」
+     * 既不是杠铃也不是器械配重片，此前只能靠分类猜，会把它错排给只有哑铃的用户。
+     */
+    CABLE,
 
     /** 跑步机 */
     TREADMILL,

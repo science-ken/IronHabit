@@ -222,6 +222,8 @@ data class ExerciseSuggestion(
     val category: ExerciseCategory,
     /** 有序肌群列表，首个 = 主肌群。 */
     val muscleGroups: List<String>,
+    /** 所需器械（v7 新增）；随建议一起被"收入"写进动作库，否则收入后的行只能回落到分类判据。 */
+    val equipment: List<Equipment> = emptyList(),
     val defaultSets: Int,
     val defaultReps: Int,
     val noteKey: String,

@@ -72,17 +72,6 @@ private const val DEFAULT_SETS_TEXT = "3"
 private const val DEFAULT_REPS_TEXT = "12"
 
 /**
- * 常用肌群预设（**数据预置**，与 `BuiltInExercises` 同性质，允许内联）。
- *
- * 多选，**选中顺序即主→辅**（第一个 = 主肌群），与 `exercises.muscle_group` 有序 CSV 语义一致。
- */
-internal val PRESET_MUSCLE_GROUPS: List<String> = listOf(
-    "胸部", "上胸", "背部", "肩部", "后肩",
-    "肱二头肌", "肱三头肌", "腿部", "腿后链", "臀部",
-    "核心", "腹部", "全身", "有氧",
-)
-
-/**
  * 「新增 / 编辑动作」ViewModel。
  *
  * 路由参数 `exerciseId`（0 = 新增）经 [SavedStateHandle] 注入；编辑态一次性读取旧值后转入表单模型。

@@ -106,6 +106,8 @@
     <string name="title_exercise_detail">动作详情</string>
     <string name="empty_plan">这一天还没有计划，点右上角「+」添加</string>
     <string name="empty_exercise">动作库为空，点右上角「+」创建自定义动作</string>
+    <string name="hint_search_exercise">搜索动作或肌群</string>
+    <string name="empty_exercise_no_match">没有匹配的动作，换个词试试</string>
     <string name="empty_history">还没有打卡记录</string>
 
     <!-- 星期（周一~周日，1..7） -->
@@ -328,6 +330,7 @@
     <string name="equipment_pullup_bar">单杠</string>
     <string name="equipment_resistance_band">弹力带</string>
     <string name="equipment_machine">器械区</string>
+    <string name="equipment_cable">绳索</string>
     <string name="equipment_treadmill">跑步机</string>
 
     <!-- 分区：约束（伤病部位 9 项 / 忌口 6 项）-->

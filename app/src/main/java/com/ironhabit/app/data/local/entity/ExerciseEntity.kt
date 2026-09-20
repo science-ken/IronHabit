@@ -39,6 +39,17 @@ data class ExerciseEntity(
     @ColumnInfo(name = "muscle_group")
     val muscleGroup: String? = null,
 
+    /**
+     * 本动作**需要**的器械，v7 新增：`Equipment.name` 的**有序 CSV**（如 `"BARBELL"`、`"DUMBBELL,MACHINE"`）。
+     *
+     * - `null` / 空 = **未标注**（存量行、用户自建动作）→ 规则引擎回落到旧的"按分类猜"判据，
+     *   绝不把"没标注"当成"不需要器械"；
+     * - 复用 [com.ironhabit.app.domain.model.Equipment] 而非新造枚举：档案侧（用户有什么）与
+     *   动作侧（动作要什么）必须共用一套词汇，否则匹配要在两张表之间手工对齐。
+     */
+    @ColumnInfo(name = "equipment")
+    val equipment: String? = null,
+
     /** 三态来源（唯一真源，取代 [isBuiltIn]）。 */
     @ColumnInfo(name = "source")
     val source: ExerciseSource = ExerciseSource.BUILT_IN,

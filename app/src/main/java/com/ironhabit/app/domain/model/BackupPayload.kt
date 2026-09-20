@@ -64,6 +64,14 @@ data class ExerciseBackup(
     /** **有序 CSV**（v2 起语义）：第一个 = 主肌群。旧备份的单值天然合法。 */
     val muscleGroup: String? = null,
     /**
+     * **有序 CSV** 的 `Equipment.name`（v7 新增）：本动作需要的器械。
+     *
+     * `null` = 老备份未携带 / 该动作未标注 —— 两者同义，导入后由启动播种的"只补空"再补一次。
+     * 有意**不**抬 `schemaVersion`：新增可缺省字段对老读者零影响，抬版本反而会让老 App
+     * 把这版备份判为"太新，读不了"。
+     */
+    val equipment: String? = null,
+    /**
      * 三态来源（v2 新增）。`null` = 老备份（按 [isBuiltIn] 推导导入时的来源）。
      */
     val source: String? = null,

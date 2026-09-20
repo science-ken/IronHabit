@@ -27,6 +27,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.ExerciseCategory
+import com.ironhabit.app.domain.model.MuscleGroup
 import com.ironhabit.app.ui.components.EmptyState
 import com.ironhabit.app.ui.components.LoadingSkeleton
 import com.ironhabit.app.ui.components.LocalSnackbarHostState
@@ -228,7 +229,7 @@ private fun MuscleGroupChips(
             .horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
     ) {
-        PRESET_MUSCLE_GROUPS.forEach { group ->
+        MuscleGroup.formOptions.forEach { group ->
             FilterChip(
                 selected = group in selected,
                 onClick = { onToggle(group) },

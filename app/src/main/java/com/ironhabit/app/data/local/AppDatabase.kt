@@ -31,6 +31,7 @@ import com.ironhabit.app.data.local.entity.WeekPlanEntity
  *   **不启用破坏性迁移**（项目红线「禁破坏性迁移」）：`DatabaseModule` 未注册任何
  *   `fallbackToDestructiveMigration*`；遇到未注册的降级 schema 变化会**抛异常暴露**而非静默清库。
  * - 版本 6：由 [MIGRATION_5_6] 从 v5 升级（动作停用入口下线，存量停用动作一次性全部置回启用）。
+ * - 版本 7：由 [MIGRATION_6_7] 从 v6 升级（`exercises` 增加 `equipment` 器械列，**纯加列无回填**）。
  */
 @Database(
     entities = [
@@ -69,6 +70,6 @@ abstract class AppDatabase : RoomDatabase() {
         const val DATABASE_NAME: String = "ironhabit.db"
 
         /** 当前 schema 版本。 */
-        const val VERSION: Int = 6
+        const val VERSION: Int = 7
     }
 }
