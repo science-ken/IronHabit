@@ -84,10 +84,13 @@ boot() {
   echo "❌ 启动超时"; return 1
 }
 
-# 把当前界面层级拉到 $SHOTS/ui.xml（ui / taptext 共用）
+# 把当前界面层级拉到 $SHOTS/ui.xml（ui / taptext / tap 共用）
 pull_ui() {
-  "$ADB" -s "$(device)" shell uiautomator dump /data/local/tmp/ui.xml >/dev/null 2>&1
-  "$ADB" -s "$(device)" exec-out cat /data/local/tmp/ui.xml > "$SHOTS/ui.xml" 2>/dev/null
+  local D; D="$(device)"
+  # ⚠️ 必须先删旧文件：dump 失败时 cat 会读到**上一轮**的层级，
+  # 于是"界面明明在今日页"却报出别的页面，本会话被这个假象骗过一次。
+  "$ADB" -s "$D" shell "rm -f /data/local/tmp/ui.xml; uiautomator dump /data/local/tmp/ui.xml" >/dev/null 2>&1
+  MSYS_NO_PATHCONV=1 "$ADB" -s "$D" exec-out "cat /data/local/tmp/ui.xml" > "$SHOTS/ui.xml" 2>/dev/null
   [ -s "$SHOTS/ui.xml" ] || { echo "❌ 界面层级拉取失败（App 未在前台？）"; return 1; }
 }
 
@@ -167,7 +170,28 @@ if hits:
 
   tap)
     ensure_device || exit 1; D="$(device)"
-    "$ADB" -s "$D" shell input tap "$2" "$3"; echo "tap $2 $3" ;;
+    X="$2"; Y="$3"
+    [ -n "$X" ] && [ -n "$Y" ] || { echo "用法：bash scripts/dev.sh tap <x> <y>"; exit 1; }
+    case "$X$Y" in (*[!0-9]*) echo "❌ 坐标必须是数字：$X $Y"; exit 1 ;; esac
+    mkdir -p "$SHOTS"
+
+    # ① 坐标在不在屏上：超出面板高度的 tap 是**静默空操作**，
+    #    照着被缩放过的截图估 y=2130 就这么白点过一次（本机是 1080x1920）。
+    SIZE="$("$ADB" -s "$D" shell wm size 2>/dev/null | tr -d '\r' | grep -o '[0-9]*x[0-9]*' | tail -1)"
+    W="${SIZE%x*}"; H="${SIZE#*x}"
+    if [ -n "$W" ] && [ -n "$H" ] && { [ "$X" -gt "$W" ] || [ "$Y" -gt "$H" ]; }; then
+      echo "❌ ($X,$Y) 超出屏幕 $SIZE —— 这一指不会有任何反应，别当它点过了"
+      exit 1
+    fi
+
+    # ② 落点先看清楚：本会话误触写库三次，全是照着旧坐标盲点（训练弹窗整张卡都是打卡热区）
+    "$ADB" -s "$D" exec-out screencap -p > "$SHOTS/pre-tap-$(date +%H%M%S).png" 2>/dev/null
+    if pull_ui; then
+      echo -n "落点 ($X,$Y) → "
+      "$PY" "$ROOT/scripts/tap-target.py" "$SHOTS/ui.xml" "$X" "$Y"
+    fi
+
+    "$ADB" -s "$D" shell input tap "$X" "$Y"; echo "tap $X $Y" ;;
 
   # 返回：bash scripts/dev.sh back   （二级页没有底部导航，必须先返回）
   back)
