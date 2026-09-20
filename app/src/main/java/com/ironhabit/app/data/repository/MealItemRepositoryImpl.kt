@@ -31,6 +31,9 @@ class MealItemRepositoryImpl @Inject constructor(
 
     override suspend fun countByMeal(mealId: Long): Int = mealItemDao.countByMeal(mealId)
 
+    override suspend fun getById(itemId: Long): MealItem? =
+        mealItemDao.getById(itemId)?.let { entity -> MealItemMapper.toDomain(entity) }
+
     override suspend fun upsert(item: MealItem): Long =
         mealItemDao.upsert(MealItemMapper.toEntity(item))
 

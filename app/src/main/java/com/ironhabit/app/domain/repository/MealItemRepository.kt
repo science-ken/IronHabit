@@ -17,6 +17,9 @@ interface MealItemRepository {
     /** 某餐现有条目数（上限判据用）。 */
     suspend fun countByMeal(mealId: Long): Int
 
+    /** 按 id 取一条（改份量前要先拿到它当时记了多少克）。 */
+    suspend fun getById(itemId: Long): MealItem?
+
     /** 新增或更新一条，返回行 id。 */
     suspend fun upsert(item: MealItem): Long
 
