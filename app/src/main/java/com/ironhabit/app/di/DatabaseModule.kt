@@ -10,6 +10,7 @@ import com.ironhabit.app.data.local.MIGRATION_4_5
 import com.ironhabit.app.data.local.MIGRATION_5_6
 import com.ironhabit.app.data.local.MIGRATION_6_7
 import com.ironhabit.app.data.local.MIGRATION_7_8
+import com.ironhabit.app.data.local.MIGRATION_8_9
 import com.ironhabit.app.data.local.dao.BodyMetricDao
 import com.ironhabit.app.data.local.dao.CheckInDao
 import com.ironhabit.app.data.local.dao.ExerciseDao
@@ -17,6 +18,7 @@ import com.ironhabit.app.data.local.dao.FoodDao
 import com.ironhabit.app.data.local.dao.HabitDao
 import com.ironhabit.app.data.local.dao.HabitLogDao
 import com.ironhabit.app.data.local.dao.MealDao
+import com.ironhabit.app.data.local.dao.MealItemDao
 import com.ironhabit.app.data.local.dao.StatsDao
 import com.ironhabit.app.data.local.dao.WeekPlanDao
 import dagger.Module
@@ -56,7 +58,7 @@ object DatabaseModule {
     )
         .addMigrations(
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4,
-            MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8,
+            MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9,
         )
         .build()
 
@@ -86,4 +88,7 @@ object DatabaseModule {
 
     @Provides
     fun provideFoodDao(db: AppDatabase): FoodDao = db.foodDao()
+
+    @Provides
+    fun provideMealItemDao(db: AppDatabase): MealItemDao = db.mealItemDao()
 }

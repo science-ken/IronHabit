@@ -10,6 +10,7 @@ import com.ironhabit.app.data.local.dao.FoodDao
 import com.ironhabit.app.data.local.dao.HabitDao
 import com.ironhabit.app.data.local.dao.HabitLogDao
 import com.ironhabit.app.data.local.dao.MealDao
+import com.ironhabit.app.data.local.dao.MealItemDao
 import com.ironhabit.app.data.local.dao.StatsDao
 import com.ironhabit.app.data.local.dao.WeekPlanDao
 import com.ironhabit.app.data.local.entity.BodyMetricEntity
@@ -21,6 +22,7 @@ import com.ironhabit.app.data.local.entity.FoodServingEntity
 import com.ironhabit.app.data.local.entity.HabitEntity
 import com.ironhabit.app.data.local.entity.HabitLogEntity
 import com.ironhabit.app.data.local.entity.MealEntity
+import com.ironhabit.app.data.local.entity.MealItemEntity
 import com.ironhabit.app.data.local.entity.WeekPlanEntity
 
 /**
@@ -37,6 +39,8 @@ import com.ironhabit.app.data.local.entity.WeekPlanEntity
  * - 版本 7：由 [MIGRATION_6_7] 从 v6 升级（`exercises` 增加 `equipment` 器械列，**纯加列无回填**）。
  * - 版本 8：由 [MIGRATION_7_8] 从 v7 升级（新增 `foods` + `food_servings` 两张表，食物库；**纯建表**，
  *   不碰 `meals` 一个字节 —— 饮食区"计划 vs 实际"的语义见 `.scratch/ironhabit-diet-food-log/spec.md` §1）。
+ * - 版本 9：由 [MIGRATION_8_9] 从 v8 升级（新增 `meal_items`：一餐里**实际吃下的条目**。
+ *   营养值是落库时算好的**快照**，改食物定义不会改写历史）。
  */
 @Database(
     entities = [
@@ -49,6 +53,7 @@ import com.ironhabit.app.data.local.entity.WeekPlanEntity
         MealEntity::class,
         FoodEntity::class,
         FoodServingEntity::class,
+        MealItemEntity::class,
     ],
     version = AppDatabase.VERSION,
     exportSchema = true,
@@ -74,11 +79,13 @@ abstract class AppDatabase : RoomDatabase() {
 
     abstract fun foodDao(): FoodDao
 
+    abstract fun mealItemDao(): MealItemDao
+
     companion object {
         /** 数据库文件名。 */
         const val DATABASE_NAME: String = "ironhabit.db"
 
         /** 当前 schema 版本。 */
-        const val VERSION: Int = 8
+        const val VERSION: Int = 9
     }
 }

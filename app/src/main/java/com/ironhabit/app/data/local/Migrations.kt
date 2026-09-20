@@ -329,3 +329,63 @@ val MIGRATION_7_8: Migration = object : Migration(7, 8) {
         )
     }
 }
+
+/**
+ * v8 → v9：新增 `meal_items`（一餐里"实际吃了什么"的条目）。
+ *
+ * ## 语义承重墙
+ * 这张表**只装真的吃下去的东西**。AI 生成的建议留在 `meals.items_text`，
+ * 用户点「吃了它」才会往这里复制一行。
+ * 让建议直接进这张表 = 把训练区 2026-09-20 刚修掉的
+ * 「排了计划当成练了」在饮食区重演一遍（见 `.scratch/ironhabit-diet-food-log/spec.md` §1）。
+ *
+ * ## 为什么带 4 个营养快照列
+ * 存"每 100g 定义 + 克数"然后查询时现算，会让改食物定义**改写历史**：
+ * 把米饭从 116 改成 130，三个月前那顿跟着变，趋势图自己动。
+ * 与 `check_ins.weight_kg` 存"当时举了多少"同一个原则。
+ * 同时存 `food_name` 快照：食物被停用或将来被删，这一行仍然自解释。
+ *
+ * ## 两个外键的方向不一样，是有意的
+ * - `meal_id` → `CASCADE`：一餐被删，它下面的条目当然跟着没；
+ * - `food_id` → `SET_NULL`：删掉一个食物**绝不能**抹掉吃过它的历史记录。
+ *   置空之后名称与营养快照仍在，只是点不进详情。
+ *
+ * 约束（与其它迁移同）：`minSdk = 24` → 禁 `DROP COLUMN` / `RENAME COLUMN`，本次纯建表。
+ * ⚠️ DDL 必须与 KSP 生成的 `app/schemas/.../9.json` 的 `createSql` **逐字对齐**
+ * （含两个外键子句之间那个 `, ` 与末尾 `SET NULL )` 前的空格），
+ * 否则运行时校验会报 "Migration didn't properly handle meal_items"。
+ * 列上**不写 `DEFAULT`**：实体没有 `@ColumnInfo(defaultValue = …)`，写了就不一致。
+ */
+val MIGRATION_8_9: Migration = object : Migration(8, 9) {
+
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `meal_items` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`meal_id` INTEGER NOT NULL, " +
+                "`food_id` INTEGER, " +
+                "`food_name` TEXT NOT NULL, " +
+                "`grams` REAL NOT NULL, " +
+                "`serving_unit` TEXT, " +
+                "`serving_count` REAL, " +
+                "`kcal` INTEGER NOT NULL, " +
+                "`protein_g` REAL NOT NULL, " +
+                "`carbs_g` REAL NOT NULL, " +
+                "`fat_g` REAL NOT NULL, " +
+                "`sort_order` INTEGER NOT NULL, " +
+                "`created_at` INTEGER NOT NULL, " +
+                "FOREIGN KEY(`meal_id`) REFERENCES `meals`(`id`) " +
+                "ON UPDATE NO ACTION ON DELETE CASCADE , " +
+                "FOREIGN KEY(`food_id`) REFERENCES `foods`(`id`) " +
+                "ON UPDATE NO ACTION ON DELETE SET NULL )"
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_meal_items_meal_id` " +
+                "ON `meal_items` (`meal_id`)"
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_meal_items_food_id` " +
+                "ON `meal_items` (`food_id`)"
+        )
+    }
+}
