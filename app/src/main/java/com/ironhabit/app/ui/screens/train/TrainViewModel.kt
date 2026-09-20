@@ -11,6 +11,7 @@ import com.ironhabit.app.domain.repository.PlanRepository
 import com.ironhabit.app.domain.usecase.AddExerciseToPlanUseCase
 import com.ironhabit.app.domain.usecase.ResetPlanItemUseCase
 import com.ironhabit.app.domain.util.DateUtils
+import com.ironhabit.app.domain.util.TodayClock
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -21,14 +22,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.datetime.Clock
-import kotlinx.datetime.TimeZone
 
 /**
  * 「训练」页 ViewModel（周计划 / 动作库 / 历史 三分段共用）。
@@ -44,21 +44,35 @@ class TrainViewModel @Inject constructor(
     private val exerciseRepository: ExerciseRepository,
     private val checkInRepository: CheckInRepository,
     private val addToPlan: AddExerciseToPlanUseCase,
-    private val clock: Clock,
-    private val timeZone: TimeZone,
+    private val todayClock: TodayClock,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TrainUiState())
     val uiState: StateFlow<TrainUiState> = _uiState.asStateFlow()
 
     /** 当前选中星期（`1..7`）。 */
-    private val selectedDay = MutableStateFlow(todayWeekday())
+    private val selectedDay = MutableStateFlow(todayClock.todayWeekday())
+
+    /**
+     * 用户是否手动选过星期。
+     *
+     * 选过之后换天就**不再抢**他的选择 —— 他可能正在看下周某一天；
+     * 没选过（默认"今天"）时才跟着时钟走。
+     */
+    private val userPickedDay = MutableStateFlow(false)
 
     /** 数据流重订阅触发器（失败重试）：自增即让下面的聚合流整体重订阅一次。 */
     private val retryTrigger = MutableStateFlow(0L)
 
-    /** 本周的周一（P3：计划按周存放；动作库「+」默认写这一周）。 */
-    private val currentWeekStart: Long = DateUtils.weekStartMon1(todayEpochDay())
+    /**
+     * 本周的周一（P3：计划按周存放；动作库「+」默认写这一周）。
+     *
+     * ⚠️ 这里以前是 `private val currentWeekStart = weekStartMon1(todayEpochDay())` ——
+     * **构造时算一次**。App 常驻开着跨过周一 00:00，从动作库「+」排进去的动作
+     * 会全部落进上一周。改成跟着 [TodayClock.epochDay] 走。
+     */
+    private val weekStartFlow: Flow<Long> =
+        todayClock.epochDay.map { epochDay -> DateUtils.weekStartMon1(epochDay) }
 
     /** 所选星期的计划（携带 day 以便区分新旧）。 */
     private val plansFlow: Flow<Pair<Int, List<WeekPlan>>> =
@@ -66,25 +80,33 @@ class TrainViewModel @Inject constructor(
             planRepository.observePlansForDay(day).map { plans -> day to plans }
         }
 
-    /** 本周生效计划（专属优先，回落「每周相同」）→ `exerciseId → 出现的星期集合`。 */
-    private val plannedDaysFlow: Flow<Map<Long, Set<Int>>> =
-        planRepository.observeEffectivePlanForWeek(currentWeekStart)
-            .map { plans -> plans.toDaysByExercise() }
+    /**
+     * 本周生效计划（专属优先，回落「每周相同」）→ `exerciseId → 出现的星期集合`，
+     * 并**连同那一周的周一一起带出去**：页面标签和写入必须用同一个值，
+     * 否则会出现"标签写本周、动作排进上周"。
+     */
+    private val plannedDaysFlow: Flow<Pair<Long, Map<Long, Set<Int>>>> =
+        weekStartFlow.flatMapLatest { weekStart ->
+            planRepository.observeEffectivePlanForWeek(weekStart)
+                .map { plans -> weekStart to plans.toDaysByExercise() }
+        }
 
     /** 「每周相同」那份 → `exerciseId → 出现的星期集合`（弹层「每周都加」勾选初值参考）。 */
     private val repeatDaysFlow: Flow<Map<Long, Set<Int>>> =
         planRepository.observeRepeatPlan()
             .map { plans -> plans.toDaysByExercise() }
 
-    /** 近 30 天打卡历史（按日期倒序聚合为 [HistoryEntry]）。 */
+    /** 近 30 天打卡历史（按日期倒序聚合为 [HistoryEntry]）。窗口跟着 [TodayClock] 滑动。 */
     private val historyFlow: Flow<List<HistoryEntry>> =
-        checkInRepository.observeBetween(historyStartEpochDay(), historyEndEpochDay())
-            .map { checkIns ->
-                checkIns
-                    .groupBy { it.dateEpochDay }
-                    .map { (epochDay, items) -> HistoryEntry(epochDay = epochDay, count = items.size) }
-                    .sortedByDescending { it.epochDay }
-            }
+        todayClock.epochDay.flatMapLatest { today ->
+            checkInRepository.observeBetween(today - (HISTORY_DAYS - 1), today)
+                .map { checkIns ->
+                    checkIns
+                        .groupBy { it.dateEpochDay }
+                        .map { (epochDay, items) -> HistoryEntry(epochDay = epochDay, count = items.size) }
+                        .sortedByDescending { it.epochDay }
+                }
+        }
 
     private val dataState: StateFlow<TrainUiState> = retryTrigger
         .flatMapLatest {
@@ -94,16 +116,16 @@ class TrainViewModel @Inject constructor(
                 historyFlow,
                 plannedDaysFlow,
                 repeatDaysFlow,
-            ) { dayPlans, exercises, history, plannedDays, repeatDays ->
+            ) { dayPlans, exercises, history, planned, repeatDays ->
                 TrainUiState(
                     isLoading = false,
                     selectedDay = dayPlans.first,
-                    weekStartEpochDay = currentWeekStart,
+                    weekStartEpochDay = planned.first,
                     plans = dayPlans.second,
                     exercises = exercises,
                     exerciseNameById = exercises.associate { exercise -> exercise.id to exercise.name },
                     history = history,
-                    plannedDaysByExercise = plannedDays,
+                    plannedDaysByExercise = planned.second,
                     repeatDaysByExercise = repeatDays,
                 )
             }
@@ -124,10 +146,23 @@ class TrainViewModel @Inject constructor(
         viewModelScope.launch {
             dataState.collect { data -> _uiState.update { local -> merge(local, data) } }
         }
+        // 换天时把"选中的星期"推到新的一天 —— 仅在用户没手动选过的情况下。
+        // 不这么做：App 常驻开着跨过 00:00，页面还停在昨天的星期上，
+        // 用户以为在看"今日"，实际排课/删除都作用在另一天。
+        viewModelScope.launch {
+            todayClock.epochDay
+                .drop(1)
+                .collect { epochDay ->
+                    if (!userPickedDay.value) {
+                        selectedDay.value = DateUtils.weekdayMon1(epochDay)
+                    }
+                }
+        }
     }
 
-    /** 选择星期（`1..7`）。 */
+    /** 选择星期（`1..7`）。手动选过之后，换天不再抢这个选择。 */
     fun onSelectDay(dayOfWeek: Int) {
+        userPickedDay.value = true
         selectedDay.value = dayOfWeek.coerceIn(MIN_DAY_OF_WEEK, MAX_DAY_OF_WEEK)
     }
 
@@ -173,7 +208,7 @@ class TrainViewModel @Inject constructor(
             try {
                 addToPlan(
                     exerciseId = exerciseId,
-                    weekStartEpochDay = currentWeekStart,
+                    weekStartEpochDay = todayClock.weekStartEpochDay(),
                     selectedDays = selectedDays,
                     targetSets = targetSets,
                     targetReps = targetReps,
@@ -229,15 +264,6 @@ class TrainViewModel @Inject constructor(
     private fun List<WeekPlan>.toDaysByExercise(): Map<Long, Set<Int>> =
         groupBy { it.exerciseId }
             .mapValues { (_, rows) -> rows.map { plan -> plan.dayOfWeek }.toSet() }
-
-    private fun todayWeekday(): Int =
-        DateUtils.weekdayMon1(todayEpochDay())
-
-    private fun todayEpochDay(): Long = DateUtils.todayEpochDay(clock, timeZone)
-
-    private fun historyEndEpochDay(): Long = todayEpochDay()
-
-    private fun historyStartEpochDay(): Long = historyEndEpochDay() - (HISTORY_DAYS - 1)
 
     private companion object {
         const val MIN_DAY_OF_WEEK = 1

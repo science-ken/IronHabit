@@ -28,6 +28,7 @@ import com.ironhabit.app.domain.usecase.UndoCheckInUseCase
 import com.ironhabit.app.domain.usecase.UpsertMealUseCase
 import com.ironhabit.app.domain.util.DateUtils
 import com.ironhabit.app.test.MainDispatcherRule
+import com.ironhabit.app.test.todayClockFor
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -133,8 +134,7 @@ class TodayViewModelMealEditTest {
             buildWeeklyReview = buildWeeklyReview,
             statsRepository = statsRepository,
             planPreviewHolder = com.ironhabit.app.domain.usecase.PlanPreviewHolder(),
-            clock = clock,
-            timeZone = timeZone,
+            todayClock = todayClockFor(clock, timeZone),
         )
     }
 

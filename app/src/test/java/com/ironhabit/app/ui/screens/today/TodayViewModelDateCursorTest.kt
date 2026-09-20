@@ -33,6 +33,7 @@ import com.ironhabit.app.domain.usecase.UndoCheckInUseCase
 import com.ironhabit.app.domain.usecase.UpsertMealUseCase
 import com.ironhabit.app.domain.util.DateUtils
 import com.ironhabit.app.test.MainDispatcherRule
+import com.ironhabit.app.test.todayClockFor
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
@@ -41,6 +42,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -98,9 +100,18 @@ class TodayViewModelDateCursorTest {
         diet = DietReview(loggedDays = 0, avgKcal = null, avgProteinG = null),
     )
 
-    private val clock = Clock.System
+    /**
+     * 可推进的假时钟：起点就是真实「现在」，所以本文件其余用例的行为一字不变；
+     * 只有 `cursorFollowsMidnightRollover` 会把它拨过午夜。
+     */
+    private val clock = object : Clock {
+        var instant: Instant = Clock.System.now()
+        override fun now(): Instant = this.instant
+    }
     private val timeZone = TimeZone.UTC
-    private val today: Long = DateUtils.todayEpochDay(Clock.System, TimeZone.UTC)
+    private val todayClock = todayClockFor(clock, timeZone)
+    private val dayMillis: Long = 86_400_000L
+    private val today: Long = DateUtils.todayEpochDay(clock, timeZone)
     private val futureDay: Long = today + 7 // 「看下周计划」
 
     private val exercise = Exercise(id = 1L, name = "卧推", category = ExerciseCategory.STRENGTH)
@@ -145,8 +156,7 @@ class TodayViewModelDateCursorTest {
             buildWeeklyReview = buildWeeklyReview,
             statsRepository = statsRepository,
             planPreviewHolder = com.ironhabit.app.domain.usecase.PlanPreviewHolder(),
-            clock = clock,
-            timeZone = timeZone,
+            todayClock = todayClock,
         )
     }
 
@@ -176,6 +186,30 @@ class TodayViewModelDateCursorTest {
             "本周热力同样要逐字段搬进 uiState（applyData 漏一个字段那格就永远是初始值）",
             7,
             vm.uiState.value.weekHeatmap.size,
+        )
+    }
+
+    @Test
+    fun cursorFollowsMidnightRollover() = runTest(mainDispatcherRule.testDispatcher) {
+        // 跨午夜：App 常驻开着过 00:00，游标必须自己跟到新的一天。
+        // 跟不动的后果不是"显示旧了"，而是**打卡写进昨天** —— streak 与热力图一起被污染。
+        val nextDay: Long = today + 1
+        every { getTodayOverview.invoke(nextDay) } returns
+            flowOf(TodayOverview(dateEpochDay = nextDay, plannedSetsThisWeek = plannedSets))
+        every { getTodayMeals.invoke(nextDay) } returns flowOf(TodayMeals())
+
+        val vm = newViewModel()
+        advanceUntilIdle()
+        assertEquals("起点：游标 = 今天", today, vm.uiState.value.dateEpochDay)
+
+        clock.instant = Instant.fromEpochMilliseconds(clock.instant.toEpochMilliseconds() + dayMillis)
+        todayClock.refresh()
+        advanceUntilIdle()
+
+        assertEquals(
+            "换天后游标要跟到新的一天（用户没手动选过日子时才跟）",
+            nextDay,
+            vm.uiState.value.dateEpochDay,
         )
     }
 

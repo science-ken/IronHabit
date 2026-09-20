@@ -31,6 +31,7 @@ import com.ironhabit.app.domain.usecase.UpsertMealUseCase
 import com.ironhabit.app.domain.usecase.ToggleSetUseCase
 import com.ironhabit.app.domain.usecase.UndoCheckInUseCase
 import com.ironhabit.app.domain.util.DateUtils
+import com.ironhabit.app.domain.util.TodayClock
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -42,13 +43,12 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.datetime.Clock
-import kotlinx.datetime.TimeZone
 
 /**
  * 「今日」页 ViewModel。
@@ -82,8 +82,7 @@ class TodayViewModel @Inject constructor(
     private val planRepository: PlanRepository,
     private val buildWeeklyReview: BuildWeeklyReviewUseCase,
     private val statsRepository: StatsRepository,
-    private val clock: Clock,
-    private val timeZone: TimeZone,
+    private val todayClock: TodayClock,
 ) : ViewModel() {
 
     /** 对外状态：数据字段来自 [overviewState]，瞬态字段（Snackbar/错误）由动作写入。 */
@@ -93,7 +92,26 @@ class TodayViewModel @Inject constructor(
     private val retryTrigger = MutableStateFlow(0L)
 
     /** 日期游标：默认今天；由日期栏 chip / `‹ ›` 跨周改写。 */
-    private val selectedEpochDay = MutableStateFlow(todayEpochDay())
+    private val selectedEpochDay = MutableStateFlow(todayClock.todayEpochDay())
+
+    /**
+     * 用户是否手动挪过游标。挪过之后换天**不再抢** —— 他可能正在回看某一天；
+     * 只有停在"今天"时，才跟着时钟推到新的一天。
+     */
+    private val userMovedCursor = MutableStateFlow(false)
+
+    init {
+        // 跨午夜自动跟进：App 常驻开着过 00:00 时，标题仍写「今日」，
+        // 而游标停在昨天 —— 一指点下去打卡就写进昨天，streak 与热力图一起被污染。
+        // 只靠"数据变化时重算"治不了它：没人写库就没有新发射，所以必须有 [TodayClock] 的轮询。
+        viewModelScope.launch {
+            todayClock.epochDay
+                .drop(1)
+                .collect { epochDay ->
+                    if (!userMovedCursor.value) selectedEpochDay.value = epochDay
+                }
+        }
+    }
 
     /** 「每周相同」那份计划是否存在（存在 = 已开启）。 */
     private val repeatWeeklyFlow: Flow<Boolean> =
@@ -255,6 +273,7 @@ class TodayViewModel @Inject constructor(
 
     /** 切换查看日期（日期栏 chip / `‹ ›` 跨周）。 */
     fun onSelectEpochDay(epochDay: Long) {
+        userMovedCursor.value = true
         selectedEpochDay.value = epochDay
     }
 
@@ -513,7 +532,7 @@ class TodayViewModel @Inject constructor(
 
     /** 当前写入口径：优先数据流已加载的日期，否则回落到今天。 */
     private fun currentEpochDay(): Long =
-        _uiState.value.dateEpochDay.let { if (it > 0L) it else todayEpochDay() }
+        _uiState.value.dateEpochDay.let { if (it > 0L) it else todayClock.todayEpochDay() }
 
     /** 合并数据流：数据字段整体覆盖；Snackbar 由 streak 变化或写操作决定；错误优先取数据流的。 */
     private fun applyData(data: TodayUiState) {
@@ -564,7 +583,7 @@ class TodayViewModel @Inject constructor(
                 weekHeatmap = data.weekHeatmap,
                 // 同一个坑的第三处：漏掉它「总组数」就永远只显示完成数、不显示 / 35。
                 plannedSetsThisWeek = data.plannedSetsThisWeek,
-                todayEpochDay = todayEpochDay(),
+                todayEpochDay = todayClock.todayEpochDay(),
                 errorRes = null,
                 snackbarRes = streakRes ?: state.snackbarRes,
                 snackbarArgs = state.snackbarArgs,
@@ -573,7 +592,6 @@ class TodayViewModel @Inject constructor(
         previousStreak = current
     }
 
-    private fun todayEpochDay(): Long = DateUtils.todayEpochDay(clock, timeZone)
 
     private companion object {
         /** 触发器口径：取全历史活跃日（自 1970-01-01 起）。 */
