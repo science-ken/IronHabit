@@ -164,6 +164,7 @@ class TrainViewModel @Inject constructor(
         selectedDays: Set<Int>,
         targetSets: Int,
         targetReps: Int,
+        targetDurationMin: Int?,
         alsoRepeatWeekly: Boolean,
     ) {
         if (_uiState.value.isSubmittingAdd) return
@@ -176,6 +177,7 @@ class TrainViewModel @Inject constructor(
                     selectedDays = selectedDays,
                     targetSets = targetSets,
                     targetReps = targetReps,
+                    targetDurationMin = targetDurationMin,
                     alsoRepeatWeekly = alsoRepeatWeekly,
                 )
                 _uiState.update { state ->

@@ -49,16 +49,22 @@ private val WEEKDAY_SHORT_RES = listOf(
  * 「加入每周训练计划」底部弹层（动作库行尾 `+` / `✓` 的下一步，无状态组件）。
  *
  * - **星期多选**（`1..7`）：勾选 = 目标态；[initialDays] 为该动作当前已排的天（打开时预勾）。
- * - **组数 / 次数**：默认 3 × 12；范围由 [InputLimits] 口径把守，越界禁用保存。
+ * - **组数 / 次数 / 时长**：初值取**动作自带的默认值**（`Exercise.defaultSets/Reps/DurationSec`），
+ *   动作没给默认值才回落到 3 × 12。此前这里无条件写死 3 × 12 —— 于是「硬拉 4×6」和
+ *   「游泳 40 分钟」被加进计划时都会变成 3×12 且没有时长，等于把动作库里的默认值白存了。
+ *   范围由 [InputLimits] 口径把守，越界禁用保存。
  * - **每周都加**：勾选后把同样的目标态同步写进「每周相同」那份
  *   （以后没单独排计划的周也会有它；[initialRepeatWeekly] = 该动作已在那份里时预勾）。
  * - 写操作结果由页面级 Snackbar / 错误态承载（坑 3：弹层内的操作反馈会被 `ModalBottomSheet` 盖住）。
  * - 内容套 `heightIn` 上限 + 滚动（坑 4：小屏裁切，1080×1920 上按钮点不到）。
  *
- * @param exercise 目标动作
+ * ⚠️ 确认提交会按当前三个输入框**整行覆盖**该槽位的目标值（含把时长清空）—— 与组数/次数原有
+ * 语义一致，不是本次新引入的行为。
+ *
+ * @param exercise 目标动作（其默认组次/时长作为表单初值）
  * @param initialDays 该动作当前已排的星期（本周生效计划 ∪ 「每周相同」，预勾）
  * @param initialRepeatWeekly 「每周都加」复选框初值
- * @param onSubmit 提交（参数：勾选天、组数、次数、是否同步「每周相同」）
+ * @param onSubmit 提交（参数：勾选天、组数、次数、目标时长分钟（`null` = 不设）、是否同步「每周相同」）
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -67,7 +73,7 @@ fun AddToPlanSheet(
     initialDays: Set<Int>,
     initialRepeatWeekly: Boolean,
     onDismissRequest: () -> Unit,
-    onSubmit: (days: Set<Int>, sets: Int, reps: Int, alsoRepeatWeekly: Boolean) -> Unit,
+    onSubmit: (days: Set<Int>, sets: Int, reps: Int, durationMin: Int?, alsoRepeatWeekly: Boolean) -> Unit,
     isSubmitting: Boolean,
     modifier: Modifier = Modifier,
 ) {
@@ -75,14 +81,27 @@ fun AddToPlanSheet(
 
     var selectedDays by remember { mutableStateOf(initialDays) }
     var repeatWeekly by remember { mutableStateOf(initialRepeatWeekly) }
-    var setsText by remember { mutableStateOf(DEFAULT_SETS.toString()) }
-    var repsText by remember { mutableStateOf(DEFAULT_REPS.toString()) }
+    // 键上动作 id：换一个动作重开弹层时初值必须重算，否则留着上一个动作的数字。
+    var setsText by remember(exercise.id) {
+        mutableStateOf((exercise.defaultSets ?: DEFAULT_SETS).toString())
+    }
+    var repsText by remember(exercise.id) {
+        mutableStateOf((exercise.defaultReps ?: DEFAULT_REPS).toString())
+    }
+    // 动作没有默认时长（力量/自重动作通常是 `null`）→ 留空 = 不设目标时长，落 `null` 而非 0。
+    var durationText by remember(exercise.id) { mutableStateOf(initialDurationText(exercise)) }
 
     val sets: Int? = setsText.trim().toIntOrNull()
     val reps: Int? = repsText.trim().toIntOrNull()
+    val durationInput: String = durationText.trim()
+    val duration: Int? = durationInput.toIntOrNull()
     val setsValid: Boolean = sets != null && sets in InputLimits.MIN_SETS..InputLimits.MAX_SETS
     val repsValid: Boolean = reps != null && reps in InputLimits.MIN_REPS..InputLimits.MAX_REPS
-    val formValid: Boolean = setsValid && repsValid && selectedDays.isNotEmpty() && !isSubmitting
+    // 与 [InputLimits] 的「空 = 未填」口径一致：填了就必须落在分钟合法区间。
+    val durationValid: Boolean =
+        durationInput.isEmpty() || (duration != null && duration in InputLimits.MIN_DURATION_MIN..InputLimits.MAX_DURATION_MIN)
+    val formValid: Boolean =
+        setsValid && repsValid && durationValid && selectedDays.isNotEmpty() && !isSubmitting
 
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
@@ -159,6 +178,16 @@ fun AddToPlanSheet(
                 )
             }
 
+            OutlinedTextField(
+                value = durationText,
+                onValueChange = { durationText = it },
+                label = { Text(text = stringResource(R.string.hint_duration_minutes)) },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                singleLine = true,
+                isError = duration != null && !durationValid,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -195,7 +224,7 @@ fun AddToPlanSheet(
                     onClick = {
                         val finalSets: Int = sets ?: return@Button
                         val finalReps: Int = reps ?: return@Button
-                        onSubmit(selectedDays, finalSets, finalReps, repeatWeekly)
+                        onSubmit(selectedDays, finalSets, finalReps, duration, repeatWeekly)
                     },
                     enabled = formValid,
                 ) {
@@ -210,8 +239,28 @@ fun AddToPlanSheet(
     }
 }
 
-/** 组数默认值（弹层初值；与既有计划默认口径一致）。 */
+/**
+ * 「时长（分钟）」输入框的初值。
+ *
+ * 只有 **≥ 1 分钟** 的动作默认时长才拿来预填：计划里的 `target_duration_min` 是"这次有氧做多久"，
+ * 而「侧平板支撑 / 登山跑 / 高抬腿」的 `defaultDurationSec = 45` 是**一组维持多久**，两者不是一个口径。
+ * 若照 `45 / 60 = 0` 预填，`0` 落在 [InputLimits] 的合法区间（`1..600`）之外 →
+ * 表单永久判为非法 → **保存键被禁用**，这几个动作反而加不进计划。不足一分钟一律留空。
+ * 与 `LocalRuleAdvisor` 的"修复 C3"（有氧时长 `< MIN_DURATION_MIN` 记 `null` 不记 `0`）同口径。
+ *
+ * `internal` 便于 JVM 单测直接钉住上述边界，不必起 Compose。
+ */
+internal fun initialDurationText(exercise: Exercise): String =
+    exercise.defaultDurationSec
+        ?.takeIf { it >= SECONDS_PER_MINUTE }
+        ?.let { (it / SECONDS_PER_MINUTE).toString() }
+        .orEmpty()
+
+/** 组数兜底值（仅当动作**没有**默认组数时用）。 */
 private const val DEFAULT_SETS: Int = 3
 
-/** 次数默认值。 */
+/** 次数兜底值（仅当动作没有默认次数时用）。 */
 private const val DEFAULT_REPS: Int = 12
+
+/** 秒 → 分换算基数（`Exercise.defaultDurationSec` 是秒口径，计划目标是分钟口径）。 */
+private const val SECONDS_PER_MINUTE: Int = 60

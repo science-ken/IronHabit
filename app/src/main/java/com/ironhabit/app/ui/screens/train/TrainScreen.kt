@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -27,6 +28,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -169,12 +171,13 @@ fun TrainScreen(
                 uiState.repeatDaysByExercise[sheetExercise.id]?.isNotEmpty() == true,
             isSubmitting = uiState.isSubmittingAdd,
             onDismissRequest = viewModel::onDismissAddToPlanSheet,
-            onSubmit = { days, sets, reps, alsoRepeat ->
+            onSubmit = { days, sets, reps, durationMin, alsoRepeat ->
                 viewModel.onSubmitAddToPlan(
                     exerciseId = sheetExercise.id,
                     selectedDays = days,
                     targetSets = sets,
                     targetReps = reps,
+                    targetDurationMin = durationMin,
                     alsoRepeatWeekly = alsoRepeat,
                 )
             },
@@ -358,12 +361,17 @@ private fun LibrarySection(
     var showAll by rememberSaveable { mutableStateOf(true) }
     // 肌群筛选（方案 A）：空串 = 全部；chips 数据驱动自动作的主肌群，不动数据库
     var muscleFilter by rememberSaveable { mutableStateOf("") }
+    // 搜索（v7）：动作名 / 肌群子串。库里动作一多，只靠分类滚动就找不到东西。
+    var searchQuery by rememberSaveable { mutableStateOf("") }
     val visibleExercises = remember(uiState.exercises, sourceFilter, showAll) {
         if (showAll) uiState.exercises else uiState.exercises.filter { it.source == sourceFilter }
     }
-    val muscleOptions = remember(visibleExercises) { distinctMuscleGroups(visibleExercises) }
-    val filteredExercises = remember(visibleExercises, muscleFilter) {
-        filterExercisesByMuscle(visibleExercises, muscleFilter)
+    val searchedExercises = remember(visibleExercises, searchQuery) {
+        searchExercises(visibleExercises, searchQuery)
+    }
+    val muscleOptions = remember(searchedExercises) { distinctMuscleGroups(searchedExercises) }
+    val filteredExercises = remember(searchedExercises, muscleFilter) {
+        filterExercisesByMuscle(searchedExercises, muscleFilter)
     }
 
     // LazyColumn：40+ 动作不再全量组合，滚动/重组只处理可见项
@@ -407,6 +415,23 @@ private fun LibrarySection(
                 },
             )
         }
+        item(key = "exercise-search") {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                label = { Text(text = stringResource(R.string.hint_search_exercise)) },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Filled.Search,
+                        contentDescription = null,
+                    )
+                },
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = IronHabitSpacing.xs),
+            )
+        }
         if (muscleOptions.isNotEmpty()) {
             item(key = "muscle-filter") {
                 MuscleFilterRow(
@@ -433,6 +458,17 @@ private fun LibrarySection(
                         onAddToPlan = { onOpenAddToPlan(exercise) },
                     )
                 }
+            }
+        }
+        if (filteredExercises.isEmpty()) {
+            // 有动作但筛空了：必须说"没找到"，否则界面只剩标题与筛选条，像坏了。
+            item(key = "library-no-match") {
+                Text(
+                    text = stringResource(R.string.empty_exercise_no_match),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(IronHabitSpacing.xs),
+                )
             }
         }
     }

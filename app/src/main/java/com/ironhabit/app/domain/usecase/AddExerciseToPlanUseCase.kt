@@ -34,6 +34,8 @@ import javax.inject.Inject
  * @param selectedDays 目标态：该动作应出现在 `1..7` 的哪几天
  * @param targetSets 组数（越界自动钳制到 [InputLimits] 口径）
  * @param targetReps 次数（同上）
+ * @param targetDurationMin 目标时长（分钟）；`null` = 该槽位**不设**时长（与组数/次数同为整行覆盖，
+ *   不是"保留旧值"）。弹层侧的初值取动作自带的 `defaultDurationSec`，所以有氧动作不会平白被清掉。
  * @param alsoRepeatWeekly 是否同步写入「每周相同」那份
  * @return 写入 / 移除的星期与复制的模板行数（Snackbar 文案与测试断言用）
  */
@@ -57,10 +59,15 @@ class AddExerciseToPlanUseCase @Inject constructor(
         targetSets: Int,
         targetReps: Int,
         alsoRepeatWeekly: Boolean,
+        targetDurationMin: Int? = null,
     ): Result {
         val days: Set<Int> = selectedDays.filter { it in MIN_DAY..MAX_DAY }.toSet()
         val sets: Int = targetSets.coerceIn(InputLimits.MIN_SETS, InputLimits.MAX_SETS)
         val reps: Int = targetReps.coerceIn(InputLimits.MIN_REPS, InputLimits.MAX_REPS)
+        val durationMin: Int? = targetDurationMin?.coerceIn(
+            InputLimits.MIN_DURATION_MIN,
+            InputLimits.MAX_DURATION_MIN,
+        )
 
         val written = mutableSetOf<Int>()
         val removed = mutableSetOf<Int>()
@@ -115,7 +122,7 @@ class AddExerciseToPlanUseCase @Inject constructor(
                         targetSets = sets,
                         targetReps = reps,
                         targetWeightKg = existing?.targetWeightKg,
-                        targetDurationMin = existing?.targetDurationMin,
+                        targetDurationMin = durationMin,
                         sortOrder = existing?.sortOrder ?: nextSortOrder(weekRows, day),
                         isActive = true,
                         isUserEdited = true, // 由 applyWeeklyChanges 统一强制，这里显式写出意图

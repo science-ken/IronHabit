@@ -69,3 +69,21 @@ fun distinctMuscleGroups(exercises: List<Exercise>): List<String> =
  */
 fun filterExercisesByMuscle(exercises: List<Exercise>, muscle: String): List<Exercise> =
     if (muscle.isBlank()) exercises else exercises.filter { it.primaryMuscleGroup == muscle }
+
+/**
+ * 按**动作名 / 任一肌群标签**做子串过滤（v7 加：动作库要从 51 个扩到几百个，只靠分类滚动找不到）。
+ *
+ * - 首尾空白忽略、大小写不敏感（英文动作名与用户随手输入的大小写不该影响命中）；
+ * - 空白查询 = 原样返回（**不过滤**，也不复制列表）；
+ * - 辅肌群也参与匹配（用户搜"肱三头"理应看到「哑铃卧推」这类以胸为主的动作）。
+ *
+ * 纯函数抽取便于 JVM 单测锁定上述三条口径。
+ */
+fun searchExercises(exercises: List<Exercise>, query: String): List<Exercise> {
+    val needle: String = query.trim()
+    if (needle.isEmpty()) return exercises
+    return exercises.filter { exercise ->
+        exercise.name.contains(needle, ignoreCase = true) ||
+            exercise.muscleGroups.any { it.contains(needle, ignoreCase = true) }
+    }
+}
