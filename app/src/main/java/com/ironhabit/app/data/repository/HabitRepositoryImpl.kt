@@ -1,5 +1,7 @@
 package com.ironhabit.app.data.repository
 
+import androidx.room.withTransaction
+import com.ironhabit.app.data.local.AppDatabase
 import com.ironhabit.app.data.local.dao.HabitDao
 import com.ironhabit.app.data.local.dao.HabitLogDao
 import com.ironhabit.app.data.mapper.HabitMapper
@@ -23,6 +25,7 @@ import kotlinx.datetime.atStartOfDayIn
  */
 @Singleton
 class HabitRepositoryImpl @Inject constructor(
+    private val database: AppDatabase,
     private val habitDao: HabitDao,
     private val habitLogDao: HabitLogDao,
     private val clock: Clock,
@@ -72,9 +75,15 @@ class HabitRepositoryImpl @Inject constructor(
         habitDao.softDelete(habitId)
     }
 
-    override suspend fun reorderHabits(orderedIds: List<Long>) {
-        orderedIds.forEachIndexed { index, id ->
-            habitDao.updateSortOrder(id, index)
+    /**
+     * 整表重排是**多行写入** → 必须原子。中途失败会留下两行同一个 `sortOrder`，
+     * 而 `sortOrder` 相同的行在列表里顺序不确定，用户看到的是"拖完又弹回原位"。
+     * 与 [setLog] 的 `upsertLogAtomic`、`PlanRepositoryImpl.setRepeatWeekly`（B-17）同一约定。
+     */
+    override suspend fun reorderHabits(orderedIds: List<Long>) =
+        database.withTransaction {
+            orderedIds.forEachIndexed { index, id ->
+                habitDao.updateSortOrder(id, index)
+            }
         }
-    }
 }

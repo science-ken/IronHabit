@@ -1,5 +1,7 @@
 package com.ironhabit.app.data.repository
 
+import androidx.room.withTransaction
+import com.ironhabit.app.data.local.AppDatabase
 import com.ironhabit.app.data.local.dao.MealDao
 import com.ironhabit.app.data.mapper.MealMapper
 import com.ironhabit.app.di.IoDispatcher
@@ -22,6 +24,7 @@ import kotlinx.coroutines.flow.map
  */
 @Singleton
 class MealRepositoryImpl @Inject constructor(
+    private val database: AppDatabase,
     private val mealDao: MealDao,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : MealRepository {
@@ -46,13 +49,18 @@ class MealRepositoryImpl @Inject constructor(
     override suspend fun getMealsIncludingInactive(epochDay: Long): List<Meal> =
         mealDao.getByDateIncludingInactive(epochDay).map(MealMapper::toDomain)
 
-    override suspend fun upsertGenerated(meals: List<Meal>): Int {
-        // 只 upsert，绝不 DELETE（含"先删当天再重建"）—— 见接口文档。
-        for (meal in meals) {
-            mealDao.upsertGenerated(MealMapper.toEntity(meal).copy(isUserEdited = false))
+    /**
+     * AI 一次生成 4 餐 → **多行写入必须原子**。中途失败会留下"部分餐已换、部分还是旧的"，
+     * 当天的热量合计就是错的，而这个错值还会被 AI 教练页当输入读回去。
+     */
+    override suspend fun upsertGenerated(meals: List<Meal>): Int =
+        database.withTransaction {
+            // 只 upsert，绝不 DELETE（含"先删当天再重建"）—— 见接口文档。
+            for (meal in meals) {
+                mealDao.upsertGenerated(MealMapper.toEntity(meal).copy(isUserEdited = false))
+            }
+            meals.size
         }
-        return meals.size
-    }
 
     override suspend fun upsert(meal: Meal): Long =
         mealDao.upsertUser(MealMapper.toEntity(meal).copy(isUserEdited = true))

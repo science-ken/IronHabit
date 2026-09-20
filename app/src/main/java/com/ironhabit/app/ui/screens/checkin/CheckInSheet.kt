@@ -27,6 +27,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.ironhabit.app.R
+import com.ironhabit.app.domain.model.InputLimits
 import com.ironhabit.app.domain.model.TodayPlanItem
 import com.ironhabit.app.ui.theme.IronHabitSpacing
 
@@ -63,10 +64,14 @@ fun CheckInSheet(
     val weight: Float? = weightText.trim().takeIf { it.isNotEmpty() }?.toFloatOrNull()
     val duration: Int? = durationText.trim().takeIf { it.isNotEmpty() }?.toIntOrNull()
 
-    val setsValid: Boolean = sets != null && sets > 0
-    val repsValid: Boolean = reps != null && reps > 0
-    val weightValid: Boolean = weightText.isBlank() || weight != null
-    val durationValid: Boolean = durationText.isBlank() || duration != null
+    // 判据与「计划表单」(`AddEditPlanViewModel.onSave`) 用同一组 `InputLimits.isValid*`，
+    // 连「空 = 未填」的口径也一致。此前这里只判"能不能 parse"+「> 0」，
+    // 于是 99999 组、负重量、1e6 次都能一路写进库，把容量与趋势全部拉歪。
+    val setsValid: Boolean = sets != null && InputLimits.isValidSets(sets)
+    val repsValid: Boolean = reps != null && InputLimits.isValidReps(reps)
+    val weightValid: Boolean = weightText.isBlank() || (weight != null && InputLimits.isValidWeightKg(weight))
+    val durationValid: Boolean =
+        durationText.isBlank() || (duration != null && InputLimits.isValidDurationMin(duration))
     val formValid: Boolean = setsValid && repsValid && weightValid && durationValid
 
     ModalBottomSheet(
