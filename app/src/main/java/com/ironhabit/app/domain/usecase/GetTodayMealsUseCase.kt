@@ -5,9 +5,7 @@ import com.ironhabit.app.domain.model.BodyMetricType
 import com.ironhabit.app.domain.model.TodayMeals
 import com.ironhabit.app.domain.repository.BodyMetricRepository
 import com.ironhabit.app.domain.repository.MealRepository
-import com.ironhabit.app.domain.repository.PlanRepository
 import com.ironhabit.app.domain.repository.SettingsRepository
-import com.ironhabit.app.domain.util.DateUtils
 import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -24,22 +22,21 @@ import kotlinx.coroutines.flow.map
  */
 class GetTodayMealsUseCase @Inject constructor(
     private val mealRepository: MealRepository,
-    private val planRepository: PlanRepository,
+    private val trainingDayResolver: TrainingDayResolver,
     private val settingsRepository: SettingsRepository,
     private val bodyMetricRepository: BodyMetricRepository,
 ) {
 
     operator fun invoke(epochDay: Long): Flow<TodayMeals> {
-        val weekday: Int = DateUtils.weekdayMon1(epochDay)
-
         val mealsFlow = mealRepository.observeMeals(epochDay)
         val totalsFlow = mealRepository.observeTotals(epochDay)
         val profileFlow = settingsRepository.profile()
         // 最新体重 = `observeByType` 已按日期倒序 → 取首条；无记录 → null（走 §7.5.3 兜底）。
         val weightFlow = bodyMetricRepository.observeByType(BodyMetricType.WEIGHT)
             .map { metrics -> metrics.firstOrNull()?.value }
-        val isTrainingDayFlow = planRepository.observePlansForDay(weekday)
-            .map { plans -> plans.isNotEmpty() }
+        // 判据收在 TrainingDayResolver：打卡过算练了；没打卡但那天是今天/未来且排了计划，
+        // 仍按训练日（早上还没练就压低热量是错的）；过去且没练才算休息日。
+        val isTrainingDayFlow = trainingDayResolver.observe(epochDay)
 
         return combine(
             mealsFlow,

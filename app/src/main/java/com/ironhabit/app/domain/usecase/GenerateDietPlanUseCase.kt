@@ -8,7 +8,6 @@ import com.ironhabit.app.domain.model.DietTarget
 import com.ironhabit.app.domain.model.MealType
 import com.ironhabit.app.domain.repository.BodyMetricRepository
 import com.ironhabit.app.domain.repository.MealRepository
-import com.ironhabit.app.domain.repository.PlanRepository
 import com.ironhabit.app.domain.repository.SettingsRepository
 import com.ironhabit.app.domain.util.DateUtils
 import javax.inject.Inject
@@ -50,7 +49,7 @@ data class GeneratedDietSummary(
  */
 class GenerateDietPlanUseCase @Inject constructor(
     private val mealRepository: MealRepository,
-    private val planRepository: PlanRepository,
+    private val trainingDayResolver: TrainingDayResolver,
     private val settingsRepository: SettingsRepository,
     private val bodyMetricRepository: BodyMetricRepository,
     private val clock: Clock,
@@ -61,8 +60,7 @@ class GenerateDietPlanUseCase @Inject constructor(
     suspend operator fun invoke(epochDay: Long): GeneratedDietSummary = withContext(ioDispatcher) {
         val profile = settingsRepository.profile().first()
         val weightKg: Float? = bodyMetricRepository.latest(BodyMetricType.WEIGHT)?.value
-        val weekday: Int = DateUtils.weekdayMon1(epochDay)
-        val isTrainingDay: Boolean = planRepository.observePlansForDay(weekday).first().isNotEmpty()
+        val isTrainingDay: Boolean = trainingDayResolver(epochDay)
 
         val target: DietTarget = DietPlanGenerator.dailyTarget(
             weightKg = weightKg,
