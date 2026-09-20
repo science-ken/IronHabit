@@ -143,6 +143,7 @@ class P2AdversarialTest {
         exerciseRepository = exerciseRepository,
         bodyMetricRepository = bodyMetricRepository,
         mealRepository = mealRepository,
+        mealItemRepository = mockk<com.ironhabit.app.domain.repository.MealItemRepository>(relaxed = true),
         planRepository = planRepository,
         clock = clock,
         timeZone = timeZone,

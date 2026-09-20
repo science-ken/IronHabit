@@ -113,6 +113,7 @@ class StringResourcePlaceholderContractTest {
         entry("label_meal_item_summary", ArgKind.STRING, ArgKind.STRING, ArgKind.NUMERIC) // MealBlock（名称 · 份量 · kcal）
         entry("label_meal_kcal_approx", ArgKind.NUMERIC, ArgKind.NUMERIC) // MealBlock 粗记态（kcal, 蛋白 g）
         entry("msg_meal_item_limit", ArgKind.STRING) // TodayViewModel（上限走 snackbarArgs: List<String> → 只能 %1$s）
+        entry("ai_review_diet_approx", ArgKind.NUMERIC) // WeeklyReviewBlock（avgKcal: Int，全是粗记时给日均前面加「约」）
 
         // ---------------- 【未使用】strings.xml 有占位符、代码暂无引用 ----------------
         entry("label_week_of", ArgKind.STRING)

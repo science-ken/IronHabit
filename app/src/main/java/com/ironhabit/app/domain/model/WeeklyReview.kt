@@ -103,14 +103,23 @@ data class BodyReview(
 /**
  * 饮食汇总。
  *
- * @property loggedDays 本周"有饮食记录"的天数（当天启用状态的餐次里 kcal > 0）
+ * 口径（Q22 = **C**）：一天算不算"记过"、平均按多少算，看的都是**实际摄入**
+ * （`MealIntakeCalculator`：有明细算明细，没明细但打了勾算粗记），
+ * **不是** AI 排了多少餐 —— 排了计划一口没吃，历史上会被记成"记了 2400 kcal"。
+ *
+ * @property loggedDays 本周有实际记录的天数（当天既没明细也没打勾的不算）
  * @property avgKcal 有记录那几天的日均热量；没记录 = `null`
  * @property avgProteinG 有记录那几天的日均蛋白质；没记录 = `null`
+ * @property preciseDays 其中**逐样记过明细**的天数。只要它小于 [loggedDays]，
+ *   说明日均里掺了"打勾估的"天，界面就要在数字前面标「约」（Q31 = B）。
+ *   判据用「小于」而不是「等于 0」：一周里记一天明细，不该把另外几天估的洗成准数。
+ *   默认 0 是**故意偏保守**：漏填只会多标一次「约」，不会反过来把估的当准的。
  */
 data class DietReview(
     val loggedDays: Int,
     val avgKcal: Int?,
     val avgProteinG: Int?,
+    val preciseDays: Int = 0,
 )
 
 /**

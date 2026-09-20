@@ -34,6 +34,21 @@ interface MealItemDao {
     )
     fun observeByDate(epochDay: Long): Flow<List<MealItemEntity>>
 
+    /**
+     * [observeByDate] 的一次性版本：周复盘要连着算七天，起七个 Flow 再 each 一条
+     * 不如让调用方按天取。过滤口径**必须与上面逐字一致**（含 `is_active = 1`），
+     * 否则"流里看到的"和"复盘算出来的"会是两套数。
+     */
+    @Query(
+        """
+        SELECT mi.* FROM meal_items mi
+        JOIN meals m ON m.id = mi.meal_id
+        WHERE m.date_epoch_day = :epochDay AND m.is_active = 1
+        ORDER BY m.sort_order, mi.sort_order, mi.id
+        """
+    )
+    suspend fun getByDate(epochDay: Long): List<MealItemEntity>
+
     @Query("SELECT * FROM meal_items WHERE meal_id = :mealId ORDER BY sort_order, id")
     suspend fun getByMeal(mealId: Long): List<MealItemEntity>
 

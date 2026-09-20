@@ -20,11 +20,10 @@ import kotlin.math.roundToInt
 /**
  * 热量 / 蛋白汇总条（对应预览的 `kcal` / `prot` 与进度条）。
  *
- * 显示**「已摄入 / 目标」**两个口径：已摄入只算勾选完成的餐（[MealTotals.intakeKcal]），
- * 目标来自规则现算的 [DietTarget]。目标为 0（极端防御）时回落到「计划总量」作为分母，
- * 避免出现 `x / 0`。
+ * 显示**「实际摄入 / 目标」**：分子一律是 [intake]（明细优先 → 打了勾的整餐值 → 0），
+ * 分母是规则现算的 [DietTarget]；目标为 0（极端防御）时回落到「计划总量」，避免出现 `x / 0`。
  *
- * @param totals 当日合计（已摄入 / 计划）
+ * @param totals 当日合计 —— **只用它的 `plan*` 当分母兜底**，`intake*` 是"打了勾的整餐值"，不是吃了多少
  * @param target 当日目标（kcal / 蛋白）
  */
 @Composable

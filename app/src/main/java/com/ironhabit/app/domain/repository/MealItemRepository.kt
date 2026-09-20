@@ -14,6 +14,9 @@ interface MealItemRepository {
     /** 某天全部条目（已过滤掉软删的餐；按餐次顺序 → 条目顺序）。 */
     fun observeByDate(epochDay: Long): Flow<List<MealItem>>
 
+    /** [observeByDate] 的一次性版本（周复盘按天循环用；过滤口径与它完全相同）。 */
+    suspend fun getByDate(epochDay: Long): List<MealItem>
+
     /** 某餐现有条目数（上限判据用）。 */
     suspend fun countByMeal(mealId: Long): Int
 

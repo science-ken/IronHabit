@@ -1,10 +1,12 @@
 package com.ironhabit.app.domain.usecase
 
 import com.ironhabit.app.domain.model.BodyMetricType
+import com.ironhabit.app.domain.model.MealIntakeCalculator
 import com.ironhabit.app.domain.model.UserProfile
 import com.ironhabit.app.domain.repository.BodyMetricRepository
 import com.ironhabit.app.domain.repository.CheckInRepository
 import com.ironhabit.app.domain.repository.ExerciseRepository
+import com.ironhabit.app.domain.repository.MealItemRepository
 import com.ironhabit.app.domain.repository.MealRepository
 import com.ironhabit.app.domain.repository.PlanRepository
 import com.ironhabit.app.domain.repository.SettingsRepository
@@ -41,8 +43,8 @@ data class CoachPlanLine(
  * @property averageRpe 窗口内平均主观强度（无 RPE 记录为 `null`）
  * @property weightDeltaKg 体重变化（最新一条 − 上一条；不足两条为 `null`）
  * @property currentStreak 当前连续打卡天数
- * @property todayIntakeKcal 今日已摄入热量（只算已完成餐）
- * @property todayPlanKcal 今日计划总热量（全部餐）
+ * @property todayIntakeKcal 今日**实际**摄入热量（明细优先 → 打了勾的整餐值 → 0；见 `MealIntakeCalculator`）
+ * @property todayPlanKcal 今日计划总热量（全部启用餐，与吃没吃无关）
  */
 data class CoachContext(
     val profile: UserProfile = UserProfile(),
@@ -71,6 +73,7 @@ class BuildCoachContextUseCase @Inject constructor(
     private val checkInRepository: CheckInRepository,
     private val bodyMetricRepository: BodyMetricRepository,
     private val mealRepository: MealRepository,
+    private val mealItemRepository: MealItemRepository,
     private val calculateStreak: CalculateStreakUseCase,
     private val clock: Clock,
     private val timeZone: TimeZone,
@@ -113,8 +116,16 @@ class BuildCoachContextUseCase @Inject constructor(
             asOfEpochDay = today,
         )
 
-        // 今日饮食合计（已摄入 / 计划）。
-        val totals = mealRepository.observeTotals(today).first()
+        // 今日饮食：**分子走实际摄入**（明细优先 → 打了勾的整餐值 → 都没有就是 0）。
+        // ⚠️ 别再退回 `observeTotals().intakeKcal`：那个数是"打了勾的那一餐的整餐值"，
+        // 而勾可能只是完成计划的标记 —— 发给模型就等于告诉它"今天吃了 2200 kcal"，
+        // 而用户其实一口都没记。教练会照着这个没发生过的数字提建议。
+        val activeMeals = mealRepository.getMealsIncludingInactive(today).filter { it.isActive }
+        val intake = MealIntakeCalculator.compute(
+            meals = activeMeals,
+            items = mealItemRepository.getByDate(today),
+        )
+        val planKcal: Int = activeMeals.sumOf { it.kcal }
 
         return CoachContext(
             profile = profile,
@@ -124,8 +135,8 @@ class BuildCoachContextUseCase @Inject constructor(
             averageRpe = averageRpe,
             weightDeltaKg = weightDeltaKg,
             currentStreak = streak.current,
-            todayIntakeKcal = totals.intakeKcal,
-            todayPlanKcal = totals.planKcal,
+            todayIntakeKcal = intake.kcal,
+            todayPlanKcal = planKcal,
         )
     }
 

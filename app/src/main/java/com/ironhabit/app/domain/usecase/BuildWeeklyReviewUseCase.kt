@@ -11,9 +11,12 @@ import com.ironhabit.app.domain.model.TrainingReview
 import com.ironhabit.app.domain.model.WeekDayDetail
 import com.ironhabit.app.domain.model.WeekItemDetail
 import com.ironhabit.app.domain.model.WeeklyReview
+import com.ironhabit.app.domain.model.MealIntake
+import com.ironhabit.app.domain.model.MealIntakeCalculator
 import com.ironhabit.app.domain.repository.BodyMetricRepository
 import com.ironhabit.app.domain.repository.CheckInRepository
 import com.ironhabit.app.domain.repository.ExerciseRepository
+import com.ironhabit.app.domain.repository.MealItemRepository
 import com.ironhabit.app.domain.repository.MealRepository
 import com.ironhabit.app.domain.repository.PlanRepository
 import javax.inject.Inject
@@ -45,8 +48,10 @@ import kotlinx.datetime.toLocalDateTime
  *   （整周都没重量 → 该周"无记录"，**不记 0**）。本周有记录的动作才进 [TrainingReview.progressed] /
  *   [TrainingReview.stalled]；`stagnantWeeks` 只在**有记录的周**之间连数
  *   （中间断档不算"停滞"，否则一个刚开始练的动作第一周就会被判停滞）；
- * - **饮食**：只算 `isActive == true` 的餐；当天这些餐 `kcal` 之和 > 0 才算"有记录的一天"；
- *   日均是**有记录的天**的平均，不是 7 天平均（没记录的天不该把均值拉低）。
+ * - **饮食**：一天算不算"记过"看的是**实际摄入**（Q22 = C）—— 有明细算明细之和，
+ *   没明细但打了勾算那餐的整餐值（粗记），两者都没有的天**不计入**；
+ *   AI 排了餐但一口没记 → 那天不存在。日均是**有记录的天**的平均，不是 7 天平均
+ *   （没记录的天不该把均值拉低）；`preciseDays` 单独带出去，供界面标「约」（Q31 = B）。
  *
  * @param weekStartEpochDay 目标周的周一（epochDay 口径）；`null` = 今天所在的那一周
  */
@@ -55,6 +60,7 @@ class BuildWeeklyReviewUseCase @Inject constructor(
     private val exerciseRepository: ExerciseRepository,
     private val bodyMetricRepository: BodyMetricRepository,
     private val mealRepository: MealRepository,
+    private val mealItemRepository: MealItemRepository,
     private val planRepository: PlanRepository,
     private val clock: Clock,
     private val timeZone: TimeZone,
@@ -232,17 +238,26 @@ class BuildWeeklyReviewUseCase @Inject constructor(
 
     private suspend fun buildDiet(weekStart: Long, weekEnd: Long): DietReview {
         var loggedDays: Int = 0
+        var preciseDays: Int = 0
         var kcalSum: Int = 0
         var proteinSum: Double = 0.0
 
         var day: Long = weekStart
         while (day <= weekEnd) {
             val meals = mealRepository.getMealsIncludingInactive(day).filter { meal -> meal.isActive }
-            val kcal: Int = meals.sumOf { meal -> meal.kcal }
-            if (kcal > 0) {
+            // 与今日页共用同一个计算器：判定收在一处，否则磁贴说"约"而复盘说"精确"，
+            // 同一份数据两种口径 —— 那正是这次要修掉的东西。
+            val intake: MealIntake = MealIntakeCalculator.compute(
+                meals = meals,
+                items = mealItemRepository.getByDate(day),
+            )
+            // `kcal > 0` 而不是 `hasAnyRecord`：打了勾但那餐一个数字都没有的天，
+            // 计入只会把一个 0 塞进平均里拉低它，却说不出任何事实。
+            if (intake.hasAnyRecord && intake.kcal > 0) {
                 loggedDays++
-                kcalSum += kcal
-                proteinSum += meals.sumOf { meal -> meal.proteinG }
+                if (intake.preciseMeals > 0) preciseDays++
+                kcalSum += intake.kcal
+                proteinSum += intake.proteinG
             }
             day++
         }
@@ -251,6 +266,7 @@ class BuildWeeklyReviewUseCase @Inject constructor(
             loggedDays = loggedDays,
             avgKcal = if (loggedDays == 0) null else (kcalSum.toFloat() / loggedDays).roundToInt(),
             avgProteinG = if (loggedDays == 0) null else (proteinSum / loggedDays).roundToInt(),
+            preciseDays = preciseDays,
         )
     }
 

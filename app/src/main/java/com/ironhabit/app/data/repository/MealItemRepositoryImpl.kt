@@ -29,6 +29,9 @@ class MealItemRepositoryImpl @Inject constructor(
             .map { entities -> entities.map { entity -> MealItemMapper.toDomain(entity) } }
             .flowOn(ioDispatcher)
 
+    override suspend fun getByDate(epochDay: Long): List<MealItem> =
+        mealItemDao.getByDate(epochDay).map { entity -> MealItemMapper.toDomain(entity) }
+
     override suspend fun countByMeal(mealId: Long): Int = mealItemDao.countByMeal(mealId)
 
     override suspend fun getById(itemId: Long): MealItem? =

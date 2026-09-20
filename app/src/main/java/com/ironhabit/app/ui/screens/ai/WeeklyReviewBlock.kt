@@ -140,8 +140,16 @@ private fun WeeklyReviewCard(
             )
             StatRow(
                 leftLabel = stringResource(R.string.ai_review_stat_diet),
-                leftValue = review.diet.avgKcal?.toString()
-                    ?: stringResource(R.string.ai_review_value_missing),
+                // 只要**有任何一天是打勾估的**，日均前面就得带「约」：
+                // 只在"全是估的"时才标，会让一周里记一天明细就把另外六天的猜测洗成准数
+                // —— 而 AI 会照着这个数开建议（Q31 = B）。
+                leftValue = review.diet.avgKcal?.let { kcal ->
+                    if (review.diet.preciseDays < review.diet.loggedDays) {
+                        stringResource(R.string.ai_review_diet_approx, kcal)
+                    } else {
+                        kcal.toString()
+                    }
+                } ?: stringResource(R.string.ai_review_value_missing),
                 rightLabel = null,
                 rightValue = null,
             )

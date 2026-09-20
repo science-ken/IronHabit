@@ -5,13 +5,16 @@ import com.ironhabit.app.domain.model.BodyMetricType
 import com.ironhabit.app.domain.model.CheckIn
 import com.ironhabit.app.domain.model.Exercise
 import com.ironhabit.app.domain.model.ExerciseCategory
+import com.ironhabit.app.domain.model.FoodNutrition
 import com.ironhabit.app.domain.model.Meal
+import com.ironhabit.app.domain.model.MealItem
 import com.ironhabit.app.domain.model.MealType
 import com.ironhabit.app.domain.model.ReviewNote
 import com.ironhabit.app.domain.model.TrainingReview
 import com.ironhabit.app.domain.repository.BodyMetricRepository
 import com.ironhabit.app.domain.repository.CheckInRepository
 import com.ironhabit.app.domain.repository.ExerciseRepository
+import com.ironhabit.app.domain.repository.MealItemRepository
 import com.ironhabit.app.domain.repository.MealRepository
 import com.ironhabit.app.domain.repository.PlanRepository
 import io.mockk.coEvery
@@ -81,18 +84,37 @@ class BuildWeeklyReviewUseCaseTest {
         rpe = rpe,
     )
 
-    private fun meal(epochDay: Long, kcal: Int, proteinG: Double, isActive: Boolean = true): Meal = Meal(
+    private fun meal(
+        epochDay: Long,
+        kcal: Int,
+        proteinG: Double,
+        id: Long = 0L,
+        isActive: Boolean = true,
+        isCompleted: Boolean = false,
+    ): Meal = Meal(
+        id = id,
         dateEpochDay = epochDay,
         mealType = MealType.LUNCH,
         kcal = kcal,
         proteinG = proteinG,
         isActive = isActive,
+        isCompleted = isCompleted,
+    )
+
+    /** 一条"实际记过"的条目（挂在 [mealId] 那一餐上）。 */
+    private fun item(mealId: Long, kcal: Int, proteinG: Double): MealItem = MealItem(
+        id = mealId * 100 + kcal,
+        mealId = mealId,
+        foodName = "测试食物",
+        grams = 100.0,
+        nutrition = FoodNutrition(kcal = kcal, proteinG = proteinG, carbsG = 0.0, fatG = 0.0),
     )
 
     private val checkInRepository = mockk<CheckInRepository>()
     private val exerciseRepository = mockk<ExerciseRepository>()
     private val bodyMetricRepository = mockk<BodyMetricRepository>()
     private val mealRepository = mockk<MealRepository>()
+    private val mealItemRepository = mockk<MealItemRepository>()
     private val planRepository = mockk<PlanRepository>()
 
     /** 按区间过滤的假查库（与真实仓库语义一致：闭区间）。 */
@@ -100,6 +122,7 @@ class BuildWeeklyReviewUseCaseTest {
         checkIns: List<CheckIn> = emptyList(),
         weights: List<BodyMetric> = emptyList(),
         meals: List<Meal> = emptyList(),
+        itemsByDay: Map<Long, List<MealItem>> = emptyMap(),
         plannedWeekdays: List<Int> = listOf(1, 3, 5),
     ) {
         every { checkInRepository.observeBetween(any(), any()) } answers {
@@ -113,6 +136,9 @@ class BuildWeeklyReviewUseCaseTest {
             val epochDay = firstArg<Long>()
             meals.filter { it.dateEpochDay == epochDay }
         }
+        coEvery { mealItemRepository.getByDate(any()) } answers {
+            itemsByDay[firstArg<Long>()].orEmpty()
+        }
         // B-9 后复盘按目标周取口径（useCase 传 weekStart）→ 用 any() 匹配任意周参数
         every { planRepository.observePlannedWeekdays(any()) } returns flowOf(plannedWeekdays)
     }
@@ -122,6 +148,7 @@ class BuildWeeklyReviewUseCaseTest {
         exerciseRepository = exerciseRepository,
         bodyMetricRepository = bodyMetricRepository,
         mealRepository = mealRepository,
+        mealItemRepository = mealItemRepository,
         planRepository = planRepository,
         clock = fixedClock,
         timeZone = TimeZone.UTC,
@@ -393,13 +420,13 @@ class BuildWeeklyReviewUseCaseTest {
     fun diet_averageUsesOnlyLoggedDays_andIgnoresInactiveMeals() = runTest {
         stub(
             meals = listOf(
-                // 周一：600 + 800 = 1400 kcal / 60g 蛋白
-                meal(day(0), kcal = 600, proteinG = 30.0),
-                meal(day(0), kcal = 800, proteinG = 30.0),
+                // 周一：打了勾 → 粗记 600 + 800 = 1400 kcal / 60g 蛋白
+                meal(day(0), kcal = 600, proteinG = 30.0, isCompleted = true),
+                meal(day(0), kcal = 800, proteinG = 30.0, isCompleted = true),
                 // 周二：只有一条被"不吃这餐"软删掉 → 不算记录
-                meal(day(1), kcal = 500, proteinG = 25.0, isActive = false),
+                meal(day(1), kcal = 500, proteinG = 25.0, isActive = false, isCompleted = true),
                 // 周三：900 kcal / 50g
-                meal(day(2), kcal = 900, proteinG = 50.0),
+                meal(day(2), kcal = 900, proteinG = 50.0, isCompleted = true),
             ),
         )
 
@@ -408,16 +435,72 @@ class BuildWeeklyReviewUseCaseTest {
         assertEquals("只有周一、周三算「有记录的一天」", 2, review.diet.loggedDays)
         assertEquals("(1400+900)/2 = 1150（不是 7 天平均）", 1150, review.diet.avgKcal)
         assertEquals("(60+50)/2 = 55", 55, review.diet.avgProteinG)
+        assertEquals("全是打勾估的 → 一天都不精确（界面据此标「约」）", 0, review.diet.preciseDays)
         assertFalse(review.notes.contains(ReviewNote.NO_DIET))
+    }
+
+    /**
+     * 第 3 刀的承重墙：**AI 排了餐 ≠ 吃了**。
+     * 旧口径直接 `sum(meals.kcal)`，于是"一周生成了计划但一口没记"会被报成
+     * "记了 7 天、日均 2400 kcal" —— 训练侧 2026-09-20 刚为同一件事把计划与打卡分成两张表。
+     */
+    @Test
+    fun diet_plannedButNeverLogged_countsNoDays() = runTest {
+        stub(
+            meals = (0..6).map { offset ->
+                meal(day(offset), kcal = 800, proteinG = 40.0)
+            },
+        )
+
+        val review = useCase()()
+
+        assertEquals("排满 7 天但没勾也没记 → 0 天", 0, review.diet.loggedDays)
+        assertNull(review.diet.avgKcal)
+        assertTrue(review.notes.contains(ReviewNote.NO_DIET))
+    }
+
+    /** 明细优先：打了勾、也记了明细 → 只认明细，整餐值不再叠加。 */
+    @Test
+    fun diet_itemsBeatTheTick_andPreciseDaysCountsThem() = runTest {
+        val lunch: Meal = meal(day(0), id = 11L, kcal = 800, proteinG = 40.0, isCompleted = true)
+        stub(
+            meals = listOf(lunch),
+            itemsByDay = mapOf(day(0) to listOf(item(mealId = 11L, kcal = 350, proteinG = 22.0))),
+        )
+
+        val review = useCase()()
+
+        assertEquals(1, review.diet.loggedDays)
+        assertEquals("取明细的 350，不是打勾那餐的 800", 350, review.diet.avgKcal)
+        assertEquals(1, review.diet.preciseDays)
+    }
+
+    /** 打勾估的 + 逐样记的混在一周：平均按各自口径合起来算，精确天数只数后者。 */
+    @Test
+    fun diet_mixesCoarseAndPreciseDays() = runTest {
+        stub(
+            meals = listOf(
+                meal(day(0), id = 21L, kcal = 500, proteinG = 20.0, isCompleted = true),
+                meal(day(1), id = 22L, kcal = 900, proteinG = 45.0, isCompleted = true),
+            ),
+            // 周二记了明细（300），所以那餐的整餐值 900 不再计入。
+            itemsByDay = mapOf(day(1) to listOf(item(mealId = 22L, kcal = 300, proteinG = 30.0))),
+        )
+
+        val review = useCase()()
+
+        assertEquals(2, review.diet.loggedDays)
+        assertEquals("周一粗记 500 + 周二明细 300，日均 400", 400, review.diet.avgKcal)
+        assertEquals("只有周二是逐样记的", 1, review.diet.preciseDays)
     }
 
     @Test
     fun zeroKcalDay_doesNotCountAsLogged() = runTest {
-        stub(meals = listOf(meal(day(0), kcal = 0, proteinG = 0.0)))
+        stub(meals = listOf(meal(day(0), kcal = 0, proteinG = 0.0, isCompleted = true)))
 
         val review = useCase()()
 
-        assertEquals(0, review.diet.loggedDays)
+        assertEquals("打了勾但那餐一个数字都没有 → 计入只会把均值拉向 0", 0, review.diet.loggedDays)
         assertNull(review.diet.avgKcal)
         assertTrue(review.notes.contains(ReviewNote.NO_DIET))
     }

@@ -541,6 +541,7 @@
     <string name="ai_review_stat_rpe">平均 RPE</string>
     <string name="ai_review_stat_weight">体重变化</string>
     <string name="ai_review_stat_diet">日均摄入 kcal</string>
+    <string name="ai_review_diet_approx">约 %1$d</string>
     <string name="ai_review_value_missing">—</string>
     <string name="ai_review_progressed">进步：%1$s</string>
     <string name="ai_review_stalled">停滞：%1$s</string>
