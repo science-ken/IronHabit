@@ -605,6 +605,31 @@
     <string name="label_diet_intake_kcal">%1$d / %2$d kcal</string>
     <string name="label_diet_intake_protein">%1$d / %2$d g 蛋白</string>
 
+    <!-- ===== 食物库（第 1 刀：浏览 / 搜索 / 新建 / 停用；记进一餐在第 2 刀）===== -->
+    <string name="title_food_library">食物库</string>
+    <string name="hint_food_search">搜索食物名称</string>
+    <string name="action_new_food">新建食物</string>
+    <string name="empty_food_library">还没有食物，点「新建食物」加一条</string>
+    <string name="empty_food_search_no_match">没有匹配的食物</string>
+    <string name="label_food_built_in">内置</string>
+    <string name="label_food_per_100g_summary">每 100g 约 %1$d kcal</string>
+    <string name="label_food_serving_summary">1%1$s = %2$d g</string>
+    <string name="title_add_food">新建食物</string>
+    <string name="title_edit_food">编辑食物</string>
+    <string name="hint_food_name">食物名称</string>
+    <string name="hint_food_kcal">每 100g 热量（kcal）</string>
+    <string name="hint_food_protein">每 100g 蛋白质（g，可留空）</string>
+    <string name="hint_food_carbs">每 100g 碳水（g，可留空）</string>
+    <string name="hint_food_fat">每 100g 脂肪（g，可留空）</string>
+    <string name="label_food_servings">家用份量（可留空，可加多套）</string>
+    <string name="hint_food_serving_unit">单位（碗 / 个 / 勺）</string>
+    <string name="hint_food_serving_grams">等于多少克</string>
+    <string name="action_add_serving">再加一份</string>
+    <string name="action_deactivate">停用</string>
+    <string name="action_remove">删除</string>
+    <string name="msg_food_saved">已保存</string>
+    <string name="action_food_library">食物库</string>
+
     <!-- ===== 动作库「加入计划」（v6）===== -->
     <string name="title_add_to_plan">加入每周训练计划</string>
     <string name="label_pick_days">练哪几天（可多选）</string>

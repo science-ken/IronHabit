@@ -43,6 +43,7 @@ import com.ironhabit.app.ui.components.MealBlock
 import com.ironhabit.app.ui.components.PlanDateStrip
 import com.ironhabit.app.ui.components.SkeletonCard
 import com.ironhabit.app.ui.screens.checkin.CheckInSheet
+import com.ironhabit.app.ui.screens.food.FoodLibrarySheet
 import com.ironhabit.app.ui.screens.meals.MealEditSheet
 import com.ironhabit.app.ui.theme.IronHabitSpacing
 
@@ -89,6 +90,11 @@ fun TodayScreen(
 
     /** 磁贴点开的清单弹窗；`null` = 未打开。 */
     var sheetTarget by remember { mutableStateOf<TodaySheetTarget?>(null) }
+
+    // 食物库是**第三层**弹层（清单 → 饮食分区 → 食物库），且它有自己的 ViewModel 与状态，
+    // 所以不复用 sheetTarget：混进去就要给 TodayUiState 加字段，
+    // 而那个 VM 的 applyData 是逐字段手写复制的，本项目已经漏抄过三次。
+    var showFoodLibrary by remember { mutableStateOf(false) }
 
     // 未来日只读：所选日 > 今天（`todayEpochDay` == 0 表示尚未加载，不判定）。
     val isFutureDay: Boolean =
@@ -334,6 +340,13 @@ fun TodayScreen(
                                 Text(text = stringResource(R.string.action_regenerate_diet))
                             }
                         }
+                        // 放在 if/else **外面**：一条餐都还没生成时也要能进食物库，
+                        // 否则第 1 刀的入口在空日里直接消失，看起来像功能没做。
+                        TextButton(
+                            onClick = { showFoodLibrary = true },
+                        ) {
+                            Text(text = stringResource(R.string.action_food_library))
+                        }
                     }
 
                     TodaySheetTarget.HABIT -> {
@@ -401,6 +414,10 @@ fun TodayScreen(
                 )
             },
         )
+    }
+    // 食物库弹层（第 1 刀：浏览 / 搜索 / 新建 / 停用；把食物记进一餐在第 2 刀）。
+    if (showFoodLibrary) {
+        FoodLibrarySheet(onDismissRequest = { showFoodLibrary = false })
     }
 }
 

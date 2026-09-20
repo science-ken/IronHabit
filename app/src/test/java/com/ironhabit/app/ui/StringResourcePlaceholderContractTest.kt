@@ -107,6 +107,8 @@ class StringResourcePlaceholderContractTest {
         entry("label_meal_kcal", ArgKind.NUMERIC, ArgKind.NUMERIC) // MealBlock:80（kcal, proteinG.roundToInt()）
         entry("label_diet_intake_kcal", ArgKind.NUMERIC, ArgKind.NUMERIC) // DietTotalsBar:47（intakeKcal, kcalDenominator）
         entry("label_diet_intake_protein", ArgKind.NUMERIC, ArgKind.NUMERIC) // DietTotalsBar:57（roundToInt(), denominator）
+        entry("label_food_per_100g_summary", ArgKind.NUMERIC) // FoodLibrarySheet（kcalPer100g: Int）
+        entry("label_food_serving_summary", ArgKind.STRING, ArgKind.NUMERIC) // FoodLibrarySheet（unit: String, grams: Int）
 
         // ---------------- 【未使用】strings.xml 有占位符、代码暂无引用 ----------------
         entry("label_week_of", ArgKind.STRING)
