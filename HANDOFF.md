@@ -585,6 +585,19 @@ non-ASCII 会**直接失败**（连编译都不开始，24 秒内报错）：
    的中断工作树；独有内容当时留过档，判完价值后连归档一起删了（见 §0 上方"③"那节）。
 2. **跑一次全量测试**确认环境没问题（命令见 §2），**期望以 §9 的实测数为准**。
 3. **读 §3（红线）和 §4（数据模型）**，再动代码。这两节是"不知道就会踩雷"的部分。
+4. **⚠️ 这棵树不止一个会话在用**（2026-09-19/20 实测：另一个会话同期提交了
+   `a33d72c` 肌群词表 + Room v7、`63daab1`、`f3265ad`，并且**正在跑 Gradle**）。四条硬规矩：
+   - **动手前先 `git status --short`**。看到不是自己改的文件，就**绝对不要 `git add -A`**
+     ——那会把别人没写完的东西（含未完成的数据库迁移）吞进你的 commit。只按文件名逐个 `git add`。
+   - **构建一律加 `--no-daemon`**。共享守护进程会被对方的 `gradle --stop` 一起带走，
+     今天三次构建莫名死于 `daemon has been stopped: stop command received`；
+     强停还会把 `app/build` 的增量状态弄坏（`Cannot access output property 'classesOutputDir'`）
+     并留下 `R.jar` 文件锁（`Device or resource busy`，此时只能等对方跑完，别去杀别人的 java）。
+   - **不要用 `timeout` 包构建**：超时会把守护进程连带打死，症状和上面一样、还更难查。
+   - **`app/build/test-results/*.xml` 会是陈旧文件**：上一次失败/挂死的运行可能留下旧结果。
+     判断"到底跑没跑"要看 XML 里有没有**这一版新增的用例名**，或直接先删掉那个 XML。
+   - 想知道是谁在占：`powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='java.exe'\" | Select ProcessId,CreationDate,CommandLine"`
+     ——启动时间是新的，就是对方正在跑。
 
 产出的东西（APK / 报告）放哪、怎么交付，见 §8。
 
