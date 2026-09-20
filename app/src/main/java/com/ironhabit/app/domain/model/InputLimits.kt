@@ -131,6 +131,63 @@ object InputLimits {
     fun isValidMealProteinG(value: Double): Boolean =
         value.isFinite() && value >= MIN_MEAL_PROTEIN_G && value <= MAX_MEAL_PROTEIN_G
 
+    // ================= 食物库（每 100g 基准） =================
+
+    /**
+     * 每 100g 热量 `0..900 kcal`：上限不是"经验值"而是**物理上限** ——
+     * 纯脂肪就是约 900 kcal/100g，任何食物都不可能超过它。
+     * 超出必是漏打小数点（把 9.0 写成 900 之外的量级）或单位搞错（kJ 当 kcal）。
+     */
+    const val MIN_FOOD_KCAL_PER_100G: Int = 0
+    const val MAX_FOOD_KCAL_PER_100G: Int = 900
+
+    /**
+     * 每 100g 的蛋白 / 碳水 / 脂肪 `0..100 g`：同样由"每 100g"这个基准本身决定 ——
+     * 一个 100g 的样品里某项宏量不可能超过 100g。
+     */
+    const val MIN_FOOD_MACRO_PER_100G: Double = 0.0
+    const val MAX_FOOD_MACRO_PER_100G: Double = 100.0
+
+    /** 每 100g 热量是否合法。 */
+    fun isValidFoodKcalPer100G(value: Int): Boolean =
+        value in MIN_FOOD_KCAL_PER_100G..MAX_FOOD_KCAL_PER_100G
+
+    /** 每 100g 某项宏量是否合法（`NaN` / `±Infinity` 一律非法）。 */
+    fun isValidFoodMacroPer100G(value: Double): Boolean =
+        value.isFinite() && value >= MIN_FOOD_MACRO_PER_100G && value <= MAX_FOOD_MACRO_PER_100G
+
+    // ================= 食物库（家用份量） =================
+
+    /**
+     * 一份的克数 `1..2000 g`。下限 `1` 而非 `0`：**0 克的份是一个会静默把营养算成 0 的陷阱**
+     * （`grams <= 0` 在 `FoodMapper.normalizeServings` 里也会被丢掉，两处口径一致）。
+     * 上限 2000g 覆盖"一整锅"这种夸张但可想象的单位。
+     */
+    const val MIN_SERVING_GRAMS: Int = 1
+    const val MAX_SERVING_GRAMS: Int = 2_000
+
+    /** 份数 `0.1..20`：下限允许"半个/一勺"，上限防手滑多打一个 0。 */
+    const val MIN_SERVINGS: Double = 0.1
+    const val MAX_SERVINGS: Double = 20.0
+
+    /** 一份的克数是否合法。 */
+    fun isValidServingGrams(value: Int): Boolean = value in MIN_SERVING_GRAMS..MAX_SERVING_GRAMS
+
+    /** 份数是否合法（`NaN` / `±Infinity` 一律非法）。 */
+    fun isValidServings(value: Double): Boolean =
+        value.isFinite() && value >= MIN_SERVINGS && value <= MAX_SERVINGS
+
+    /**
+     * 一餐的条目数上限 `50`。
+     *
+     * 不是"用户真会记 50 样"，而是**给误操作封顶**：连点加食物会把一餐堆成上百行，
+     * 而那一餐的合计就再也没意义了。到顶时界面应当直接提示而不是继续接受。
+     */
+    const val MAX_ITEMS_PER_MEAL: Int = 50
+
+    /** 一餐条目数是否还能再加一条。 */
+    fun canAddMealItem(currentCount: Int): Boolean = currentCount < MAX_ITEMS_PER_MEAL
+
     // ================= 组数 =================
 
     /** 组数是否在合法区间内。 */

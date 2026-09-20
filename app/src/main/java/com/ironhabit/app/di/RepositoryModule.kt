@@ -4,6 +4,7 @@ import com.ironhabit.app.data.repository.BackupRepositoryImpl
 import com.ironhabit.app.data.repository.BodyMetricRepositoryImpl
 import com.ironhabit.app.data.repository.CheckInRepositoryImpl
 import com.ironhabit.app.data.repository.ExerciseRepositoryImpl
+import com.ironhabit.app.data.repository.FoodRepositoryImpl
 import com.ironhabit.app.data.repository.HabitRepositoryImpl
 import com.ironhabit.app.data.repository.MealRepositoryImpl
 import com.ironhabit.app.data.repository.PlanRepositoryImpl
@@ -13,6 +14,7 @@ import com.ironhabit.app.domain.repository.BackupRepository
 import com.ironhabit.app.domain.repository.BodyMetricRepository
 import com.ironhabit.app.domain.repository.CheckInRepository
 import com.ironhabit.app.domain.repository.ExerciseRepository
+import com.ironhabit.app.domain.repository.FoodRepository
 import com.ironhabit.app.domain.repository.HabitRepository
 import com.ironhabit.app.domain.repository.MealRepository
 import com.ironhabit.app.domain.repository.PlanRepository
@@ -68,4 +70,8 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindMealRepository(impl: MealRepositoryImpl): MealRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindFoodRepository(impl: FoodRepositoryImpl): FoodRepository
 }

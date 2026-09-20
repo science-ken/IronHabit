@@ -252,3 +252,80 @@ val MIGRATION_6_7: Migration = object : Migration(6, 7) {
         db.execSQL("ALTER TABLE exercises ADD COLUMN equipment TEXT DEFAULT NULL")
     }
 }
+
+/**
+ * v7 → v8：新增食物库两张表（`foods` + `food_servings`）。**纯建表，不碰任何既有表。**
+ *
+ * ## 为什么 `meals` 一个字节都不动
+ * 这一刀只建"能选出一样食物"的能力，**不建"吃了什么"**（那是第二刀的 `meal_items`）。
+ * `meals.kcal` / `items_text` 继续是**计划**值 —— 见
+ * `.scratch/ironhabit-diet-food-log/spec.md` §1：「`meal_items` 里有行 = 真的吃了」，
+ * 而 AI 建议永远不进那张表。这条语义是本次设计里唯一不能妥协的一条，
+ * 因为它正是训练区 2026-09-20 刚修掉的「排了计划当成练了」在饮食区的对应物。
+ *
+ * ## 为什么份量单独一张表，而不是主表上的一对列
+ * 一个食物可以有「一碗 200g / 一盘 350g / 半份 100g」多套家用份量。
+ * 用列表达（FitBook 那种 `servingWeight1G…9G`）要预先钉死"最多几套"，
+ * 而 `minSdk = 24` 下**加列容易、永远删不掉**；子表加一行才是自然操作。
+ *
+ * ## 约束
+ * `minSdk = 24` → 禁止 `DROP COLUMN` / `RENAME COLUMN`；本次只有 `CREATE TABLE` / `CREATE INDEX`，天然满足。
+ * ⚠️ DDL 必须与 KSP 由 [com.ironhabit.app.data.local.entity.FoodEntity] /
+ * [com.ironhabit.app.data.local.entity.FoodServingEntity] 生成的 `app/schemas/.../8.json`
+ * 的 `createSql` **逐字对齐**（含外键子句末尾 `CASCADE )` 那个空格 —— Room 就是这么吐的），
+ * 否则运行时 schema 校验会报 "Migration didn't properly handle foods"。
+ * 两表都**不带 `DEFAULT` 子句**：实体上没有 `@ColumnInfo(defaultValue = …)`，
+ * Kotlin 侧的默认值 Room 是看不见的，写了就会和生成结果不一致。
+ *
+ * Room 升级路径（链式）：
+ * ```
+ *   v1 ──► 1→2 ──► … ──► 6→7 ──► 7→8 ──► v8
+ *   v7 ──► 7→8 ──► v8
+ *   全新安装 ──► 直接按实体建表（不跑迁移）
+ * ```
+ */
+val MIGRATION_7_8: Migration = object : Migration(7, 8) {
+
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `foods` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`name` TEXT NOT NULL, " +
+                "`kcal_per_100g` INTEGER NOT NULL, " +
+                "`protein_per_100g` REAL NOT NULL, " +
+                "`carbs_per_100g` REAL NOT NULL, " +
+                "`fat_per_100g` REAL NOT NULL, " +
+                "`dietary_tags` TEXT, " +
+                "`source` TEXT NOT NULL, " +
+                "`note` TEXT, " +
+                "`is_active` INTEGER NOT NULL, " +
+                "`is_user_edited` INTEGER NOT NULL, " +
+                "`sort_order` INTEGER NOT NULL, " +
+                "`created_at` INTEGER NOT NULL)"
+        )
+        db.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS `index_foods_name` " +
+                "ON `foods` (`name`)"
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_foods_is_active` " +
+                "ON `foods` (`is_active`)"
+        )
+
+        // 子表必须在主表之后建：外键指向 foods(id)。
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `food_servings` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`food_id` INTEGER NOT NULL, " +
+                "`unit` TEXT NOT NULL, " +
+                "`grams` INTEGER NOT NULL, " +
+                "`sort_order` INTEGER NOT NULL, " +
+                "FOREIGN KEY(`food_id`) REFERENCES `foods`(`id`) " +
+                "ON UPDATE NO ACTION ON DELETE CASCADE )"
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_food_servings_food_id` " +
+                "ON `food_servings` (`food_id`)"
+        )
+    }
+}

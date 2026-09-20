@@ -6,6 +6,7 @@ import androidx.room.TypeConverters
 import com.ironhabit.app.data.local.dao.BodyMetricDao
 import com.ironhabit.app.data.local.dao.CheckInDao
 import com.ironhabit.app.data.local.dao.ExerciseDao
+import com.ironhabit.app.data.local.dao.FoodDao
 import com.ironhabit.app.data.local.dao.HabitDao
 import com.ironhabit.app.data.local.dao.HabitLogDao
 import com.ironhabit.app.data.local.dao.MealDao
@@ -15,6 +16,8 @@ import com.ironhabit.app.data.local.entity.BodyMetricEntity
 import com.ironhabit.app.data.local.entity.CheckInEntity
 import com.ironhabit.app.data.local.entity.Converters
 import com.ironhabit.app.data.local.entity.ExerciseEntity
+import com.ironhabit.app.data.local.entity.FoodEntity
+import com.ironhabit.app.data.local.entity.FoodServingEntity
 import com.ironhabit.app.data.local.entity.HabitEntity
 import com.ironhabit.app.data.local.entity.HabitLogEntity
 import com.ironhabit.app.data.local.entity.MealEntity
@@ -32,6 +35,8 @@ import com.ironhabit.app.data.local.entity.WeekPlanEntity
  *   `fallbackToDestructiveMigration*`；遇到未注册的降级 schema 变化会**抛异常暴露**而非静默清库。
  * - 版本 6：由 [MIGRATION_5_6] 从 v5 升级（动作停用入口下线，存量停用动作一次性全部置回启用）。
  * - 版本 7：由 [MIGRATION_6_7] 从 v6 升级（`exercises` 增加 `equipment` 器械列，**纯加列无回填**）。
+ * - 版本 8：由 [MIGRATION_7_8] 从 v7 升级（新增 `foods` + `food_servings` 两张表，食物库；**纯建表**，
+ *   不碰 `meals` 一个字节 —— 饮食区"计划 vs 实际"的语义见 `.scratch/ironhabit-diet-food-log/spec.md` §1）。
  */
 @Database(
     entities = [
@@ -42,6 +47,8 @@ import com.ironhabit.app.data.local.entity.WeekPlanEntity
         HabitLogEntity::class,
         BodyMetricEntity::class,
         MealEntity::class,
+        FoodEntity::class,
+        FoodServingEntity::class,
     ],
     version = AppDatabase.VERSION,
     exportSchema = true,
@@ -65,11 +72,13 @@ abstract class AppDatabase : RoomDatabase() {
 
     abstract fun mealDao(): MealDao
 
+    abstract fun foodDao(): FoodDao
+
     companion object {
         /** 数据库文件名。 */
         const val DATABASE_NAME: String = "ironhabit.db"
 
         /** 当前 schema 版本。 */
-        const val VERSION: Int = 7
+        const val VERSION: Int = 8
     }
 }

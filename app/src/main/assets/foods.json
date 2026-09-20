@@ -1,0 +1,272 @@
+[
+  {
+    "name": "大米（生）",
+    "kcalPer100g": 346,
+    "proteinPer100g": 7.5,
+    "carbsPer100g": 77.6,
+    "fatPer100g": 0.7,
+    "servings": [
+      { "unit": "碗（生）", "grams": 150 },
+      { "unit": "把（生）", "grams": 30 }
+    ],
+    "dietaryTags": []
+  },
+  {
+    "name": "米饭（蒸）",
+    "kcalPer100g": 116,
+    "proteinPer100g": 2.6,
+    "carbsPer100g": 25.9,
+    "fatPer100g": 0.3,
+    "servings": [
+      { "unit": "碗", "grams": 150 },
+      { "unit": "盘", "grams": 250 }
+    ],
+    "dietaryTags": []
+  },
+  {
+    "name": "馒头",
+    "kcalPer100g": 223,
+    "proteinPer100g": 7.0,
+    "carbsPer100g": 44.2,
+    "fatPer100g": 1.1,
+    "servings": [{ "unit": "个", "grams": 100 }],
+    "dietaryTags": ["GLUTEN"]
+  },
+  {
+    "name": "挂面（干）",
+    "kcalPer100g": 344,
+    "proteinPer100g": 8.5,
+    "carbsPer100g": 73.8,
+    "fatPer100g": 0.7,
+    "servings": [{ "unit": "份（干）", "grams": 100 }],
+    "dietaryTags": ["GLUTEN"]
+  },
+  {
+    "name": "燕麦片",
+    "kcalPer100g": 367,
+    "proteinPer100g": 15.0,
+    "carbsPer100g": 61.6,
+    "fatPer100g": 6.7,
+    "servings": [{ "unit": "份", "grams": 40 }],
+    "dietaryTags": ["GLUTEN"]
+  },
+  {
+    "name": "全麦面包",
+    "kcalPer100g": 246,
+    "proteinPer100g": 9.0,
+    "carbsPer100g": 45.0,
+    "fatPer100g": 3.0,
+    "servings": [{ "unit": "片", "grams": 35 }],
+    "dietaryTags": ["GLUTEN"]
+  },
+  {
+    "name": "玉米（鲜）",
+    "kcalPer100g": 112,
+    "proteinPer100g": 4.0,
+    "carbsPer100g": 22.8,
+    "fatPer100g": 1.2,
+    "servings": [{ "unit": "根", "grams": 200 }],
+    "dietaryTags": []
+  },
+  {
+    "name": "红薯",
+    "kcalPer100g": 61,
+    "proteinPer100g": 2.2,
+    "carbsPer100g": 13.9,
+    "fatPer100g": 0.2,
+    "servings": [{ "unit": "个", "grams": 200 }],
+    "dietaryTags": []
+  },
+  {
+    "name": "土豆",
+    "kcalPer100g": 81,
+    "proteinPer100g": 2.7,
+    "carbsPer100g": 17.8,
+    "fatPer100g": 0.1,
+    "servings": [{ "unit": "个", "grams": 150 }],
+    "dietaryTags": []
+  },
+  {
+    "name": "鸡蛋（煮）",
+    "kcalPer100g": 144,
+    "proteinPer100g": 13.3,
+    "carbsPer100g": 2.8,
+    "fatPer100g": 8.8,
+    "servings": [{ "unit": "个", "grams": 50 }],
+    "dietaryTags": []
+  },
+  {
+    "name": "鸡胸肉（生）",
+    "kcalPer100g": 133,
+    "proteinPer100g": 19.4,
+    "carbsPer100g": 2.5,
+    "fatPer100g": 5.0,
+    "servings": [{ "unit": "块", "grams": 150 }],
+    "dietaryTags": []
+  },
+  {
+    "name": "猪肉（瘦，生）",
+    "kcalPer100g": 143,
+    "proteinPer100g": 20.3,
+    "carbsPer100g": 1.5,
+    "fatPer100g": 6.2,
+    "servings": [{ "unit": "两", "grams": 50 }],
+    "dietaryTags": []
+  },
+  {
+    "name": "牛肉（瘦，生）",
+    "kcalPer100g": 106,
+    "proteinPer100g": 20.2,
+    "carbsPer100g": 1.2,
+    "fatPer100g": 2.3,
+    "servings": [{ "unit": "两", "grams": 50 }],
+    "dietaryTags": []
+  },
+  {
+    "name": "草鱼（生）",
+    "kcalPer100g": 113,
+    "proteinPer100g": 16.6,
+    "carbsPer100g": 0.0,
+    "fatPer100g": 5.2,
+    "servings": [{ "unit": "块", "grams": 120 }],
+    "dietaryTags": ["SEAFOOD"]
+  },
+  {
+    "name": "基围虾（生）",
+    "kcalPer100g": 101,
+    "proteinPer100g": 18.2,
+    "carbsPer100g": 3.9,
+    "fatPer100g": 1.4,
+    "servings": [{ "unit": "只", "grams": 12 }],
+    "dietaryTags": ["SEAFOOD"]
+  },
+  {
+    "name": "豆腐（南）",
+    "kcalPer100g": 60,
+    "proteinPer100g": 6.0,
+    "carbsPer100g": 2.5,
+    "fatPer100g": 3.0,
+    "servings": [{ "unit": "块", "grams": 100 }],
+    "dietaryTags": []
+  },
+  {
+    "name": "牛奶",
+    "kcalPer100g": 54,
+    "proteinPer100g": 3.0,
+    "carbsPer100g": 3.4,
+    "fatPer100g": 3.2,
+    "servings": [
+      { "unit": "盒", "grams": 250 },
+      { "unit": "杯", "grams": 200 }
+    ],
+    "dietaryTags": ["DAIRY"]
+  },
+  {
+    "name": "无糖酸奶",
+    "kcalPer100g": 60,
+    "proteinPer100g": 3.5,
+    "carbsPer100g": 4.0,
+    "fatPer100g": 3.3,
+    "servings": [{ "unit": "杯", "grams": 150 }],
+    "dietaryTags": ["DAIRY"]
+  },
+  {
+    "name": "豆浆（无糖）",
+    "kcalPer100g": 31,
+    "proteinPer100g": 3.0,
+    "carbsPer100g": 1.2,
+    "fatPer100g": 1.6,
+    "servings": [{ "unit": "杯", "grams": 250 }],
+    "dietaryTags": []
+  },
+  {
+    "name": "西兰花",
+    "kcalPer100g": 36,
+    "proteinPer100g": 4.1,
+    "carbsPer100g": 4.3,
+    "fatPer100g": 0.6,
+    "servings": [{ "unit": "颗", "grams": 300 }],
+    "dietaryTags": []
+  },
+  {
+    "name": "菠菜",
+    "kcalPer100g": 25,
+    "proteinPer100g": 2.6,
+    "carbsPer100g": 2.8,
+    "fatPer100g": 0.3,
+    "servings": [{ "unit": "份", "grams": 200 }],
+    "dietaryTags": []
+  },
+  {
+    "name": "番茄",
+    "kcalPer100g": 20,
+    "proteinPer100g": 0.9,
+    "carbsPer100g": 4.0,
+    "fatPer100g": 0.2,
+    "servings": [{ "unit": "个", "grams": 150 }],
+    "dietaryTags": []
+  },
+  {
+    "name": "黄瓜",
+    "kcalPer100g": 16,
+    "proteinPer100g": 0.8,
+    "carbsPer100g": 2.9,
+    "fatPer100g": 0.2,
+    "servings": [{ "unit": "根", "grams": 200 }],
+    "dietaryTags": []
+  },
+  {
+    "name": "苹果",
+    "kcalPer100g": 54,
+    "proteinPer100g": 0.4,
+    "carbsPer100g": 13.7,
+    "fatPer100g": 0.2,
+    "servings": [{ "unit": "个", "grams": 180 }],
+    "dietaryTags": []
+  },
+  {
+    "name": "香蕉",
+    "kcalPer100g": 93,
+    "proteinPer100g": 1.4,
+    "carbsPer100g": 22.0,
+    "fatPer100g": 0.2,
+    "servings": [{ "unit": "根", "grams": 120 }],
+    "dietaryTags": []
+  },
+  {
+    "name": "橙子",
+    "kcalPer100g": 48,
+    "proteinPer100g": 0.8,
+    "carbsPer100g": 11.1,
+    "fatPer100g": 0.2,
+    "servings": [{ "unit": "个", "grams": 150 }],
+    "dietaryTags": []
+  },
+  {
+    "name": "花生仁（生）",
+    "kcalPer100g": 540,
+    "proteinPer100g": 24.6,
+    "carbsPer100g": 16.2,
+    "fatPer100g": 40.1,
+    "servings": [{ "unit": "把", "grams": 30 }],
+    "dietaryTags": ["PEANUT"]
+  },
+  {
+    "name": "食用油",
+    "kcalPer100g": 900,
+    "proteinPer100g": 0.0,
+    "carbsPer100g": 0.0,
+    "fatPer100g": 100.0,
+    "servings": [{ "unit": "勺", "grams": 10 }],
+    "dietaryTags": []
+  },
+  {
+    "name": "白砂糖",
+    "kcalPer100g": 400,
+    "proteinPer100g": 0.0,
+    "carbsPer100g": 99.9,
+    "fatPer100g": 0.0,
+    "servings": [{ "unit": "勺", "grams": 10 }],
+    "dietaryTags": []
+  }
+]

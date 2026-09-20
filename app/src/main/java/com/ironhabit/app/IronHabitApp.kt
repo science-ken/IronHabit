@@ -10,6 +10,7 @@ import com.ironhabit.app.data.notification.NotificationChannels
 import com.ironhabit.app.di.ApplicationScope
 import com.ironhabit.app.domain.repository.ReminderScheduler
 import com.ironhabit.app.domain.usecase.SeedExercisesUseCase
+import com.ironhabit.app.domain.usecase.SeedFoodsUseCase
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -21,7 +22,7 @@ import javax.inject.Inject
  * 职责：
  * 1. 作为 Hilt 组件树的根（`@HiltAndroidApp`）。
  * 2. 启动时创建本地通知渠道（训练 / 习惯两条）。
- * 3. 幂等播种内置动作库（`OnConflictStrategy.IGNORE`，重复启动不产生脏数据）。
+ * 3. 幂等播种内置动作库与内置食物库（`OnConflictStrategy.IGNORE` / 同名跳过，重复启动不产生脏数据）。
  * 4. 依当前设置重排全部提醒（覆盖「应用更新 / 系统重启 / 进程被杀」后 AlarmManager
  *    已清空闹钟的情况 —— 系统在以上场景会丢弃所有已排闹钟，必须主动重建）。
  * 5. 注册时区 / 时钟变更的运行时广播接收器，变了就重排提醒。
@@ -35,6 +36,10 @@ class IronHabitApp : Application() {
     /** 首启播种内置动作的用例（幂等）。 */
     @Inject
     lateinit var seedExercisesUseCase: SeedExercisesUseCase
+
+    /** 首启播种内置食物库的用例（幂等，读 `assets/foods.json`）。 */
+    @Inject
+    lateinit var seedFoodsUseCase: SeedFoodsUseCase
 
     /** 提醒调度器（由 NotificationModule @Binds 为 ReminderSchedulerImpl）。 */
     @Inject
@@ -56,6 +61,9 @@ class IronHabitApp : Application() {
         applicationScope.launch {
             runCatching { seedExercisesUseCase() }
                 .onFailure { Log.w(TAG, "seed exercises failed", it) }
+
+            runCatching { seedFoodsUseCase() }
+                .onFailure { Log.w(TAG, "seed foods failed", it) }
 
             runCatching { reminderScheduler.rescheduleAll() }
                 .onFailure { Log.w(TAG, "reschedule reminders failed", it) }

@@ -9,9 +9,11 @@ import com.ironhabit.app.data.local.MIGRATION_3_4
 import com.ironhabit.app.data.local.MIGRATION_4_5
 import com.ironhabit.app.data.local.MIGRATION_5_6
 import com.ironhabit.app.data.local.MIGRATION_6_7
+import com.ironhabit.app.data.local.MIGRATION_7_8
 import com.ironhabit.app.data.local.dao.BodyMetricDao
 import com.ironhabit.app.data.local.dao.CheckInDao
 import com.ironhabit.app.data.local.dao.ExerciseDao
+import com.ironhabit.app.data.local.dao.FoodDao
 import com.ironhabit.app.data.local.dao.HabitDao
 import com.ironhabit.app.data.local.dao.HabitLogDao
 import com.ironhabit.app.data.local.dao.MealDao
@@ -54,7 +56,7 @@ object DatabaseModule {
     )
         .addMigrations(
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4,
-            MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
+            MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8,
         )
         .build()
 
@@ -81,4 +83,7 @@ object DatabaseModule {
 
     @Provides
     fun provideMealDao(db: AppDatabase): MealDao = db.mealDao()
+
+    @Provides
+    fun provideFoodDao(db: AppDatabase): FoodDao = db.foodDao()
 }
