@@ -24,9 +24,16 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 abstract class NotificationModule {
 
-    /** 把 domain 的提醒调度接口绑定到 AlarmManager 实现。 */
+    /**
+     * 把 domain 的提醒调度接口绑定到 AlarmManager 实现。
+     *
+     * ⚠️ **故意不加 `@Singleton`**：`AppModule.provideTimeZone()` 也刻意不是单例（B-5），
+     * 但只要本绑定是单例，`ReminderSchedulerImpl` 里注入的那个 `TimeZone` 就会被冻在
+     * "进程启动那一刻"——设备换了时区之后，"每天 07:30"仍按旧时区算，提醒会在当地半夜响。
+     * 不作用域 = 每个注入点（每次广播 / 每个 ViewModel）新建一个实例，重新求值时区。
+     * 该类无任何可变状态，多实例不会重复登记闹钟（闹钟按 `PendingIntent` 的 requestCode 去重）。
+     */
     @Binds
-    @Singleton
     abstract fun bindReminderScheduler(impl: ReminderSchedulerImpl): ReminderScheduler
 
     companion object {

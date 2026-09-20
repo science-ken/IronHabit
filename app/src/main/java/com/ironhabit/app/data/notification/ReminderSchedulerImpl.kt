@@ -11,7 +11,6 @@ import com.ironhabit.app.domain.repository.SettingsRepository
 import com.ironhabit.app.domain.util.DateUtils
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
-import javax.inject.Singleton
 import kotlinx.coroutines.flow.first
 import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
@@ -24,8 +23,13 @@ import kotlinx.datetime.TimeZone
  * - 触发后由 [ReminderReceiver] 调用 [scheduleNext] 自续期「明天同一时刻」。
  *
  * 由 `NotificationModule` 通过 `@Binds` 绑定到接口。
+ *
+ * ⚠️ **不加 `@Singleton`**（`NotificationModule.bindReminderScheduler` 那里也刻意没加）：
+ * 本类注入了 `TimeZone`，一旦被单例化，时区就被冻在进程启动那一刻，
+ * 设备跨时区后"每天 07:30"仍按旧时区排。不作用域 → 每次广播 / 每个 ViewModel 新建实例、重新求值。
+ * 本类**没有任何可变状态**（只有注入依赖），多实例不会重复登记闹钟：
+ * 闹钟由 `PendingIntent` 的 requestCode 去重。
  */
-@Singleton
 class ReminderSchedulerImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     private val alarmManager: AlarmManager,
