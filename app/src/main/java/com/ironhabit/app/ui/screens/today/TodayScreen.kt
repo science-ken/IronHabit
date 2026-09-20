@@ -43,6 +43,7 @@ import com.ironhabit.app.ui.components.MealBlock
 import com.ironhabit.app.ui.components.PlanDateStrip
 import com.ironhabit.app.ui.components.SkeletonCard
 import com.ironhabit.app.ui.screens.checkin.CheckInSheet
+import com.ironhabit.app.ui.screens.food.FoodLibraryEntry
 import com.ironhabit.app.ui.screens.food.FoodLibrarySheet
 import com.ironhabit.app.ui.screens.meals.MealEditSheet
 import com.ironhabit.app.ui.theme.IronHabitSpacing
@@ -302,6 +303,9 @@ fun TodayScreen(
 
                     TodaySheetTarget.MEAL -> {
                         SectionTitle(text = stringResource(R.string.title_today_meals))
+                        // 入口放在**标题正下方**（不是弹层底部）：半展开时底部那行压根不被渲染。
+                        // 也在 if/else 外面 —— 一条餐都没生成的空日里同样要能进库。
+                        FoodLibraryEntry(onOpen = { showFoodLibrary = true })
                         if (uiState.meals.isEmpty()) {
                             EmptyState(
                                 text = stringResource(R.string.empty_today_meals),
@@ -339,13 +343,6 @@ fun TodayScreen(
                             ) {
                                 Text(text = stringResource(R.string.action_regenerate_diet))
                             }
-                        }
-                        // 放在 if/else **外面**：一条餐都还没生成时也要能进食物库，
-                        // 否则第 1 刀的入口在空日里直接消失，看起来像功能没做。
-                        TextButton(
-                            onClick = { showFoodLibrary = true },
-                        ) {
-                            Text(text = stringResource(R.string.action_food_library))
                         }
                     }
 

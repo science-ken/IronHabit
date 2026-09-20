@@ -46,6 +46,56 @@ import kotlinx.coroutines.launch
  * 弹层必须可滚动 + `imePadding`：这条是从 `MealEditSheet` 真机踩来的
  * （字段一多，保存/取消会被裁到够不着）。
  */
+/**
+ * 「今日饮食」弹层顶部的**食物库入口条**。
+ *
+ * 为什么放顶部而不是底部一行小字（真机实测）：饮食弹层默认**半展开**，
+ * 四张餐卡就把可视区占满，底部那行按钮**连节点都不会被渲染出来**
+ * —— 不是"看不见"，是"没进视图层级"，用户不往上滑就永远找不到它。
+ *
+ * 条数直接读 [FoodLibraryViewModel]：它与下面的弹层**是同一个实例**
+ * （同属今日这个导航目的地，`hiltViewModel()` 走同一个 ViewModelStore），
+ * 所以不必给 `TodayUiState` 加字段 —— 那个 VM 的 `applyData` 是逐字段手写复制的，
+ * 本项目已经漏抄过三次。
+ */
+@Composable
+fun FoodLibraryEntry(
+    onOpen: () -> Unit,
+    modifier: Modifier = Modifier,
+    viewModel: FoodLibraryViewModel = hiltViewModel(),
+) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+    OutlinedButton(
+        onClick = onOpen,
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.title_food_library),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = stringResource(R.string.label_food_library_count, uiState.allFoods.size),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text(
+                text = "›",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FoodLibrarySheet(

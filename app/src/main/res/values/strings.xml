@@ -628,7 +628,7 @@
     <string name="action_deactivate">停用</string>
     <string name="action_remove">删除</string>
     <string name="msg_food_saved">已保存</string>
-    <string name="action_food_library">食物库</string>
+    <string name="label_food_library_count">共 %1$d 条 · 可搜索 / 新建 / 停用</string>
 
     <!-- ===== 动作库「加入计划」（v6）===== -->
     <string name="title_add_to_plan">加入每周训练计划</string>
