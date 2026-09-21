@@ -11,6 +11,7 @@ import com.ironhabit.app.domain.model.TrainingReview
 import com.ironhabit.app.domain.model.WeekDayDetail
 import com.ironhabit.app.domain.model.WeekItemDetail
 import com.ironhabit.app.domain.model.WeeklyReview
+import com.ironhabit.app.domain.model.WeekPlan
 import com.ironhabit.app.domain.model.MealIntake
 import com.ironhabit.app.domain.model.MealIntakeCalculator
 import com.ironhabit.app.domain.repository.BodyMetricRepository
@@ -79,29 +80,49 @@ class BuildWeeklyReviewUseCase @Inject constructor(
         val exercises: Map<Long, Exercise> = exerciseRepository.observeActive().first()
             .associateBy { exercise -> exercise.id }
 
+        // 计划只读一次「本周生效行」：plannedDays、plannedSets、逐日计划组数必须同源，
+        // 而且必须走 resolver —— 模板回落 / 逐天覆盖 / 软删行三条规则只在
+        // `WeekPlanWeekResolver` 有一份，绕开它「12/35」的分母会和今日页清单对不上。
+        val planRows: List<WeekPlan> = planRepository.observeEffectivePlanForWeek(weekStart).first()
+        val plannedSetsByDay: Map<Int, Int> = planRows
+            .groupBy { plan -> plan.dayOfWeek }
+            .mapValues { (_, rows) -> rows.sumOf { row -> row.targetSets } }
+
         val training: TrainingReview = buildTraining(
             weekStartEpochDay = weekStart,
             weekCheckIns = weekCheckIns,
             trendCheckIns = trendCheckIns,
             exercises = exercises,
             // B-9：「计划天数」必须是**复盘目标周**实际排课的天数 —— 本用例可翻到上周复盘，
-            // 不能拿「当前周」的天数冒充（observePlannedWeekdays 无参版恒取当前周）。
-            plannedDays = planRepository.observePlannedWeekdays(weekStart).first().size,
+            // 不能拿「当前周」的天数冒充。`observePlannedWeekdays(weekStart)` 本来就是
+            // `observeEffectivePlanForWeek(weekStart)` 的 distinct 投影，这里直接派生，少读一次仓库。
+            plannedDays = plannedSetsByDay.size,
+            plannedSets = planRows.sumOf { row -> row.targetSets },
         )
         // 只算一次：body / diet 都会做仓库查询，算两遍既慢又可能出现不一致的快照。
-        val body: BodyReview = buildBody(weekStart = weekStart, weekEnd = weekEnd)
-        val diet: DietReview = buildDiet(weekStart = weekStart, weekEnd = weekEnd)
+        // 所以**逐日事实和周汇总都从同一次读取派生** —— 周卡说 2,199、日卡加起来不是
+        // 这种情况在结构上就不可能发生。
+        val body: BodyFacts = buildBody(weekStart = weekStart, weekEnd = weekEnd)
+        val dayDiets: List<DayDiet> = buildDayDiets(weekStart = weekStart)
+        val diet: DietReview = aggregateDiet(dayDiets)
 
         return WeeklyReview(
             weekStartEpochDay = weekStart,
             weekEndEpochDay = weekEnd,
             training = training,
-            body = body,
+            body = body.review,
             diet = diet,
-            days = buildDays(weekStart = weekStart, weekCheckIns = weekCheckIns, exercises = exercises),
+            days = buildDays(
+                weekStart = weekStart,
+                weekCheckIns = weekCheckIns,
+                exercises = exercises,
+                dayDiets = dayDiets,
+                weightByDay = body.weightByDay,
+                plannedSetsByDay = plannedSetsByDay,
+            ),
             notes = buildNotes(
                 training = training,
-                body = body,
+                body = body.review,
                 diet = diet,
                 weekEndEpochDay = weekEnd,
                 today = today,
@@ -117,6 +138,7 @@ class BuildWeeklyReviewUseCase @Inject constructor(
         trendCheckIns: List<CheckIn>,
         exercises: Map<Long, Exercise>,
         plannedDays: Int,
+        plannedSets: Int,
     ): TrainingReview {
         val totalVolume: Float = weekCheckIns.sumOf { checkIn ->
             val weight: Float = checkIn.weightKg ?: return@sumOf 0.0
@@ -137,6 +159,7 @@ class BuildWeeklyReviewUseCase @Inject constructor(
             completedDays = weekCheckIns.map { it.dateEpochDay }.distinct().size,
             totalVolumeKg = totalVolume,
             totalSets = weekCheckIns.sumOf { it.completedSets },
+            plannedSets = plannedSets,
             avgRpe = if (rpeValues.isEmpty()) {
                 null
             } else {
@@ -220,30 +243,42 @@ class BuildWeeklyReviewUseCase @Inject constructor(
 
     // ---------------- 身体 ----------------
 
-    private suspend fun buildBody(weekStart: Long, weekEnd: Long): BodyReview {
-        val weights: List<Float> = bodyMetricRepository.observeByType(BodyMetricType.WEIGHT).first()
+    /**
+     * 体重：一次读取同时产出周汇总和逐日表。
+     *
+     * 一天最多一条（`BodyMetricEntity` 上 `type + date_epoch_day` 唯一索引），
+     * 所以可以放心摊到日卡上，不出现"那天称了两次该显示哪个"。
+     */
+    private suspend fun buildBody(weekStart: Long, weekEnd: Long): BodyFacts {
+        val rows = bodyMetricRepository.observeByType(BodyMetricType.WEIGHT).first()
             .filter { metric -> metric.dateEpochDay in weekStart..weekEnd }
             .sortedBy { metric -> metric.dateEpochDay }
-            .map { metric -> metric.value }
+        val weights: List<Float> = rows.map { metric -> metric.value }
 
-        return BodyReview(
-            startWeightKg = weights.firstOrNull(),
-            latestWeightKg = weights.lastOrNull(),
-            // 记录条数要带上：只有一条时"变化"算不出来（见 BodyReview.deltaKg）。
-            sampleCount = weights.size,
+        return BodyFacts(
+            review = BodyReview(
+                startWeightKg = weights.firstOrNull(),
+                latestWeightKg = weights.lastOrNull(),
+                // 记录条数要带上：只有一条时"变化"算不出来（见 BodyReview.deltaKg）。
+                sampleCount = weights.size,
+            ),
+            weightByDay = rows.associate { metric -> metric.dateEpochDay to metric.value },
         )
     }
 
+    /** [buildBody] 的两份产出：周汇总 + 逐日体重。 */
+    private data class BodyFacts(val review: BodyReview, val weightByDay: Map<Long, Float>)
+
     // ---------------- 饮食 ----------------
 
-    private suspend fun buildDiet(weekStart: Long, weekEnd: Long): DietReview {
-        var loggedDays: Int = 0
-        var preciseDays: Int = 0
-        var kcalSum: Int = 0
-        var proteinSum: Double = 0.0
-
-        var day: Long = weekStart
-        while (day <= weekEnd) {
+    /**
+     * 逐日摄入事实（7 天全出，没记的天 `kcal = 0`）。
+     *
+     * 这是饮食唯一的取数处：[aggregateDiet] 的周汇总和日卡的「当天 约 2,199」都从这份列表派生。
+     */
+    private suspend fun buildDayDiets(weekStart: Long): List<DayDiet> =
+        (0 until DAYS_IN_WEEK).map { offset ->
+            val day: Long = weekStart + offset
             val meals = mealRepository.getMealsIncludingInactive(day).filter { meal -> meal.isActive }
             // 与今日页共用同一个计算器：判定收在一处，否则磁贴说"约"而复盘说"精确"，
             // 同一份数据两种口径 —— 那正是这次要修掉的东西。
@@ -251,22 +286,35 @@ class BuildWeeklyReviewUseCase @Inject constructor(
                 meals = meals,
                 items = mealItemRepository.getByDate(day),
             )
-            // `kcal > 0` 而不是 `hasAnyRecord`：打了勾但那餐一个数字都没有的天，
-            // 计入只会把一个 0 塞进平均里拉低它，却说不出任何事实。
-            if (intake.hasAnyRecord && intake.kcal > 0) {
-                loggedDays++
-                if (intake.preciseMeals > 0) preciseDays++
-                kcalSum += intake.kcal
-                proteinSum += intake.proteinG
-            }
-            day++
+            DayDiet(
+                dateEpochDay = day,
+                // `kcal > 0` 而不是 `hasAnyRecord`：打了勾但那餐一个数字都没有的天，
+                // 计入只会把一个 0 塞进平均里拉低它，却说不出任何事实。
+                logged = intake.hasAnyRecord && intake.kcal > 0,
+                kcal = intake.kcal,
+                proteinG = intake.proteinG,
+                precise = intake.preciseMeals > 0,
+            )
         }
 
+    /** 一次遍历的逐日产出。 */
+    private data class DayDiet(
+        val dateEpochDay: Long,
+        val logged: Boolean,
+        val kcal: Int,
+        val proteinG: Double,
+        val precise: Boolean,
+    )
+
+    private fun aggregateDiet(dayDiets: List<DayDiet>): DietReview {
+        val logged: List<DayDiet> = dayDiets.filter { day -> day.logged }
+        val days: Int = logged.size
         return DietReview(
-            loggedDays = loggedDays,
-            avgKcal = if (loggedDays == 0) null else (kcalSum.toFloat() / loggedDays).roundToInt(),
-            avgProteinG = if (loggedDays == 0) null else (proteinSum / loggedDays).roundToInt(),
-            preciseDays = preciseDays,
+            loggedDays = days,
+            // 日均是**有记录的天**的平均，不是 7 天平均（没记录的天不该把均值拉低）。
+            avgKcal = if (days == 0) null else (logged.sumOf { day -> day.kcal }.toFloat() / days).roundToInt(),
+            avgProteinG = if (days == 0) null else (logged.sumOf { day -> day.proteinG } / days).roundToInt(),
+            preciseDays = logged.count { day -> day.precise },
         )
     }
 
@@ -276,12 +324,18 @@ class BuildWeeklyReviewUseCase @Inject constructor(
         weekStart: Long,
         weekCheckIns: List<CheckIn>,
         exercises: Map<Long, Exercise>,
+        dayDiets: List<DayDiet>,
+        weightByDay: Map<Long, Float>,
+        plannedSetsByDay: Map<Int, Int>,
     ): List<WeekDayDetail> {
         val byDay: Map<Long, List<CheckIn>> = weekCheckIns.groupBy { checkIn -> checkIn.dateEpochDay }
+        val dietByDay: Map<Long, DayDiet> = dayDiets.associateBy { diet -> diet.dateEpochDay }
 
         return (0 until DAYS_IN_WEEK).map { offset ->
             val day: Long = weekStart + offset
-            val items: List<WeekItemDetail> = byDay[day].orEmpty()
+            val checkIns: List<CheckIn> = byDay[day].orEmpty()
+            val diet: DayDiet? = dietByDay[day]?.takeIf { it.logged }
+            val items: List<WeekItemDetail> = checkIns
                 .sortedBy { checkIn -> checkIn.exerciseId }
                 .mapNotNull { checkIn ->
                     val name: String = exercises[checkIn.exerciseId]?.name?.trim()
@@ -297,7 +351,17 @@ class BuildWeeklyReviewUseCase @Inject constructor(
                         note = checkIn.notes,
                     )
                 }
-            WeekDayDetail(dateEpochDay = day, items = items)
+            WeekDayDetail(
+                dateEpochDay = day,
+                plannedSets = plannedSetsByDay[offset.toInt() + 1] ?: 0,
+                // 组数按**全部**当天打卡算：查不到名字的行不进 items，但那几组真的做完了。
+                completedSets = checkIns.sumOf { checkIn -> checkIn.completedSets },
+                weightKg = weightByDay[day],
+                kcal = diet?.kcal,
+                proteinG = diet?.proteinG?.roundToInt(),
+                dietPrecise = diet?.precise == true,
+                items = items,
+            )
         }
     }
 

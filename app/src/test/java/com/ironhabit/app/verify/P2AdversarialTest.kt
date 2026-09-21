@@ -17,6 +17,7 @@ import com.ironhabit.app.domain.model.UserProfile
 import com.ironhabit.app.domain.model.WeekDayDetail
 import com.ironhabit.app.domain.model.WeekItemDetail
 import com.ironhabit.app.domain.model.WeeklyReview
+import com.ironhabit.app.domain.model.WeekPlan
 import com.ironhabit.app.domain.repository.BodyMetricRepository
 import com.ironhabit.app.domain.repository.CheckInRepository
 import com.ironhabit.app.domain.repository.ExerciseRepository
@@ -132,7 +133,10 @@ class P2AdversarialTest {
         every { exerciseRepository.observeActive() } returns flowOf(exercises)
         every { bodyMetricRepository.observeByType(BodyMetricType.WEIGHT) } returns flowOf(weights)
         coEvery { mealRepository.getMealsIncludingInactive(any()) } returns emptyList()
-        every { planRepository.observePlannedWeekdays(any()) } returns flowOf(plannedWeekdays)
+        // 复盘读的是 resolver 之后的生效行（plannedDays / plannedSets / 逐日组数同源），
+        // 每个计划日给一条 → distinct dayOfWeek 个数仍等于 plannedWeekdays.size。
+        every { planRepository.observeEffectivePlanForWeek(any()) } returns
+            flowOf(plannedWeekdays.map { day -> WeekPlan(dayOfWeek = day) })
     }
 
     private fun reviewUseCase(

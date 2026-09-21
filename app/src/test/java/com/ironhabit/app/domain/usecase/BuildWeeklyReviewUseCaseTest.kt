@@ -11,6 +11,8 @@ import com.ironhabit.app.domain.model.MealItem
 import com.ironhabit.app.domain.model.MealType
 import com.ironhabit.app.domain.model.ReviewNote
 import com.ironhabit.app.domain.model.TrainingReview
+import com.ironhabit.app.domain.model.WeekPlan
+import com.ironhabit.app.domain.model.WeekDayDetail
 import com.ironhabit.app.domain.repository.BodyMetricRepository
 import com.ironhabit.app.domain.repository.CheckInRepository
 import com.ironhabit.app.domain.repository.ExerciseRepository
@@ -139,8 +141,12 @@ class BuildWeeklyReviewUseCaseTest {
         coEvery { mealItemRepository.getByDate(any()) } answers {
             itemsByDay[firstArg<Long>()].orEmpty()
         }
-        // B-9 后复盘按目标周取口径（useCase 传 weekStart）→ 用 any() 匹配任意周参数
-        every { planRepository.observePlannedWeekdays(any()) } returns flowOf(plannedWeekdays)
+        // B-9 后复盘按目标周取口径（useCase 传 weekStart）→ 用 any() 匹配任意周参数。
+        // 复盘现在读的是 resolver 之后的**生效行**（plannedDays / plannedSets / 逐日计划组数
+        // 三个都从同一份派生），所以这里给每个计划日一条：distinct dayOfWeek 的个数
+        // 仍等于 plannedWeekdays.size，与旧的 observePlannedWeekdays 桩语义一致。
+        every { planRepository.observeEffectivePlanForWeek(any()) } returns
+            flowOf(plannedWeekdays.map { day -> WeekPlan(dayOfWeek = day) })
     }
 
     private fun useCase(): BuildWeeklyReviewUseCase = BuildWeeklyReviewUseCase(
@@ -492,6 +498,88 @@ class BuildWeeklyReviewUseCaseTest {
         assertEquals(2, review.diet.loggedDays)
         assertEquals("周一粗记 500 + 周二明细 300，日均 400", 400, review.diet.avgKcal)
         assertEquals("只有周二是逐样记的", 1, review.diet.preciseDays)
+    }
+
+    // ---------------- 逐日事实（星期格 + 日卡的数据源）----------------
+
+    /** 计划组数按天摊开，且与周汇总同源 —— 日卡「12/35」那个分母就是这么来的。 */
+    @Test
+    fun dayDetails_carryPlannedSetsPerDay_andAgreeWithTheWeekTotal() = runTest {
+        stub(checkIns = listOf(checkIn(exerciseId = 1L, epochDay = day(0), sets = 4)))
+
+        val review = useCase()()
+
+        // 桩：周一 / 周三 / 周五各一条生效行，targetSets 默认 3
+        assertEquals(listOf(3, 0, 3, 0, 3, 0, 0), review.days.map { day -> day.plannedSets })
+        assertEquals(9, review.training.plannedSets)
+        assertEquals(
+            "逐日计划组数之和必须等于周汇总，否则周卡和日卡是两套口径",
+            review.training.plannedSets,
+            review.days.sumOf { day -> day.plannedSets },
+        )
+    }
+
+    /** 实际组数按**全部**当天打卡算，含查不到动作名、不进 `items` 的那些行。 */
+    @Test
+    fun dayDetails_completedSetsCountsRowsThatHaveNoName() = runTest {
+        stub(
+            checkIns = listOf(
+                checkIn(exerciseId = 1L, epochDay = day(0), sets = 4),
+                checkIn(exerciseId = 999L, epochDay = day(0), sets = 2),
+            ),
+        )
+
+        val monday: WeekDayDetail = useCase()().days.first()
+
+        assertEquals("查不到名字的行不进 items（不写「未知动作」占位）", 1, monday.items.size)
+        assertEquals("但那 2 组真的做完了，组数不能少算", 6, monday.completedSets)
+    }
+
+    /** 体重只落在称的那一天；其它天是 `null` —— 不是 0，也不许沿用上一条。 */
+    @Test
+    fun dayDetails_weightLandsOnlyOnTheWeighInDay() = runTest {
+        stub(weights = listOf(weightMetric(epochDay = day(1), value = 74.6f)))
+
+        val review = useCase()()
+
+        assertNull(review.days[0].weightKg)
+        assertEquals(74.6f, review.days[1].weightKg)
+        assertNull("不能把周二那个数顺延给周三", review.days[2].weightKg)
+    }
+
+    /** 精度是**逐天**的事实 —— 折叠成周级 `preciseDays` 之后日卡就再也标不出「约」了。 */
+    @Test
+    fun dayDetails_dietPrecisionIsPerDay() = runTest {
+        stub(
+            meals = listOf(
+                meal(day(0), id = 21L, kcal = 500, proteinG = 20.0, isCompleted = true),
+                meal(day(1), id = 22L, kcal = 900, proteinG = 45.0, isCompleted = true),
+            ),
+            itemsByDay = mapOf(day(1) to listOf(item(mealId = 22L, kcal = 300, proteinG = 30.0))),
+        )
+
+        val review = useCase()()
+
+        assertEquals("周一只打了勾 → 当天数字就是整餐值", 500, review.days[0].kcal)
+        assertFalse("周一不是逐样记的，日卡要标「约」", review.days[0].dietPrecise)
+        assertEquals("周二记了明细 → 取 300 不是打勾那餐的 900", 300, review.days[1].kcal)
+        assertTrue(review.days[1].dietPrecise)
+        assertEquals(20, review.days[0].proteinG)
+        assertEquals(1, review.diet.preciseDays)
+    }
+
+    /** 没记的那天必须是 `null`，不能是 0 —— 0 会被日卡读成"那天一口没吃"。 */
+    @Test
+    fun dayDetails_unloggedDaysAreNullNotZero() = runTest {
+        stub(meals = listOf(meal(day(0), id = 31L, kcal = 600, proteinG = 30.0, isCompleted = true)))
+
+        val review = useCase()()
+
+        assertEquals(600, review.days[0].kcal)
+        assertNull(review.days[1].kcal)
+        assertNull(review.days[1].proteinG)
+        assertFalse(review.days[1].dietPrecise)
+        assertEquals("7 天全都要出现，空格也得能点开", 7, review.days.size)
     }
 
     @Test

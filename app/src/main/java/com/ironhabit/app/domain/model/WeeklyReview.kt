@@ -34,6 +34,9 @@ data class WeeklyReview(
  * @property completedDays 本周有打卡的天数（同一天多条打卡算一天）
  * @property totalVolumeKg 总容量 = Σ(weightKg × completedReps × completedSets)，**只统计有重量的记录**；无记录 = `0f`
  * @property totalSets 完成的总组数 = Σ completedSets
+ * @property plannedSets 计划总组数 = Σ targetSets，走 `observeEffectivePlanForWeek`
+ *   （**不能**直接对 `week_plans` 求和：模板回落 / 逐天覆盖 / 软删行三条规则只在
+ *   `WeekPlanWeekResolver` 有一份，绕开它「12/35」的分母会和今日页清单对不上）
  * @property avgRpe 有 RPE 的记录的平均值（四舍五入保留 1 位小数）；一条都没有 = `null`
  * @property progressed 本周有记录、且比上周重的动作（按动作名排序）
  * @property stalled 本周有记录、且停滞 ≥ [STALLED_WEEKS_THRESHOLD] 周的动作（停滞周数倒序，再按动作名）
@@ -43,6 +46,7 @@ data class TrainingReview(
     val completedDays: Int,
     val totalVolumeKg: Float,
     val totalSets: Int,
+    val plannedSets: Int = 0,
     val avgRpe: Float?,
     val progressed: List<ExerciseTrend>,
     val stalled: List<ExerciseTrend>,
@@ -123,12 +127,32 @@ data class DietReview(
 )
 
 /**
- * 某一天的明细。
+ * 某一天的全部可展示事实。
  *
- * 一周 **7 天全都要出现**（没打卡的天 [items] 为空列表）—— 这样界面/导出都不需要"补空天"的逻辑。
+ * 一周 **7 天全都要出现**（没打卡的天 [items] 为空、[completedSets] 为 `0`）——
+ * 这样界面/导出都不需要"补空天"的逻辑，星期格也永远有 7 格可点。
+ *
+ * ⚠️ 这些数字和周汇总**出自同一次遍历**（见 `BuildWeeklyReviewUseCase` 的不变量），
+ * 不是日卡再查一遍仓库 —— 否则一次翻周可能出现"周卡说吃了 2199、日卡加起来不是"。
+ *
+ * @property plannedSets 那天计划排了几组（`0` = 真没排，不是"不知道"）
+ * @property completedSets 那天实际完成几组 = Σ `CheckIn.completedSets`，
+ *   **含查不到动作名的行**（那些行不进 [items]，但组数是真实发生的）
+ * @property weightKg 那天的体重；一天最多一条（`BodyMetricEntity` 上 type+date 唯一索引），
+ *   没称 = `null`
+ * @property kcal 那天实际摄入热量；没记 = `null`（**不许渲染成 0**）
+ * @property proteinG 那天实际蛋白质；没记 = `null`
+ * @property dietPrecise 那天是不是逐样记的明细。`false` 且 [kcal] 非 `null`
+ *   = 打了勾估的，界面要在数字前面标「约」。
  */
 data class WeekDayDetail(
     val dateEpochDay: Long,
+    val plannedSets: Int = 0,
+    val completedSets: Int = 0,
+    val weightKg: Float? = null,
+    val kcal: Int? = null,
+    val proteinG: Int? = null,
+    val dietPrecise: Boolean = false,
     val items: List<WeekItemDetail> = emptyList(),
 )
 
