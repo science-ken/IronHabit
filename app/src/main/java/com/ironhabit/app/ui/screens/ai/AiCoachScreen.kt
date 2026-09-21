@@ -40,10 +40,13 @@ import com.ironhabit.app.domain.model.AdviceSource
 import com.ironhabit.app.domain.model.ExerciseSuggestion
 import com.ironhabit.app.domain.model.RemoteFallbackReason
 import com.ironhabit.app.domain.model.SuggestionReason
+import com.ironhabit.app.domain.model.UserProfile
 import com.ironhabit.app.ui.components.AppSnackbarHost
 import com.ironhabit.app.ui.components.EmptyState
 import com.ironhabit.app.ui.components.LoadingSkeleton
 import com.ironhabit.app.ui.components.ProfileSummaryCard
+import com.ironhabit.app.ui.components.equipmentLabelRes
+import com.ironhabit.app.ui.components.joinLabels
 import com.ironhabit.app.ui.theme.IronHabitShapes
 import com.ironhabit.app.ui.theme.IronHabitSpacing
 import androidx.compose.foundation.layout.PaddingValues
@@ -189,10 +192,44 @@ private fun ProfileBlock(
         profile = uiState.profile,
         onClick = onEditProfile,
     )
+    ProfileFactsLine(profile = uiState.profile)
     TextButton(onClick = onEditProfile) {
         Text(text = stringResource(R.string.ai_action_edit_profile))
     }
 }
+
+/**
+ * 档案卡下面那行「怎么练」：器械 + 每周天数。
+ *
+ * 放在卡片**外面**是刻意的 —— [com.ironhabit.app.ui.components.ProfileSummaryCard] 由「我的」页
+ * 共用，它的注释禁止为单个页面加分支参数。
+ *
+ * 每周天数恒有值（默认 3），所以这行总会渲染；器械一项没勾就只留天数。
+ */
+@Composable
+private fun ProfileFactsLine(profile: UserProfile) {
+    val parts: List<String> = buildList {
+        if (profile.equipment.isNotEmpty()) {
+            add(
+                stringResource(
+                    R.string.ai_profile_equipment,
+                    joinLabels(
+                        resIds = profile.equipment.sortedBy { it.ordinal }.map { equipmentLabelRes(it) },
+                        separator = EQUIPMENT_SEPARATOR,
+                    ),
+                ),
+            )
+        }
+        add(stringResource(R.string.ai_profile_weekly_days, profile.trainingDaysPerWeek))
+    }
+    Text(
+        text = parts.joinToString(" · "),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+private const val EQUIPMENT_SEPARATOR = " / "
 
 internal fun formatKg(kg: Float): String {
     val rounded = kotlin.math.round(kg * 10) / 10f

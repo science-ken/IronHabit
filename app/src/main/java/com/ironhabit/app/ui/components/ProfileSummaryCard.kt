@@ -20,13 +20,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.ironhabit.app.R
+import com.ironhabit.app.domain.model.Equipment
 import com.ironhabit.app.domain.model.Gender
 import com.ironhabit.app.domain.model.Goal
+import com.ironhabit.app.domain.model.InjuryArea
 import com.ironhabit.app.domain.model.UserProfile
 import com.ironhabit.app.ui.theme.IronHabitSpacing
 
 /**
- * 身体档案概要卡（**只读**、**纯展示**）：标题 + `性别 · 年龄 · 目标` 概要 + `›`。
+ * 身体档案概要卡（**只读**、**纯展示**）：标题 + `性别 · 年龄 · 身高 · 目标 · 伤病` 概要 + `›`。
  *
  * 供「我的」页与「AI 教练」页**共用同一份实现**（避免两处各写一遍导致显示口径漂移，
  * 上一轮「计划目标重量」就出过这种 bug）。
@@ -35,8 +37,11 @@ import com.ironhabit.app.ui.theme.IronHabitSpacing
  * - **纯展示**：只读 [UserProfile] 派生文案 + 一个点击回调；
  * - **不得**内含任何页面专属逻辑（不得硬编码跳转目标、不得含 AI 页专属文案）——
  *   跳哪里由调用方通过 [onClick] 决定；
- * - 若某个页面需要额外信息（如器械 / 伤病提示），一律**在卡片外面**另加区块，
+ * - 若某个页面需要额外信息（如器械 / 每周天数），一律**在卡片外面**另加区块，
  *   **不许**往本组件塞参数分支。
+ *
+ * [equipmentLabelRes] / [injuryLabelRes] 也住在这个文件：档案词汇的中文说法只留一份，
+ * 「设置」页的勾选项和这里的概要才不会各翻一遍。
  *
  * 目标恒有值（默认 [Goal.MAINTAIN]），故概要**永不为空**。
  *
@@ -51,8 +56,15 @@ fun ProfileSummaryCard(
 ) {
     val genderText = profile.gender?.let { stringResource(genderLabelRes(it)) }
     val ageText = profile.age?.let { "${it}${stringResource(R.string.suffix_profile_age)}" }
+    val heightText = profile.heightCm?.let { "${it}${stringResource(R.string.suffix_profile_height)}" }
     val goalText = stringResource(goalLabelRes(profile.goal))
-    val summary = listOfNotNull(genderText, ageText, goalText).joinToString(SUMMARY_SEPARATOR)
+    // 伤病排在最后：它是「注意」而不是「我是谁」，且勾得越多这行越长，不该把目标挤到行尾
+    val injuryText: String? = joinLabels(
+        resIds = profile.injuryAreas.sortedBy { it.ordinal }.map { injuryLabelRes(it) },
+        separator = INJURY_SEPARATOR,
+    ).takeIf { it.isNotEmpty() }
+    val summary = listOfNotNull(genderText, ageText, heightText, goalText, injuryText)
+        .joinToString(SUMMARY_SEPARATOR)
 
     Card(
         modifier = modifier
@@ -108,5 +120,47 @@ private fun goalLabelRes(goal: Goal): Int = when (goal) {
     Goal.MAINTAIN -> R.string.label_profile_goal_maintain
 }
 
+/** 伤病部位 → 文案资源。 */
+@StringRes
+internal fun injuryLabelRes(area: InjuryArea): Int = when (area) {
+    InjuryArea.KNEE -> R.string.injury_knee
+    InjuryArea.LOWER_BACK -> R.string.injury_lower_back
+    InjuryArea.SHOULDER -> R.string.injury_shoulder
+    InjuryArea.WRIST -> R.string.injury_wrist
+    InjuryArea.ELBOW -> R.string.injury_elbow
+    InjuryArea.ANKLE -> R.string.injury_ankle
+    InjuryArea.NECK -> R.string.injury_neck
+    InjuryArea.HIP -> R.string.injury_hip
+    InjuryArea.CARDIO -> R.string.injury_cardio
+}
+
+/** 器械 → 文案资源。 */
+@StringRes
+internal fun equipmentLabelRes(equipment: Equipment): Int = when (equipment) {
+    Equipment.NONE -> R.string.equipment_none
+    Equipment.DUMBBELL -> R.string.equipment_dumbbell
+    Equipment.BARBELL -> R.string.equipment_barbell
+    Equipment.YOGA_MAT -> R.string.equipment_yoga_mat
+    Equipment.PULLUP_BAR -> R.string.equipment_pullup_bar
+    Equipment.RESISTANCE_BAND -> R.string.equipment_resistance_band
+    Equipment.MACHINE -> R.string.equipment_machine
+    Equipment.CABLE -> R.string.equipment_cable
+    Equipment.TREADMILL -> R.string.equipment_treadmill
+}
+
 /** 概要分隔符（纯符号，非中文文案）。 */
 private const val SUMMARY_SEPARATOR = " · "
+
+/**
+ * 一串文案资源 id → 中文，用 [separator] 连接。
+ *
+ * 单独一个函数是因为 `stringResource` **不能**写在 `joinToString { }` 的 lambda 里
+ * （Compose 编译器判「非组合上下文」），而 `buildList` + `for` 可以。
+ * 伤病与器械两处共用，省得各自再踩一遍。
+ */
+@Composable
+internal fun joinLabels(resIds: List<Int>, separator: String): String =
+    buildList { for (id in resIds) add(stringResource(id)) }.joinToString(separator)
+
+/** 伤病之间用斜杠，和概要先分开的「·」区分开：`膝/肩` 是一件事，不是两格档案。 */
+private const val INJURY_SEPARATOR = "/"

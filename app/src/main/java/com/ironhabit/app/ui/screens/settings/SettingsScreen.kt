@@ -71,6 +71,8 @@ import com.ironhabit.app.domain.model.UnitSystem
 import com.ironhabit.app.ui.components.EmptyState
 import com.ironhabit.app.ui.components.LoadingSkeleton
 import com.ironhabit.app.ui.components.LocalSnackbarHostState
+import com.ironhabit.app.ui.components.equipmentLabelRes
+import com.ironhabit.app.ui.components.injuryLabelRes
 import com.ironhabit.app.ui.theme.IronHabitSpacing
 
 /**
@@ -785,34 +787,6 @@ private fun goalLabelRes(goal: Goal): Int = when (goal) {
     Goal.RECOMP -> R.string.label_profile_goal_recomp
     Goal.SHAPE -> R.string.label_profile_goal_shape
     Goal.MAINTAIN -> R.string.label_profile_goal_maintain
-}
-
-/** 器械 → 文案资源。 */
-@StringRes
-private fun equipmentLabelRes(equipment: Equipment): Int = when (equipment) {
-    Equipment.NONE -> R.string.equipment_none
-    Equipment.DUMBBELL -> R.string.equipment_dumbbell
-    Equipment.BARBELL -> R.string.equipment_barbell
-    Equipment.YOGA_MAT -> R.string.equipment_yoga_mat
-    Equipment.PULLUP_BAR -> R.string.equipment_pullup_bar
-    Equipment.RESISTANCE_BAND -> R.string.equipment_resistance_band
-    Equipment.MACHINE -> R.string.equipment_machine
-    Equipment.CABLE -> R.string.equipment_cable
-    Equipment.TREADMILL -> R.string.equipment_treadmill
-}
-
-/** 伤病部位 → 文案资源。 */
-@StringRes
-private fun injuryLabelRes(area: InjuryArea): Int = when (area) {
-    InjuryArea.KNEE -> R.string.injury_knee
-    InjuryArea.LOWER_BACK -> R.string.injury_lower_back
-    InjuryArea.SHOULDER -> R.string.injury_shoulder
-    InjuryArea.WRIST -> R.string.injury_wrist
-    InjuryArea.ELBOW -> R.string.injury_elbow
-    InjuryArea.ANKLE -> R.string.injury_ankle
-    InjuryArea.NECK -> R.string.injury_neck
-    InjuryArea.HIP -> R.string.injury_hip
-    InjuryArea.CARDIO -> R.string.injury_cardio
 }
 
 /** 饮食忌口 → 文案资源。 */

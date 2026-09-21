@@ -559,6 +559,8 @@
     <string name="ai_review_summary_sets">%1$d 组</string>
     <string name="ai_review_summary_rpe">RPE %1$s</string>
     <string name="ai_review_summary_weight">体重 %1$s</string>
+    <string name="ai_profile_equipment">器械：%1$s</string>
+    <string name="ai_profile_weekly_days">每周 %1$d 练</string>
 
     <!-- ===== 复盘屏的异常 chips（点一下把带数字的问题塞进提问框）===== -->
     <string name="ai_chip_attendance">这周只练了 %1$d/%2$d 天</string>
