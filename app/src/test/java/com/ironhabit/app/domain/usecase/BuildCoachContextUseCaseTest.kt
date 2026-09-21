@@ -1,11 +1,13 @@
 package com.ironhabit.app.domain.usecase
 
 import com.ironhabit.app.domain.model.BodyMetricType
+import com.ironhabit.app.domain.model.Exercise
 import com.ironhabit.app.domain.model.FoodNutrition
 import com.ironhabit.app.domain.model.Meal
 import com.ironhabit.app.domain.model.MealItem
 import com.ironhabit.app.domain.model.MealType
 import com.ironhabit.app.domain.model.UserProfile
+import com.ironhabit.app.domain.model.WeekPlan
 import com.ironhabit.app.domain.repository.BodyMetricRepository
 import com.ironhabit.app.domain.repository.CheckInRepository
 import com.ironhabit.app.domain.repository.ExerciseRepository
@@ -73,7 +75,7 @@ class BuildCoachContextUseCaseTest {
         coEvery { mealItemRepository.getByDate(any()) } returns items
     }
 
-    private fun useCase(): BuildCoachContextUseCase = BuildCoachContextUseCase(
+    private fun useCase(clock: Clock = FIXED_CLOCK): BuildCoachContextUseCase = BuildCoachContextUseCase(
         settingsRepository = settingsRepository,
         planRepository = planRepository,
         exerciseRepository = exerciseRepository,
@@ -81,8 +83,8 @@ class BuildCoachContextUseCaseTest {
         bodyMetricRepository = bodyMetricRepository,
         mealRepository = mealRepository,
         mealItemRepository = mealItemRepository,
-        calculateStreak = CalculateStreakUseCase(FIXED_CLOCK, TimeZone.UTC),
-        clock = FIXED_CLOCK,
+        calculateStreak = CalculateStreakUseCase(clock, TimeZone.UTC),
+        clock = clock,
         timeZone = TimeZone.UTC,
     )
 
@@ -136,7 +138,58 @@ class BuildCoachContextUseCaseTest {
         assertEquals(500, context.todayPlanKcal)
     }
 
+    /**
+     * 连续天数必须与今日页同一口径（走查 #2）。
+     *
+     * 排「周一三五」、最近一次打卡在周六、今天是下周一且还没练：
+     * 按"每天都该打卡"算 → 中间那个周日没卡就断档 → **0**；
+     * 按排期算 → 周日是休息日，既不打断也不计分 → **6**（9/14~9/19 的日历跨度）。
+     * 真机上今日页写「连续 6 天」、教练页写「连续 0 天」就是这两条规则打架，
+     * 而且那个 0 会跟着 context 一起发给模型 —— AI 会以为用户没坚持。
+     */
+    @Test
+    fun restDaysDoNotBreakTheCoachStreak() = runTest {
+        val mondayClock: Clock = clockAt("2026-09-21") // 周一；上一周是 9/14 那一周
+        stub(meals = emptyList(), items = emptyList())
+        every { exerciseRepository.observeActive() } returns flowOf(listOf(exercise(11L)))
+        every { planRepository.observeAll() } returns flowOf(
+            listOf(plan(weekday = 1, exerciseId = 11L), plan(weekday = 3, exerciseId = 11L), plan(weekday = 5, exerciseId = 11L))
+                .map { row -> row.copy(weekStartEpochDay = WEEK_OF_9_14) },
+        )
+        every { checkInRepository.observeActiveDaysSince(any()) } returns flowOf(
+            listOf(20715L, 20714L, 20713L, 20712L, 20710L), // 周六往前数，降序
+        )
+
+        assertEquals("休息日不打断：与今日页同一个数", 6, useCase(mondayClock)().currentStreak)
+    }
+
+    /** 从没排过计划的人不能被换一套规则：应做日退回"每天都算"，昨天练过就不该归零。 */
+    @Test
+    fun unplannedUserKeepsTheEveryDayRule() = runTest {
+        val mondayClock: Clock = clockAt("2026-09-21")
+        stub(meals = emptyList(), items = emptyList())
+        every { checkInRepository.observeActiveDaysSince(any()) } returns flowOf(listOf(20716L))
+
+        assertEquals(1, useCase(mondayClock)().currentStreak)
+    }
+
+    private fun exercise(id: Long): Exercise = Exercise(id = id, name = "动作$id")
+
+    private fun plan(weekday: Int, exerciseId: Long): WeekPlan = WeekPlan(
+        id = exerciseId,
+        exerciseId = exerciseId,
+        dayOfWeek = weekday,
+        targetSets = 3,
+        weekStartEpochDay = 0L,
+    )
+
+    private fun clockAt(isoDate: String): Clock = object : Clock {
+        override fun now(): Instant = Instant.parse("${isoDate}T04:00:00Z")
+    }
+
     private companion object {
+        /** 2026-09-14 那一周的周一（epochDay），用来放"上一周"的计划行。 */
+        const val WEEK_OF_9_14: Long = 20710L
         /** 2026-09-20（UTC）—— 与真机验证用的同一天，数字对得上。 */
         val FIXED_CLOCK: Clock = object : Clock {
             override fun now(): Instant = Instant.parse("2026-09-20T04:00:00Z")

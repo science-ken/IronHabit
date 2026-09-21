@@ -151,3 +151,16 @@ object StreakCalculator {
     /** 每天都应做（`expectedWeekdays` 未给出时的默认）。 */
     private val ALL_WEEKDAYS: Set<Int> = setOf(1, 2, 3, 4, 5, 6, 7)
 }
+
+/**
+ * 计划行里的 `dayOfWeek` 列表 → [StreakCalculator] 要的「应做日」集合；
+ * 一个都没有（没排过计划）→ `null`，让计算器走它文档里的默认口径（每天都应做），
+ * 不给没排过计划的用户换一套规则。
+ *
+ * ⚠️ 收在这里而不是各调用方自己写一遍：今日页与教练页算的是**同一个**「连续 N 天」，
+ * 两边各自归一化迟早会漂（历史上就漂过一次，教练侧直接传了 `null`，
+ * 于是同一份数据一屏写 6 天、另一屏写 0 天）。
+ * 取哪些行进这个列表（哪几周、要不要模板行）仍由调用方决定 —— 这里只管归一化。
+ */
+fun List<Int>.toExpectedWeekdaysOrNull(): Set<Int>? =
+    filter { it in 1..7 }.toSet().takeIf { it.isNotEmpty() }

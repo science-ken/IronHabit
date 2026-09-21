@@ -13,6 +13,7 @@ import com.ironhabit.app.domain.repository.ExerciseRepository
 import com.ironhabit.app.domain.repository.HabitRepository
 import com.ironhabit.app.domain.repository.PlanRepository
 import com.ironhabit.app.domain.util.DateUtils
+import com.ironhabit.app.domain.util.toExpectedWeekdaysOrNull
 import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -166,14 +167,3 @@ class GetTodayOverviewUseCase @Inject constructor(
         const val SINCE_EPOCH_DAY: Long = 0L
     }
 }
-
-/**
- * 已排计划星期 → 应做星期集合；无计划（空）返回 `null`（= 每天都算，保持旧口径）。
- *
- * 无计划时返回 `null` 是刻意的：否则「只打卡、没排计划」的用户连续天数会被清零。
- */
-private fun List<Int>.toExpectedWeekdaysOrNull(): Set<Int>? =
-    filter { it in 1..WEEK_DAYS_OF_WEEK }.toSet().takeIf { it.isNotEmpty() }
-
-/** 一周 7 天。 */
-private const val WEEK_DAYS_OF_WEEK: Int = 7
