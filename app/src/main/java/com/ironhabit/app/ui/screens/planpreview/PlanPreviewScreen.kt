@@ -176,7 +176,17 @@ fun PlanPreviewScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             OutlinedButton(onClick = viewModel::onCancel, modifier = Modifier.weight(1f)) {
-                Text(text = stringResource(R.string.plan_preview_cancel))
+                // 采纳过之后这个按钮不再"不写入" —— 已采纳的那几天已经在库里了，
+                // 它实际做的是"收工离开"。沿用旧文案等于当面否认上一行的「已采纳 N / M 天」。
+                Text(
+                    text = stringResource(
+                        if (uiState.adoptedDays == 0) {
+                            R.string.plan_preview_cancel
+                        } else {
+                            R.string.plan_preview_done
+                        },
+                    ),
+                )
             }
             Button(
                 onClick = viewModel::onAdoptAll,

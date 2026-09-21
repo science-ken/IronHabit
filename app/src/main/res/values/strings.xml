@@ -71,6 +71,8 @@
     <string name="label_week_this">本周 %1$s</string>
     <!-- ===== 计划预览（生成 → 逐天采纳 → 不写库）===== -->
     <string name="title_plan_preview">本周计划预览 · %1$s</string>
+    <!-- 顶栏用短版：页内标题已经带日期范围，顶栏再带一遍就是上下两行同样的字。 -->
+    <string name="title_plan_preview_bar">本周计划预览</string>
     <string name="plan_preview_hint">这些还没写进你的计划。挑要练的天点「采纳这天」，没点的一条都不会进库。</string>
     <string name="plan_preview_analysis_label">教练说明</string>
     <string name="plan_preview_preserved">已保留你手动改过的 %1$d 条，不会被覆盖</string>
@@ -79,6 +81,8 @@
     <string name="plan_preview_adopted">已采纳 ✓</string>
     <string name="plan_preview_adopt_all">全部采纳（%1$d/%2$d）</string>
     <string name="plan_preview_cancel">取消，不写入</string>
+    <!-- 采纳过之后再点这个按钮不是"撤销"，已写的行留在库里 —— 文案必须说清它其实是收工。 -->
+    <string name="plan_preview_done">完成，保留已采纳的</string>
     <string name="plan_preview_rest_day">休息日 · 不排动作</string>
     <string name="plan_preview_template_day">这天由「每周相同」那份负责，本次不动它</string>
     <string name="msg_plan_nothing_adoptable">这次没有可采纳的新内容（现有安排都被保留）</string>
@@ -526,11 +530,13 @@
     <string name="ai_review_progressed">进步：%1$s</string>
     <string name="ai_review_stalled">停滞：%1$s</string>
     <string name="ai_review_stalled_item">%1$s（%2$d 周没涨）</string>
-    <string name="ai_review_trend_none">本周还看不出进步或停滞（记录还不够）</string>
-    <string name="ai_review_note_no_checkin">本周还没有打卡记录</string>
+    <!-- 四条 note 的"哪一周"由调用方给（翻到上周还写「本周」就是自相矛盾），
+         周名沿用卡片标题同一个 weekLabel()，不再各写一份。 -->
+    <string name="ai_review_trend_none">%1$s还看不出进步或停滞：要有相邻两周的记录才能对比</string>
+    <string name="ai_review_note_no_checkin">%1$s还没有打卡记录</string>
     <string name="ai_review_note_no_rpe">有打卡但都没评 RPE，判断不了用力程度</string>
-    <string name="ai_review_note_no_weight">本周没有体重记录</string>
-    <string name="ai_review_note_no_diet">本周没有饮食记录</string>
+    <string name="ai_review_note_no_weight">%1$s没有体重记录</string>
+    <string name="ai_review_note_no_diet">%1$s没有饮食记录</string>
     <string name="ai_review_note_in_progress">这一周还没过完，数字还会变</string>
     <string name="ai_review_nav_prev">‹ 上一周</string>
     <string name="ai_review_nav_next">下一周 ›</string>
@@ -539,7 +545,7 @@
     <string name="ai_review_week_offset">%1$d 周前</string>
     <string name="ai_review_week_range">%1$s ~ %2$s</string>
     <string name="ai_review_export">导出数据包</string>
-    <string name="ai_review_insight_past_week">回看的旧周只重算这一周的数字，不再附一段解读 —— 解读要的是「最近两周」这个窗口，挂在这周上就是口径不符。</string>
+    <string name="ai_review_insight_past_week">这段解读只看最近两周，不跟着翻周走</string>
 
     <!-- ===== 周卡：两行四列 + 星期热力条 ===== -->
     <string name="ai_review_stat_capacity">容量</string>
@@ -574,7 +580,7 @@
     <string name="ai_chip_none">这周没有异常 · 问问教练</string>
     <string name="ai_chip_none_q">这周整体怎么样？</string>
     <!-- 与「今日」页那条热力条口径不同，必须写在页面上，否则同一周两屏两种深浅会被当成 bug -->
-    <string name="ai_review_heat_basis">这条按完成组数上色；「今日」页那条按打卡条数上色，两者深浅不必一致</string>
+    <string name="ai_review_heat_basis">颜色深浅 = 当天练完的组数</string>
 
     <!-- ===== 只读日卡 ===== -->
     <string name="ai_day_stat_sets">组数</string>
@@ -587,7 +593,7 @@
     <string name="ai_day_rpe_missing">未记 RPE</string>
     <string name="ai_day_shortfall">计划 %1$d 组 · 实际 %2$d 组，还差 %3$d 组。具体是哪几条没做，数据库里没留，列不出来。</string>
     <string name="ai_day_empty">这天没有记录：计划 0 组、实际 0 组、没称重、没记饮食。</string>
-    <string name="ai_day_readonly_note">只读。看不到逐组是哪几组（只在打卡掩码里）、动作时长、逐组 RPE、计划容量 —— 数据层没有这些，宁可不显示也不编。</string>
+    <string name="ai_day_readonly_note">只读 · 要改这天的训练，去「今日」页</string>
     <string name="ai_review_export_hint">数据包就是这段 JSON：可以复制给任何 AI 看；App 直连 DeepSeek 时用的也是同一份数据</string>
     <string name="ai_package_title">AI 会看到什么</string>
     <string name="ai_package_detail_on">明细 + 汇总</string>

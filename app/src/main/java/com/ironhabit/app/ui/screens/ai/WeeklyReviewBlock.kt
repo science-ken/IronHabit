@@ -95,7 +95,8 @@ internal fun WeeklyReviewBlock(
         }
 
         review == null -> {
-            ReviewPending(text = stringResource(R.string.ai_review_note_no_checkin))
+            // 没有复盘数据 = 还没练过，说的就是真实本周。
+            ReviewPending(text = stringResource(R.string.ai_review_note_no_checkin, weekLabel(0)))
         }
 
         else -> {
@@ -272,7 +273,7 @@ private fun WeeklyReviewCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
 
-                trendLines(review)?.let { lines ->
+                trendLines(review, weekLabel(weekOffset))?.let { lines ->
                     Text(
                         text = lines,
                         style = MaterialTheme.typography.bodyMedium,
@@ -283,7 +284,7 @@ private fun WeeklyReviewCard(
                 // 数据不足的诚实说明：一条一行，顺序由 UseCase 固定。
                 review.notes.forEach { note ->
                     Text(
-                        text = stringResource(noteRes(note)),
+                        text = noteText(note, weekLabel(weekOffset)),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -891,7 +892,7 @@ private val WEEKDAY_SHORT_RES = listOf(
 
 /** 进步 / 停滞两行；两者都为空 → 返回 `null`（UI 显示"还看不出来"）。 */
 @Composable
-private fun trendLines(review: WeeklyReview): String? {
+private fun trendLines(review: WeeklyReview, week: String): String? {
     val progressed: String = review.training.progressed.joinToString("、") { trend ->
         trend.exerciseName
     }
@@ -913,7 +914,7 @@ private fun trendLines(review: WeeklyReview): String? {
     }
     return when {
         lines.isNotEmpty() -> lines.joinToString("\n")
-        review.training.completedDays > 0 -> stringResource(R.string.ai_review_trend_none)
+        review.training.completedDays > 0 -> stringResource(R.string.ai_review_trend_none, week)
         else -> null
     }
 }
@@ -940,11 +941,13 @@ private fun monthDay(epochDay: Long): String {
     return "${date.monthNumber}/${date.dayOfMonth}"
 }
 
-/** [ReviewNote] → 资源 id（**不含中文**，文案全在 `strings.xml`）。 */
-private fun noteRes(note: ReviewNote): Int = when (note) {
-    ReviewNote.NO_CHECKIN -> R.string.ai_review_note_no_checkin
-    ReviewNote.NO_RPE -> R.string.ai_review_note_no_rpe
-    ReviewNote.NO_WEIGHT -> R.string.ai_review_note_no_weight
-    ReviewNote.NO_DIET -> R.string.ai_review_note_no_diet
-    ReviewNote.WEEK_IN_PROGRESS -> R.string.ai_review_note_in_progress
+/** [ReviewNote] → 一行诚实说明。带「哪一周」的四条由调用方给周名，与卡片标题同源。 */
+@Composable
+private fun noteText(note: ReviewNote, week: String): String = when (note) {
+    ReviewNote.NO_CHECKIN -> stringResource(R.string.ai_review_note_no_checkin, week)
+    ReviewNote.NO_RPE -> stringResource(R.string.ai_review_note_no_rpe)
+    ReviewNote.NO_WEIGHT -> stringResource(R.string.ai_review_note_no_weight, week)
+    ReviewNote.NO_DIET -> stringResource(R.string.ai_review_note_no_diet, week)
+    // 「还没过完」只对真实本周成立，UseCase 也只在本周发这条，不需要周名。
+    ReviewNote.WEEK_IN_PROGRESS -> stringResource(R.string.ai_review_note_in_progress)
 }
