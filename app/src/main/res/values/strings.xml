@@ -525,6 +525,10 @@
     <string name="ai_review_stat_rpe">平均 RPE</string>
     <string name="ai_review_stat_weight">体重变化</string>
     <string name="ai_review_stat_diet">日均摄入 kcal</string>
+    <!-- 周卡掺了粗记天时也只能换"约"，不能把标签换成日卡那套「热量 · 粗记」——
+         数字一直是日均（÷ 有记录的天数），丢了「日均」就会被读成一整周只吃了 347 kcal，
+         而旁边「组数 25/55」是周总量，同一行两种口径。 -->
+    <string name="ai_review_stat_diet_approx">日均摄入 · 粗记</string>
     <string name="ai_review_diet_approx">约 %1$d</string>
     <string name="ai_review_value_missing">—</string>
     <string name="ai_review_progressed">进步：%1$s</string>
@@ -551,7 +555,7 @@
     <string name="ai_review_stat_capacity">容量</string>
     <string name="ai_review_stat_sets">组数</string>
     <string name="ai_review_stat_weight_now">体重</string>
-    <string name="ai_review_stat_protein">蛋白</string>
+    <string name="ai_review_stat_protein">日均蛋白 g</string>
     <string name="ai_review_stat_weighins">称重</string>
     <string name="ai_review_unit_weighins">%1$d 次</string>
     <string name="ai_review_sets_ratio">%1$d/%2$d</string>

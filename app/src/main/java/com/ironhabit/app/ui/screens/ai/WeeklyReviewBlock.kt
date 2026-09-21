@@ -237,11 +237,13 @@ private fun WeeklyReviewCard(
                         review.diet.avgKcal?.let { kcal ->
                             // 只要有任何一天是打勾估的，日均前面就得带「约」：只在"全是估的"时才标，
                             // 会让一周里记一天明细就把另外六天的猜测洗成准数 —— 而 AI 会照着这个数开建议。
+                            // 标签两个分支都带「日均」：数字一直是日均，换成日卡的「热量 · 粗记」
+                            // 就会被读成一整周只吃了这么多（旁边组数格可是周总量）。
                             val approx: Boolean = review.diet.preciseDays < review.diet.loggedDays
                             add(
                                 MetricCell(
                                     stringResource(
-                                        if (approx) R.string.ai_day_stat_kcal_approx else R.string.ai_review_stat_diet,
+                                        if (approx) R.string.ai_review_stat_diet_approx else R.string.ai_review_stat_diet,
                                     ),
                                     if (approx) stringResource(R.string.ai_review_diet_approx, kcal) else kcal.toString(),
                                 ),
