@@ -46,6 +46,11 @@ import com.ironhabit.app.ui.components.LoadingSkeleton
 import com.ironhabit.app.ui.components.ProfileSummaryCard
 import com.ironhabit.app.ui.theme.IronHabitShapes
 import com.ironhabit.app.ui.theme.IronHabitSpacing
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 
 /**
  *
@@ -57,6 +62,8 @@ fun AiCoachScreen(
     onEditProfile: () -> Unit,
     /** 生成完跳到「本周计划预览」页，由用户逐天采纳（AI 页自己不再写库）。 */
     onOpenPlanPreview: () -> Unit = {},
+    /** 跳「训练 → 动作库」：补充动作建议已经搬去那一屏，这里只留入口。 */
+    onOpenExerciseLibrary: () -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: AiCoachViewModel = hiltViewModel(),
 ) {
@@ -158,14 +165,13 @@ fun AiCoachScreen(
                         onInputChange = viewModel::onChatInputChange,
                         onSend = viewModel::onAskCoach,
                     )
-                    GeneratePlanBlock(
+                    AiCoachToolRow(
                         uiState = uiState,
-                        onGenerate = viewModel::generatePlan,
-                    )
-                    DietBlock(
-                        uiState = uiState,
+                        onGeneratePlan = viewModel::generatePlan,
                         onGenerateDiet = viewModel::generateDiet,
+                        onOpenExerciseLibrary = onOpenExerciseLibrary,
                     )
+                    DietResults(uiState = uiState)
                 }
             }
         }
@@ -188,27 +194,6 @@ private fun ProfileBlock(
     }
 }
 
-@Composable
-private fun GeneratePlanBlock(
-    uiState: AiCoachUiState,
-    onGenerate: () -> Unit,
-) {
-    SectionTitle(text = stringResource(R.string.ai_section_generate))
-    Text(
-        text = stringResource(R.string.ai_generate_hint),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    Button(
-        onClick = onGenerate,
-        enabled = !uiState.isGenerating,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        // 结果不在本页显示（只跳预览页），所以按钮永远是「生成」，没有「重新生成」那一态。
-        Text(text = stringResource(R.string.ai_generate_plan))
-    }
-}
-
 internal fun formatKg(kg: Float): String {
     val rounded = kotlin.math.round(kg * 10) / 10f
     return if (rounded % 1f == 0f) rounded.toInt().toString() else rounded.toString()
@@ -218,29 +203,11 @@ internal fun formatKg(kg: Float): String {
  *
  */
 @Composable
-private fun DietBlock(
+private fun DietResults(
     uiState: AiCoachUiState,
-    onGenerateDiet: () -> Unit,
 ) {
-    SectionTitle(text = stringResource(R.string.ai_section_diet))
-    Text(
-        text = stringResource(R.string.ai_diet_hint),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    Button(
-        onClick = onGenerateDiet,
-        enabled = !uiState.isGeneratingDiet,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        val label = if (uiState.dietSummary == null) {
-            stringResource(R.string.ai_generate_diet)
-        } else {
-            stringResource(R.string.ai_regenerate_diet)
-        }
-        Text(text = label)
-    }
-
+    // 按钮已经收进 AiCoachToolRow；这里只剩"生成出来的是什么"。
+    // 没生成过（dietSummary == null）时整块不渲染，不留一个空标题。
     val summary = uiState.dietSummary
     if (summary != null) {
         if (summary.preservedCount > 0) {
@@ -499,3 +466,97 @@ private fun AiCoachTabBar(
 
 /** 选中态的小字压在深色底上，靠降透明度处理，不再新引一个颜色 token。 */
 private const val TabNoteAlpha: Float = 0.72f
+
+
+/**
+ * 问教练屏底部的三枚工具：生成训练计划 / 分析饮食 / 动作库。
+ *
+ * 原来这两个生成动作各自是一个完整区块（标题 + 说明 + 整宽按钮），
+ * 拆两段式之后它们和对话挤在同一屏里，三枚并排才看得完"这一屏能干什么"。
+ *
+ * ⚠️ 「动作库」只是**跳过去**，不在本页给建议 —— 点「收入」会隐藏地再花一次
+ * completion（`SuggestExercisesUseCase.adopt` 要重新问一次顾问确认候选），
+ * 所以建议整块搬进了动作库那一屏，这里只留入口。
+ */
+@Composable
+private fun AiCoachToolRow(
+    uiState: AiCoachUiState,
+    onGeneratePlan: () -> Unit,
+    onGenerateDiet: () -> Unit,
+    onOpenExerciseLibrary: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
+    ) {
+        ToolButton(
+            labelRes = if (uiState.isGenerating) {
+                R.string.ai_tool_plan_busy
+            } else {
+                R.string.ai_tool_plan
+            },
+            noteRes = R.string.ai_tool_plan_note,
+            enabled = !uiState.isGenerating,
+            modifier = Modifier.weight(1f),
+            onClick = onGeneratePlan,
+        )
+        ToolButton(
+            labelRes = if (uiState.dietSummary == null) {
+                R.string.ai_tool_diet
+            } else {
+                R.string.ai_tool_diet_again
+            },
+            noteRes = R.string.ai_tool_diet_note,
+            enabled = !uiState.isGeneratingDiet,
+            modifier = Modifier.weight(1f),
+            onClick = onGenerateDiet,
+        )
+        ToolButton(
+            labelRes = R.string.ai_tool_library,
+            noteRes = R.string.ai_tool_library_note,
+            enabled = true,
+            modifier = Modifier.weight(1f),
+            onClick = onOpenExerciseLibrary,
+        )
+    }
+}
+
+@Composable
+private fun ToolButton(
+    @StringRes labelRes: Int,
+    @StringRes noteRes: Int,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    OutlinedButton(
+        onClick = onClick,
+        enabled = enabled,
+        // M3 默认是胶囊形：三枚并排时被撑成三个圆、中文还折成三行。
+        // 原型是方角小块，所以显式给卡片圆角 + 收紧内边距。
+        shape = IronHabitShapes.card,
+        contentPadding = PaddingValues(
+            horizontal = IronHabitSpacing.sm,
+            vertical = IronHabitSpacing.sm,
+        ),
+        modifier = modifier.heightIn(min = 52.dp),
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = stringResource(labelRes),
+                style = MaterialTheme.typography.labelMedium,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+            )
+            Text(
+                text = stringResource(noteRes),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+            )
+        }
+    }
+}
+

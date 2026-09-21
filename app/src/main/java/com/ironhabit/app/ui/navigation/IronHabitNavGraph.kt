@@ -95,6 +95,8 @@ fun IronHabitNavGraph(
             AiCoachScreen(
                 onEditProfile = { navController.navigate(Destinations.SETTINGS) },
                 onOpenPlanPreview = { navController.navigate(Destinations.PLAN_PREVIEW) },
+                // 补充动作建议已经搬进「训练」页的动作库分段，这里只是把用户送过去。
+                onOpenExerciseLibrary = { navController.navigateToTab(Destinations.TRAIN) },
             )
         }
         composable(Destinations.PROFILE) {

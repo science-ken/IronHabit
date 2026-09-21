@@ -386,9 +386,6 @@
     <string name="ai_action_edit_profile">编辑完整档案</string>
 
     <!-- 区块②：生成计划 -->
-    <string name="ai_section_generate">生成计划</string>
-    <string name="ai_generate_plan">生成训练计划</string>
-    <string name="ai_generate_hint">基于你的档案生成，先进「本周计划预览」，挑要采纳的天才会写入</string>
 
     <!-- 区块③：教练解读（替代"自由问答"） -->
     <string name="ai_safety_note">以上为通用健身建议，不构成医疗意见。慢性病 / 孕期 / 伤病请先咨询医生</string>
@@ -422,11 +419,7 @@
     <string name="title_ai_coach">AI 教练</string>
 
     <!-- 区块②：饮食计划入口（复用既有的 GenerateDietPlanUseCase） -->
-    <string name="ai_generate_diet">生成饮食计划</string>
-    <string name="ai_regenerate_diet">重新生成饮食计划</string>
     <!-- 区块② 收尾（子项 B）：标题 / 说明 / 诚实提示 / 本地依据 -->
-    <string name="ai_section_diet">饮食计划</string>
-    <string name="ai_diet_hint">按你的档案与忌口生成今日饮食；热量与蛋白质由本地规则计算，联网时另附 AI 的「为什么这样吃」分析</string>
     <string name="ai_diet_used_defaults">档案或体重未填全，本次用了默认目标值；补全后更准确</string>
     <string name="ai_diet_preserved_hint">已保留你手动改过的 %1$d 餐，不会被覆盖</string>
     <string name="ai_diet_basis_title">本地规则 · 生成依据</string>
@@ -509,6 +502,14 @@
     <string name="ai_tab_review_note">数字本地算</string>
     <string name="ai_tab_ask">问教练</string>
     <string name="ai_tab_ask_note">每次追问联网</string>
+    <string name="ai_tool_plan">生成计划</string>
+    <string name="ai_tool_plan_note">预览后逐天采纳</string>
+    <string name="ai_tool_plan_busy">生成中…</string>
+    <string name="ai_tool_diet">分析饮食</string>
+    <string name="ai_tool_diet_again">重新分析饮食</string>
+    <string name="ai_tool_diet_note">数字本地算</string>
+    <string name="ai_tool_library">动作库</string>
+    <string name="ai_tool_library_note">补充动作在那里</string>
 
     <!-- ===== 周复盘 + 数据包（P2）===== -->
     <string name="ai_review_title">本周复盘</string>
