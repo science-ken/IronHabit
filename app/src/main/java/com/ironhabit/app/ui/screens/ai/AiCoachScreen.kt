@@ -140,7 +140,6 @@ fun AiCoachScreen(
                         uiState = uiState,
                         onReload = viewModel::loadInsight,
                     )
-                    ExplainBlock(bmr = viewModel.estimateBmr(), canAsk = uiState.canAskCoach)
                     CoachChatCard(
                         canAsk = uiState.canAskCoach,
                         messages = uiState.chatMessages,
@@ -432,46 +431,6 @@ private fun insightWeightDeltaText(deltaKg: Float?): String {
     val rounded: Float = kotlin.math.round(deltaKg * 10f) / 10f
     val sign: String = if (rounded > 0f) "+" else ""
     return "$sign$rounded"
-}
-
-/**
- *
- */
-@Composable
-private fun ExplainBlock(bmr: Int?, canAsk: Boolean) {
-    SectionTitle(text = stringResource(R.string.ai_section_explain))
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        ),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = IronHabitSpacing.lg, vertical = IronHabitSpacing.md),
-            verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
-        ) {
-            if (!canAsk) {
-                Text(
-                    text = stringResource(R.string.ai_freechat_disabled),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-            if (bmr != null) {
-                if (!canAsk) HorizontalDivider()
-                Text(
-                    text = stringResource(R.string.ai_explain_bmr, bmr),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-            }
-            Text(
-                text = stringResource(R.string.ai_safety_note),
-                style = MaterialTheme.typography.bodySmall,
-            )
-        }
-    }
 }
 
 /** 鈶?琛ュ厖鍔ㄤ綔 路 涓€閿敹鍏ャ€?*/

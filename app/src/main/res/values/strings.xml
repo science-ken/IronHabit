@@ -390,10 +390,7 @@
     <string name="ai_generate_hint">基于你的档案生成，先进「本周计划预览」，挑要采纳的天才会写入</string>
 
     <!-- 区块③：教练解读（替代"自由问答"） -->
-    <string name="ai_section_explain">教练解读</string>
-    <string name="ai_freechat_disabled">自由问答需要联网能力，当前为本地规则版，暂不提供；以下为基于你档案的规则解读</string>
     <string name="ai_safety_note">以上为通用健身建议，不构成医疗意见。慢性病 / 孕期 / 伤病请先咨询医生</string>
-    <string name="ai_explain_bmr">基础代谢约 %1$d kcal</string>
 
     <!-- 区块④：补充动作 -->
     <string name="ai_section_suggest">补充动作 · 一键收入动作库</string>

@@ -62,8 +62,6 @@ fun CoachChatCard(
 
             if (!canAsk) {
                 // 离线 / 未配 Key：说清"去哪儿开启联网"，同时保持诚实（不渲染输入框、绝不本地编造回答）。
-                // 这里刻意**不重复**「教练解读」区块的 `ai_freechat_disabled`：同一句话在同一页出现两次很吵，
-                // 而且那句只说"暂不提供"，用户不知道该怎么办。
                 Text(
                     text = stringResource(R.string.ai_chat_needs_network),
                     style = MaterialTheme.typography.bodySmall,
@@ -115,6 +113,13 @@ fun CoachChatCard(
                     color = MaterialTheme.colorScheme.primary,
                 )
             }
+
+            // 医疗免责声明：跟着 AI 回答走，不再单开一个「教练解读」区块。
+            Text(
+                text = stringResource(R.string.ai_safety_note),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

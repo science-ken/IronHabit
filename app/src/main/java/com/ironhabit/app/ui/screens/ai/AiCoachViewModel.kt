@@ -10,7 +10,6 @@ import com.ironhabit.app.domain.model.AdviceSource
 import com.ironhabit.app.domain.model.BodyMetricType
 import com.ironhabit.app.domain.model.DietTarget
 import com.ironhabit.app.domain.model.ExerciseSuggestion
-import com.ironhabit.app.domain.model.Gender
 import com.ironhabit.app.domain.model.RemoteFallbackReason
 import com.ironhabit.app.domain.model.UserProfile
 import com.ironhabit.app.domain.model.WeeklyReview
@@ -611,21 +610,6 @@ class AiCoachViewModel @Inject constructor(
         }
     }
 
-    /**
-     * 基础代谢估算（Mifflin-St Jeor），**纯本地计算**。
-     *
-     * @return `null` 表示信息不足（无体重记录 / 体征未填全）→ UI 显示"补全体征与体重后显示"。
-     */
-    fun estimateBmr(): Int? {
-        val state = _uiState.value
-        val profile = state.profile
-        val weight = state.currentWeightKg ?: return null
-        if (!profile.isBodyProfileComplete) return null
-        val age = profile.age ?: return null
-        val height = profile.heightCm ?: return null
-        val base = 10.0 * weight + 6.25 * height - 5.0 * age
-        return (base + if (profile.gender == Gender.MALE) 5.0 else -161.0).toInt()
-    }
 }
 
 /**

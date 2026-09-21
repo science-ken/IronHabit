@@ -86,7 +86,6 @@ class StringResourcePlaceholderContractTest {
         entry("label_duration_min", ArgKind.NUMERIC) // PlanGoalText:39/44/73（durationMin: Int）
         entry("label_profile_training_days_option", ArgKind.NUMERIC) // SettingsScreen:547（Int 选项值）
         entry("ai_diet_preserved_hint", ArgKind.NUMERIC) // AiCoachScreen:615（preservedCount）
-        entry("ai_explain_bmr", ArgKind.NUMERIC) // AiCoachScreen:858（bmr: Int）
         entry("ai_explain_intake", ArgKind.NUMERIC, ArgKind.NUMERIC) // AiCoachScreen:622（targetKcal/targetProtein: Int）
         entry("ai_insight_stats", ArgKind.NUMERIC, ArgKind.STRING, ArgKind.STRING, ArgKind.NUMERIC) // AiCoachScreen:769（count, rpeText, weightText, streak）
         entry("ai_review_progressed", ArgKind.STRING) // WeeklyReviewBlock:359（joinToString 结果）
