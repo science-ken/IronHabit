@@ -554,6 +554,11 @@
     <string name="ai_review_weight_delta_down">↓%1$s</string>
     <string name="ai_review_weight_delta_up">↑%1$s</string>
     <string name="ai_review_heat_hint">点某天看当天 · 计划 vs 实际</string>
+    <string name="ai_review_expand">展开 ▼</string>
+    <string name="ai_review_collapse">收起 ▲</string>
+    <string name="ai_review_summary_sets">%1$d 组</string>
+    <string name="ai_review_summary_rpe">RPE %1$s</string>
+    <string name="ai_review_summary_weight">体重 %1$s</string>
 
     <!-- ===== 复盘屏的异常 chips（点一下把带数字的问题塞进提问框）===== -->
     <string name="ai_chip_attendance">这周只练了 %1$d/%2$d 天</string>

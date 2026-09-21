@@ -38,6 +38,7 @@ import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.AdviceSource
 import com.ironhabit.app.domain.model.RemoteFallbackReason
 import com.ironhabit.app.domain.model.ReviewNote
+import com.ironhabit.app.domain.model.TrainingReview
 import com.ironhabit.app.domain.model.WeeklyReview
 import com.ironhabit.app.domain.usecase.CoachInsightResult
 import com.ironhabit.app.ui.components.LoadingSkeleton
@@ -56,6 +57,7 @@ import androidx.compose.ui.draw.scale
 import com.ironhabit.app.domain.model.WeekDayDetail
 import androidx.annotation.StringRes
 import androidx.compose.ui.graphics.Color
+import androidx.compose.runtime.saveable.rememberSaveable
 
 /**
  * 「周复盘」区块（P2）：这一周**实际**练了什么 —— 数据全部本地算（[WeeklyReview]），不联网、不花 token。
@@ -83,6 +85,8 @@ internal fun WeeklyReviewBlock(
 ) {
     // 选中哪一格。按周翻篇重置 —— 同一个下标在另一周指的是另一天。
     var selectedDayIndex by remember(uiState.weekOffset) { mutableStateOf<Int?>(null) }
+    // 默认展开（原型 reviewOpen=true）；翻周时重置，避免上周收着、回到本周还是空的
+    var expanded by rememberSaveable(uiState.weekOffset) { mutableStateOf(true) }
 
     val review: WeeklyReview? = uiState.weeklyReview
     when {
@@ -105,6 +109,8 @@ internal fun WeeklyReviewBlock(
                 onReloadInsight = onReloadInsight,
                 selectedDayIndex = selectedDayIndex,
                 onSelectDay = { index -> selectedDayIndex = index },
+                expanded = expanded,
+                onToggleExpanded = { expanded = !expanded },
             )
 
             AnomalyChips(review = review, onAsk = onAskAbout)
@@ -141,6 +147,8 @@ private fun WeeklyReviewCard(
     onReloadInsight: () -> Unit,
     selectedDayIndex: Int?,
     onSelectDay: (Int) -> Unit,
+    expanded: Boolean,
+    onToggleExpanded: () -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
@@ -178,109 +186,133 @@ private fun WeeklyReviewCard(
                 }
             }
 
-            val training = review.training
-            MetricRow(
-                cells = buildList {
-                    if (training.totalVolumeKg > 0f) {
-                        add(MetricCell(stringResource(R.string.ai_review_stat_capacity), capacityText(training.totalVolumeKg)))
-                    }
-                    if (training.totalSets > 0 || training.plannedSets > 0) {
-                        add(
-                            MetricCell(
-                                stringResource(R.string.ai_review_stat_sets),
-                                if (training.plannedSets > 0) {
-                                    stringResource(R.string.ai_review_sets_ratio, training.totalSets, training.plannedSets)
-                                } else {
-                                    training.totalSets.toString()
-                                },
-                            ),
-                        )
-                    }
-                    training.avgRpe?.let { rpe ->
-                        add(MetricCell(stringResource(R.string.ai_review_stat_rpe), formatKg(rpe)))
-                    }
-                    review.body.latestWeightKg?.let { weight ->
-                        add(
-                            MetricCell(
-                                stringResource(R.string.ai_review_stat_weight_now),
-                                formatKg(weight),
-                                sub = review.body.deltaKg?.let { delta -> weightDeltaText(delta) },
-                            ),
-                        )
-                    }
-                },
-            )
-            MetricRow(
-                cells = buildList {
-                    add(
-                        MetricCell(
-                            stringResource(R.string.ai_review_stat_days),
-                            "${training.completedDays}/${training.plannedDays}",
-                        ),
-                    )
-                    review.diet.avgKcal?.let { kcal ->
-                        // 只要有任何一天是打勾估的，日均前面就得带「约」：只在"全是估的"时才标，
-                        // 会让一周里记一天明细就把另外六天的猜测洗成准数 —— 而 AI 会照着这个数开建议。
-                        val approx: Boolean = review.diet.preciseDays < review.diet.loggedDays
-                        add(
-                            MetricCell(
-                                stringResource(
-                                    if (approx) R.string.ai_day_stat_kcal_approx else R.string.ai_review_stat_diet,
-                                ),
-                                if (approx) stringResource(R.string.ai_review_diet_approx, kcal) else kcal.toString(),
-                            ),
-                        )
-                    }
-                    review.diet.avgProteinG?.let { protein ->
-                        add(MetricCell(stringResource(R.string.ai_review_stat_protein), protein.toString()))
-                    }
-                    if (review.body.sampleCount > 0) {
-                        add(
-                            MetricCell(
-                                stringResource(R.string.ai_review_stat_weighins),
-                                stringResource(R.string.ai_review_unit_weighins, review.body.sampleCount),
-                            ),
-                        )
-                    }
-                },
-            )
-
-            WeekHeatStrip(
-                days = review.days,
-                todayEpochDay = review.todayEpochDay,
-                selected = selectedDayIndex,
-                onSelect = onSelectDay,
-            )
-            Text(
-                text = stringResource(R.string.ai_review_heat_basis),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            trendLines(review)?.let { lines ->
+            if (!expanded) {
                 Text(
-                    text = lines,
+                    text = collapsedSummary(review),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-            }
-
-            // 数据不足的诚实说明：一条一行，顺序由 UseCase 固定。
-            review.notes.forEach { note ->
-                Text(
-                    text = stringResource(noteRes(note)),
-                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            } else {
+                val training = review.training
+                MetricRow(
+                    cells = buildList {
+                        if (training.totalVolumeKg > 0f) {
+                            add(MetricCell(stringResource(R.string.ai_review_stat_capacity), capacityText(training.totalVolumeKg)))
+                        }
+                        if (training.totalSets > 0 || training.plannedSets > 0) {
+                            add(
+                                MetricCell(
+                                    stringResource(R.string.ai_review_stat_sets),
+                                    if (training.plannedSets > 0) {
+                                        stringResource(R.string.ai_review_sets_ratio, training.totalSets, training.plannedSets)
+                                    } else {
+                                        training.totalSets.toString()
+                                    },
+                                ),
+                            )
+                        }
+                        training.avgRpe?.let { rpe ->
+                            add(MetricCell(stringResource(R.string.ai_review_stat_rpe), formatKg(rpe)))
+                        }
+                        review.body.latestWeightKg?.let { weight ->
+                            add(
+                                MetricCell(
+                                    stringResource(R.string.ai_review_stat_weight_now),
+                                    formatKg(weight),
+                                    sub = review.body.deltaKg?.let { delta -> weightDeltaText(delta) },
+                                ),
+                            )
+                        }
+                    },
+                )
+                MetricRow(
+                    cells = buildList {
+                        add(
+                            MetricCell(
+                                stringResource(R.string.ai_review_stat_days),
+                                "${training.completedDays}/${training.plannedDays}",
+                            ),
+                        )
+                        review.diet.avgKcal?.let { kcal ->
+                            // 只要有任何一天是打勾估的，日均前面就得带「约」：只在"全是估的"时才标，
+                            // 会让一周里记一天明细就把另外六天的猜测洗成准数 —— 而 AI 会照着这个数开建议。
+                            val approx: Boolean = review.diet.preciseDays < review.diet.loggedDays
+                            add(
+                                MetricCell(
+                                    stringResource(
+                                        if (approx) R.string.ai_day_stat_kcal_approx else R.string.ai_review_stat_diet,
+                                    ),
+                                    if (approx) stringResource(R.string.ai_review_diet_approx, kcal) else kcal.toString(),
+                                ),
+                            )
+                        }
+                        review.diet.avgProteinG?.let { protein ->
+                            add(MetricCell(stringResource(R.string.ai_review_stat_protein), protein.toString()))
+                        }
+                        if (review.body.sampleCount > 0) {
+                            add(
+                                MetricCell(
+                                    stringResource(R.string.ai_review_stat_weighins),
+                                    stringResource(R.string.ai_review_unit_weighins, review.body.sampleCount),
+                                ),
+                            )
+                        }
+                    },
+                )
+
+                WeekHeatStrip(
+                    days = review.days,
+                    todayEpochDay = review.todayEpochDay,
+                    selected = selectedDayIndex,
+                    onSelect = onSelectDay,
+                )
+                Text(
+                    text = stringResource(R.string.ai_review_heat_basis),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                trendLines(review)?.let { lines ->
+                    Text(
+                        text = lines,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+
+                // 数据不足的诚实说明：一条一行，顺序由 UseCase 固定。
+                review.notes.forEach { note ->
+                    Text(
+                        text = stringResource(noteRes(note)),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
             }
 
+            // 导出与展开/收起在 if/else 之外：折叠态若只剩一行摘要、没有出口，
+            // 用户就再也打不开了（原型同样把这两个按钮放在正文之外）。
             Text(
                 text = stringResource(R.string.ai_review_export_hint),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            OutlinedButton(onClick = onExport, modifier = Modifier.fillMaxWidth()) {
-                Text(text = stringResource(R.string.ai_review_export))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
+            ) {
+                OutlinedButton(onClick = onExport, modifier = Modifier.weight(1f)) {
+                    Text(text = stringResource(R.string.ai_review_export))
+                }
+                TextButton(onClick = onToggleExpanded) {
+                    Text(
+                        text = stringResource(
+                            if (expanded) R.string.ai_review_collapse else R.string.ai_review_expand,
+                        ),
+                    )
+                }
             }
 
             InsightSection(
@@ -654,6 +686,27 @@ private fun Chip(
             color = contentColor,
         )
     }
+}
+
+/**
+ * 折叠态那一行摘要。
+ *
+ * ⚠️ 只拼**真有数据**的片段：没 RPE 就不写 RPE，不写 `RPE 0`、也不写 `RPE —` ——
+ * 一个 0 会被读成「强度是 0」，那是编出来的结论。组数是真数，练了 0 组就写 0 组。
+ */
+@Composable
+internal fun collapsedSummary(review: WeeklyReview): String {
+    val training: TrainingReview = review.training
+    return buildList {
+        add(stringResource(R.string.ai_review_summary_sets, training.totalSets))
+        training.avgRpe?.let { rpe ->
+            add(stringResource(R.string.ai_review_summary_rpe, formatKg(rpe)))
+        }
+        review.body.deltaKg?.let { delta ->
+            // 复用展开态体重格那套符号与取整，别让折叠行和卡片对同一个数写出两种样子
+            add(stringResource(R.string.ai_review_summary_weight, weightDeltaText(delta)))
+        }
+    }.joinToString(" · ")
 }
 
 /** 一格指标：`sub` 是数字下面那行小字（体重格用它带 ↓0.8）。 */

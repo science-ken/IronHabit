@@ -111,6 +111,9 @@ class StringResourcePlaceholderContractTest {
         entry("ai_review_weight_delta_down", ArgKind.STRING) // 体重格 ↓0.8
         entry("ai_review_weight_delta_up", ArgKind.STRING) // 体重格 ↑0.8
         entry("ai_day_value_approx", ArgKind.NUMERIC) // 日卡粗记那天的热量
+        entry("ai_review_summary_sets", ArgKind.NUMERIC) // 周卡折叠行：真组数，0 也照写
+        entry("ai_review_summary_rpe", ArgKind.STRING) // 折叠行 RPE：Kotlin 里 formatKg 取好小数
+        entry("ai_review_summary_weight", ArgKind.STRING) // 折叠行体重变化：复用 weightDeltaText 的 ↓0.8
         entry("ai_day_shortfall", ArgKind.NUMERIC, ArgKind.NUMERIC, ArgKind.NUMERIC) // 日卡：计划 / 实际 / 差几组
         entry("ai_chip_attendance", ArgKind.NUMERIC, ArgKind.NUMERIC) // 复盘屏 chip：实际/计划天数
         entry("ai_chip_attendance_q", ArgKind.NUMERIC, ArgKind.NUMERIC) // 同上的完整提问（%2$d 在前，定位式）
