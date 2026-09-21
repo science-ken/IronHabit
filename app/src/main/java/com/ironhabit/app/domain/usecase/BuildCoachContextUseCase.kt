@@ -114,17 +114,15 @@ class BuildCoachContextUseCase @Inject constructor(
             if (weights.size >= 2) weights[0].value - weights[1].value else null
 
         // 连续天数（全历史活跃日 + 以"今天"为基准）。
-        // ⚠️ 应做日必须与今日页同一口径：固定排「周一三五」的人，休息日既不打断也不计分。
-        // 这里原先硬传 null（= 每天都该打卡），于是同一份数据今日页写「连续 6 天」、
-        // 教练页写「连续 0 天」，而这个 0 还会跟着 context 发给模型。
-        // 取统计窗口覆盖到的那几周 + 模板行；动作已被删的行剔掉（与今日页 usable 同规则）。
-        val windowStart: Long = today - (window - 1)
-        val expectedWeekdays: Set<Int>? = planRows
-            .filter { row ->
-                row.isTemplate ||
-                    row.weekStartEpochDay <= today &&
-                    row.weekStartEpochDay + WEEK_DAYS - 1 >= windowStart
-            }
+        // ⚠️ 应做日必须与今日页取自**同一份计划**：今日页用"所选日那一周的生效行"，
+        // 教练页答的是"到今天为止"，所以这里取本周生效行（模板回落那条规则只在
+        // `WeekPlanWeekResolver` 有一份，不能自己拼）。
+        // 刻意**不用**统计窗口内各周的并集：用户改过排期时，上一周的周二会把本周的判定变严，
+        // 两屏又对不上 —— 真机实测并集口径给 4 天、今日页给 6 天。
+        val currentWeekStart: Long = BuildWeeklyReviewUseCase.weekStartOf(today)
+        val expectedWeekdays: Set<Int>? = planRepository
+            .observeEffectivePlanForWeek(currentWeekStart).first()
+            // 动作已被删的行要剔掉：与今日页 `usable` 同规则，否则应做日被虚增。
             .filter { row -> row.exerciseId in exerciseNames }
             .map { row -> row.dayOfWeek }
             .toExpectedWeekdaysOrNull()
@@ -161,8 +159,5 @@ class BuildCoachContextUseCase @Inject constructor(
     companion object {
         /** 默认统计窗口：近 7 天（问答用；进度解读用 14，见 [CoachInsightUseCase.WINDOW_DAYS]）。 */
         const val DEFAULT_WINDOW_DAYS: Int = 7
-
-        /** 一周 7 天（判断某周是否落进统计窗口用）。 */
-        private const val WEEK_DAYS: Int = 7
     }
 }

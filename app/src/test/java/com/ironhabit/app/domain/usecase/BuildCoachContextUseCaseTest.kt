@@ -67,6 +67,8 @@ class BuildCoachContextUseCaseTest {
     private fun stub(meals: List<Meal>, items: List<MealItem>) {
         every { settingsRepository.profile() } returns flowOf(UserProfile())
         every { planRepository.observeAll() } returns flowOf(emptyList())
+        // 连续天数问的是"本周排了哪几天"，走的是生效行（含模板回落），不是 observeAll。
+        every { planRepository.observeEffectivePlanForWeek(any()) } returns flowOf(emptyList())
         every { exerciseRepository.observeActive() } returns flowOf(emptyList())
         every { checkInRepository.observeBetween(any(), any()) } returns flowOf(emptyList())
         every { checkInRepository.observeActiveDaysSince(any()) } returns flowOf(emptyList())
@@ -149,15 +151,19 @@ class BuildCoachContextUseCaseTest {
      */
     @Test
     fun restDaysDoNotBreakTheCoachStreak() = runTest {
-        val mondayClock: Clock = clockAt("2026-09-21") // 周一；上一周是 9/14 那一周
+        val mondayClock: Clock = clockAt("2026-09-21") // 周一；本周还没练
         stub(meals = emptyList(), items = emptyList())
         every { exerciseRepository.observeActive() } returns flowOf(listOf(exercise(11L)))
-        every { planRepository.observeAll() } returns flowOf(
-            listOf(plan(weekday = 1, exerciseId = 11L), plan(weekday = 3, exerciseId = 11L), plan(weekday = 5, exerciseId = 11L))
-                .map { row -> row.copy(weekStartEpochDay = WEEK_OF_9_14) },
+        // 本周排「周一 / 周三 / 周五」—— 与今日页取的是同一份生效行
+        every { planRepository.observeEffectivePlanForWeek(any()) } returns flowOf(
+            listOf(
+                plan(weekday = 1, exerciseId = 11L),
+                plan(weekday = 3, exerciseId = 11L),
+                plan(weekday = 5, exerciseId = 11L),
+            ),
         )
         every { checkInRepository.observeActiveDaysSince(any()) } returns flowOf(
-            listOf(20715L, 20714L, 20713L, 20712L, 20710L), // 周六往前数，降序
+            listOf(20715L, 20714L, 20713L, 20712L, 20710L), // 上周六往前数，降序
         )
 
         assertEquals("休息日不打断：与今日页同一个数", 6, useCase(mondayClock)().currentStreak)
@@ -188,8 +194,6 @@ class BuildCoachContextUseCaseTest {
     }
 
     private companion object {
-        /** 2026-09-14 那一周的周一（epochDay），用来放"上一周"的计划行。 */
-        const val WEEK_OF_9_14: Long = 20710L
         /** 2026-09-20（UTC）—— 与真机验证用的同一天，数字对得上。 */
         val FIXED_CLOCK: Clock = object : Clock {
             override fun now(): Instant = Instant.parse("2026-09-20T04:00:00Z")
