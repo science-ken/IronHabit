@@ -27,9 +27,9 @@ import kotlinx.datetime.toLocalDateTime
  * 「生成训练计划 / 重新生成」的结果摘要（纯数据，供 UI 展示"写了几条 / 保留了几条 / 为什么这样排"）。
  *
  * @property writtenCount 本次实际写入的计划条目数
- * @property preservedCount 被完整保留的**用户手改行**条数（含软删除行），对应 `ai_plan_preserved_hint`
- * @property retiredCount 本次**被回收的陈旧 AI 行**条数（上版生成、本次不再出现 → 已停用），对应 `ai_plan_retired_hint`（修复 C2）
- * @property notes "为什么这样排"的确定性理由，对应 `ai_*` 文案
+ * @property preservedCount 被完整保留的**用户手改行**条数（含软删除行）
+ * @property retiredCount 本次**被回收的陈旧 AI 行**条数（上版生成、本次不再出现 → 已停用，修复 C2）
+ * @property notes "为什么这样排"的确定性理由（`PlanReason` 枚举，文案由界面侧决定要不要摊开）
  * @property source 本次实际使用的来源（本地规则 / AI 联网生成；联网失败回落时为 LOCAL_RULES）
  * @property fallbackReason 走本地规则时的回落原因；`null` = 未发生回落（联网一期 §6.2 N4）
  */
@@ -283,21 +283,5 @@ class GenerateTrainingPlanUseCase @Inject constructor(
             analysis = preview.analysis,
             basis = preview.basis,
         )
-    }
-
-    /**
-     * 生成 + **整周写入**（拆分前的旧口径，等价于预览之后不挑、直接全部采纳）。
-     *
-     * 界面走的是 [preview] → 用户挑 → [commit] 这条有闸门的链路；
-     * 这里留给不需要预览的调用点，行为与逐条等价。
-     */
-    suspend operator fun invoke(weekStartEpochDay: Long? = null): GeneratedPlanSummary {
-        val plan: PlanPreview = preview(weekStartEpochDay)
-        return commit(plan, ALL_DAYS)
-    }
-
-    private companion object {
-        /** 整周采纳（`1..7`）：与拆分前"生成即写全周"逐条等价。 */
-        val ALL_DAYS: Set<Int> = (1..7).toSet()
     }
 }

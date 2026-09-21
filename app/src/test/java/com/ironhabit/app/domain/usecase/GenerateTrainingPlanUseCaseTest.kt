@@ -64,6 +64,17 @@ class GenerateTrainingPlanUseCaseTest {
     )
 
     /**
+     * 「生成 + 整周写入」—— **只服务于本文件**。
+     *
+     * 生产代码里这条通道原本是 `GenerateTrainingPlanUseCase.invoke()`，已删除：
+     * 它是唯一能绕过「逐天预览 → 逐天采纳」闸门的写库路径，留在 UseCase 上是风险。
+     * 本文件只需要它把库填满，所以把它降级成测试侧的 `preview()` + `commit(全周)`。
+     */
+    private suspend fun GenerateTrainingPlanUseCase.generateAll(
+        weekStartEpochDay: Long? = null,
+    ): GeneratedPlanSummary = commit(preview(weekStartEpochDay), ALL_DAYS)
+
+    /**
      * P3：生成**必须落到目标周**，而不是落到"每周相同"那份（`weekStartEpochDay = 0`）。
      *
      * 这是回归防线：如果哪天有人把 `WeekPlan(weekStartEpochDay = targetWeek)` 那一行删掉，
@@ -78,7 +89,7 @@ class GenerateTrainingPlanUseCaseTest {
         val written = slot<List<WeekPlan>>()
         coVerify(exactly = 0) { planRepository.upsertGenerated(any()) }
 
-        useCase(targetWeek)
+        useCase.generateAll(targetWeek)
 
         coVerify(exactly = 1) { planRepository.upsertGenerated(capture(written)) }
         assertTrue("至少要写出几条计划", written.captured.isNotEmpty())
@@ -133,7 +144,7 @@ class GenerateTrainingPlanUseCaseTest {
         )
         stubDefaults(existing)
 
-        val summary = useCase()
+        val summary = useCase.generateAll()
 
         val slot = slot<List<WeekPlan>>()
         coVerify(exactly = 1) { planRepository.upsertGenerated(capture(slot)) }
@@ -161,7 +172,7 @@ class GenerateTrainingPlanUseCaseTest {
             ),
         )
 
-        useCase()
+        useCase.generateAll()
 
         // 「禁用 REPLACE / 先删再建」的可执行断言：本用例对仓库**零删除调用**。
         coVerify(exactly = 0) { planRepository.delete(any()) }
@@ -175,7 +186,7 @@ class GenerateTrainingPlanUseCaseTest {
     fun generateTrainingPlan_writesOnlyIntoWritableSlots() = runTest {
         stubDefaults(existing = emptyList())
 
-        val summary = useCase()
+        val summary = useCase.generateAll()
 
         val slot = slot<List<WeekPlan>>()
         coVerify(exactly = 1) { planRepository.upsertGenerated(capture(slot)) }
@@ -205,7 +216,7 @@ class GenerateTrainingPlanUseCaseTest {
         stubDefaults(existing = listOf(staleAi, editedSunday))
         coEvery { planRepository.deactivateGenerated(any()) } returns 1
 
-        val summary = useCase()
+        val summary = useCase.generateAll()
 
         val slot = slot<List<WeekPlan>>()
         coVerify(exactly = 1) { planRepository.deactivateGenerated(capture(slot)) }
@@ -221,7 +232,7 @@ class GenerateTrainingPlanUseCaseTest {
         stubDefaults(existing = emptyList())
         coEvery { planRepository.deactivateGenerated(any()) } returns 0
 
-        val summary = useCase()
+        val summary = useCase.generateAll()
 
         assertEquals("没有陈旧行 → retiredCount = 0", 0, summary.retiredCount)
     }
@@ -258,7 +269,7 @@ class GenerateTrainingPlanUseCaseTest {
             ioDispatcher = UnconfinedTestDispatcher(),
         )
 
-        val summary = isolated()
+        val summary = isolated.generateAll()
 
         coVerify(exactly = 0) { planRepository.upsertGenerated(any()) }
         coVerify(exactly = 0) { planRepository.deactivateGenerated(any()) }
@@ -288,7 +299,7 @@ class GenerateTrainingPlanUseCaseTest {
         coEvery { planRepository.getRowsForWeek(any()) } returns emptyList()
         every { checkInRepository.latestProgressPerExercise() } returns flowOf(emptyList<ExerciseProgress>())
 
-        val summary = useCase()
+        val summary = useCase.generateAll()
 
         val cardio = summary.plans.first { it.exerciseId == 6L }
         assertEquals("有氧时长（1200s → 20min）应写入本周计划", 20, cardio.targetDurationMin)
@@ -324,7 +335,7 @@ class GenerateTrainingPlanUseCaseTest {
         coEvery { planRepository.getRepeatRows() } returns
             listOf(templateDeletedMonday, templateEditedWednesday)
 
-        val summary = useCase()
+        val summary = useCase.generateAll()
 
         val written = slot<List<WeekPlan>>()
         coVerify(exactly = 1) { planRepository.upsertGenerated(capture(written)) }
@@ -369,7 +380,7 @@ class GenerateTrainingPlanUseCaseTest {
         stubDefaults(existing = emptyList())
         coEvery { planRepository.getRepeatRows() } returns listOf(templateEdited, templateAiRow)
 
-        useCase()
+        useCase.generateAll()
 
         val retired = slot<List<WeekPlan>>()
         coVerify(exactly = 1) { planRepository.deactivateGenerated(capture(retired)) }
@@ -402,7 +413,7 @@ class GenerateTrainingPlanUseCaseTest {
         stubDefaults(existing = listOf(weekRowMonday))
         coEvery { planRepository.getRepeatRows() } returns listOf(templateEditedMonday)
 
-        val summary = useCase()
+        val summary = useCase.generateAll()
 
         val written = slot<List<WeekPlan>>()
         coVerify(exactly = 1) { planRepository.upsertGenerated(capture(written)) }
@@ -420,5 +431,8 @@ class GenerateTrainingPlanUseCaseTest {
     private companion object {
         // 2026-09-14 附近的一个固定时刻（可复现；具体日期不影响「周计划按星期存储」的语义）。
         const val FIXED_MILLIS: Long = 1_787_000_000_000L
+
+        /** 整周采纳（`1..7`）：等价于原先生产侧那条已删除的 `invoke()` 直写口径。 */
+        val ALL_DAYS: Set<Int> = (1..7).toSet()
     }
 }

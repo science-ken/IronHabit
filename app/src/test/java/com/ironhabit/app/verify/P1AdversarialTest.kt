@@ -42,7 +42,8 @@ import org.junit.Test
  *
  * 约束：
  * 1. 只调用**公开 API**：[LocalRuleAdvisor.planWeek]（[PlanAdvisor] 的实现）与
- *    [GenerateTrainingPlanUseCase.invoke]；不碰任何 `internal` / `private` 成员。
+ *    [GenerateTrainingPlanUseCase.preview] + [GenerateTrainingPlanUseCase.commit]；
+ *    不碰任何 `internal` / `private` 成员。
  * 2. 不修改任何既有文件；断言不掺水（没有 `assertTrue(true)`、没有注释掉的断言）。
  * 3. 期望值来自**文档化的契约**（`TRAINING_DAY_SETS` 的 KDoc 表、`ProfileLimits` 的钳制域、
  *    `INJURY_AGGRAVATED_TAGS` / `SAFE_SUBSTITUTION_TAGS` 的语义），不是来自"跑一遍看它输出什么"。
@@ -607,8 +608,8 @@ class P1AdversarialTest {
             ioDispatcher = UnconfinedTestDispatcher(),
         )
 
-        val first = useCase()
-        val second = useCase()
+        val first = useCase.generateAll()
+        val second = useCase.generateAll()
 
         assertEquals("两次写入的批次数", 2, written.size)
         assertEquals(
@@ -700,7 +701,7 @@ class P1AdversarialTest {
             ioDispatcher = UnconfinedTestDispatcher(),
         )
 
-        val summary = useCase()
+        val summary = useCase.generateAll()
 
         val editedSlots = setOf(1 to squatId, 3 to benchId)
         val writtenSlots = written.flatMap { batch -> batch.map { it.dayOfWeek to it.exerciseId } }
@@ -720,3 +721,16 @@ class P1AdversarialTest {
         coVerify(exactly = 0) { planRepository.upsert(any()) }
     }
 }
+
+/**
+ * 「生成 + 整周写入」—— **只服务于本文件**。
+ *
+ * 生产代码里这条通道原本是 `GenerateTrainingPlanUseCase.invoke()`，已删除：它是唯一能绕过
+ * 「逐天预览 → 逐天采纳」闸门的写库路径。本文件要观察的是"落库落成什么样"，
+ * 所以把它降级成 `preview()` + `commit(全周)` 的测试侧 helper。
+ */
+private suspend fun GenerateTrainingPlanUseCase.generateAll() =
+    commit(preview(), ALL_WEEK_DAYS)
+
+/** 整周采纳（`1..7`）。 */
+private val ALL_WEEK_DAYS: Set<Int> = (1..7).toSet()

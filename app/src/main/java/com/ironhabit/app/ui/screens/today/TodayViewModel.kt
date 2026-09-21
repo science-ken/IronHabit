@@ -521,8 +521,8 @@ class TodayViewModel @Inject constructor(
      * 用户在「今日」页翻到某一周、看到「这一周还没有训练计划」时点这个按钮：
      * 生成的是**那一周**的计划（`weekStartMon1(选中日)`），不是"每周相同"那份。
      *
-     * ⚠️ 生成结果是**直接写库**的（沿用 [GenerateTrainingPlanUseCase] 的既有契约：
-     * 手改行不动、陈旧 AI 行回收）；"先预览、逐天采纳"是 P3 下一步的事。
+     * 结果**不直接写库**：算完放进 [PlanPreviewHolder] 并跳「本周计划预览」页，
+     * 用户逐天点「采纳这天」才落库（手改行不动、陈旧 AI 行回收由 `commit` 保证）。
      */
     fun onCreatePlanByAi() {
         if (_uiState.value.isCreatingPlan) return
