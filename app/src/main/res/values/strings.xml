@@ -551,6 +551,18 @@
     <string name="ai_review_weight_delta_down">↓%1$s</string>
     <string name="ai_review_weight_delta_up">↑%1$s</string>
     <string name="ai_review_heat_hint">点某天看当天 · 计划 vs 实际</string>
+
+    <!-- ===== 复盘屏的异常 chips（点一下把带数字的问题塞进提问框）===== -->
+    <string name="ai_chip_attendance">这周只练了 %1$d/%2$d 天</string>
+    <string name="ai_chip_attendance_q">计划 %2$d 天，实际只练了 %1$d 天，剩下那几天怎么补回来？</string>
+    <string name="ai_chip_stalled">有动作连续 %1$d 周没涨</string>
+    <string name="ai_chip_stalled_q">%1$s 已经连续 %2$d 周没涨了，本周组数 %3$d/%4$d。该加重量还是加组数？</string>
+    <string name="ai_chip_no_rpe">有 %1$d 组没记 RPE</string>
+    <string name="ai_chip_no_rpe_q">本周有 %1$d 组没记 RPE，加重量的判断是不是就用不上这条了？</string>
+    <string name="ai_chip_one_weighin">本周只称了 1 次</string>
+    <string name="ai_chip_one_weighin_q">本周只称了一次体重，算不出变化。现在该看什么指标？</string>
+    <string name="ai_chip_none">这周没有异常 · 问问教练</string>
+    <string name="ai_chip_none_q">这周整体怎么样？</string>
     <!-- 与「今日」页那条热力条口径不同，必须写在页面上，否则同一周两屏两种深浅会被当成 bug -->
     <string name="ai_review_heat_basis">这条按完成组数上色；「今日」页那条按打卡条数上色，两者深浅不必一致</string>
 

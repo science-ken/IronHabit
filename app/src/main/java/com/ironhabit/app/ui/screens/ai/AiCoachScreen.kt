@@ -137,6 +137,12 @@ fun AiCoachScreen(
                     onWeekChange = viewModel::loadWeeklyReview,
                     onExport = viewModel::onExportPackage,
                     onReloadInsight = viewModel::loadInsight,
+                    // 点 chip = 跳到「问教练」并把带数字的完整问题填进输入框。
+                    // 刻意不直接发出去：用户可能想改两个字再问，替他发就收不回来了。
+                    onAskAbout = { question ->
+                        tab = AiCoachTab.ASK
+                        viewModel.onChatInputChange(question)
+                    },
                 )
 
                 else -> {

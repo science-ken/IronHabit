@@ -54,6 +54,8 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.draw.scale
 import com.ironhabit.app.domain.model.WeekDayDetail
+import androidx.annotation.StringRes
+import androidx.compose.ui.graphics.Color
 
 /**
  * 「周复盘」区块（P2）：这一周**实际**练了什么 —— 数据全部本地算（[WeeklyReview]），不联网、不花 token。
@@ -77,6 +79,7 @@ internal fun WeeklyReviewBlock(
     onWeekChange: (Int) -> Unit,
     onExport: () -> Unit,
     onReloadInsight: () -> Unit,
+    onAskAbout: (String) -> Unit,
 ) {
     // 选中哪一格。按周翻篇重置 —— 同一个下标在另一周指的是另一天。
     var selectedDayIndex by remember(uiState.weekOffset) { mutableStateOf<Int?>(null) }
@@ -103,6 +106,8 @@ internal fun WeeklyReviewBlock(
                 selectedDayIndex = selectedDayIndex,
                 onSelectDay = { index -> selectedDayIndex = index },
             )
+
+            AnomalyChips(review = review, onAsk = onAskAbout)
 
 
             val openIndex: Int? = selectedDayIndex
@@ -510,6 +515,144 @@ internal fun WeekPackageSheet(
                 )
             }
         }
+    }
+}
+
+/**
+ * 一枚异常 chip：短标签 + 点下去塞进提问框的**完整问题（带真实数字）**。
+ *
+ * 标签和提问分开是因为 chip 要短到能横着一排看完，而问模型必须把数字给全 ——
+ * 只给一句"这周怎么样"，模型只能回一句更空的。
+ */
+internal data class ReviewChip(
+    @StringRes val labelRes: Int,
+    val labelArgs: List<Any>,
+    @StringRes val questionRes: Int,
+    val questionArgs: List<Any>,
+)
+
+/**
+ * 由周复盘的**异常**驱动 chip（不是每个数字都可点 —— 12 个入口太密）。
+ *
+ * ⚠️ 每条 chip 的数字都必须从 [WeeklyReview] 里算出来，不许写死：
+ * 没数据支撑的 chip 干脆不出现，全周干净就只剩一枚"没有异常"的虚线 chip。
+ */
+internal fun reviewChips(review: WeeklyReview): List<ReviewChip> {
+    val chips = mutableListOf<ReviewChip>()
+    val training = review.training
+
+    if (training.plannedDays > 0 && training.completedDays < training.plannedDays) {
+        chips += ReviewChip(
+            labelRes = R.string.ai_chip_attendance,
+            labelArgs = listOf(training.completedDays, training.plannedDays),
+            questionRes = R.string.ai_chip_attendance_q,
+            questionArgs = listOf(training.completedDays, training.plannedDays),
+        )
+    }
+
+    training.stalled.maxByOrNull { trend -> trend.stagnantWeeks }?.let { trend ->
+        chips += ReviewChip(
+            labelRes = R.string.ai_chip_stalled,
+            labelArgs = listOf(trend.stagnantWeeks),
+            questionRes = R.string.ai_chip_stalled_q,
+            questionArgs = listOf(
+                trend.exerciseName,
+                trend.stagnantWeeks,
+                training.totalSets,
+                training.plannedSets,
+            ),
+        )
+    }
+
+    // 没记 RPE 的组数：只统计得上动作名的那些行（查不到名字的行本来就不进 items），
+    // 所以这是个**下界** —— 宁可少报，也不报一个算不出来的数。
+    val setsWithoutRpe: Int = review.days.sumOf { day ->
+        day.items.filter { item -> item.rpe == null }.sumOf { item -> item.sets }
+    }
+    if (setsWithoutRpe > 0) {
+        chips += ReviewChip(
+            labelRes = R.string.ai_chip_no_rpe,
+            labelArgs = listOf(setsWithoutRpe),
+            questionRes = R.string.ai_chip_no_rpe_q,
+            questionArgs = listOf(setsWithoutRpe),
+        )
+    }
+
+    if (review.body.sampleCount == 1) {
+        chips += ReviewChip(
+            labelRes = R.string.ai_chip_one_weighin,
+            labelArgs = emptyList(),
+            questionRes = R.string.ai_chip_one_weighin_q,
+            questionArgs = emptyList(),
+        )
+    }
+
+    return chips
+}
+
+/** 横向可滚的异常 chip 行；没有异常时只留一枚虚线的"问问教练"。 */
+@Composable
+private fun AnomalyChips(review: WeeklyReview, onAsk: (String) -> Unit) {
+    val chips: List<ReviewChip> = reviewChips(review)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
+    ) {
+        if (chips.isEmpty()) {
+            val fallbackQuestion: String = stringResource(R.string.ai_chip_none_q)
+            Chip(
+                text = stringResource(R.string.ai_chip_none),
+                warn = false,
+                dashed = true,
+                onClick = { onAsk(fallbackQuestion) },
+            )
+        } else {
+            chips.forEach { chip ->
+                // 提问文案要在组合期解好：onClick 不是 @Composable 上下文，
+                // 在里面调 stringResource 编译不过。
+                val question: String =
+                    stringResource(chip.questionRes, *chip.questionArgs.toTypedArray())
+                Chip(
+                    text = stringResource(chip.labelRes, *chip.labelArgs.toTypedArray()),
+                    warn = true,
+                    dashed = false,
+                    onClick = { onAsk(question) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun Chip(
+    text: String,
+    warn: Boolean,
+    dashed: Boolean,
+    onClick: () -> Unit,
+) {
+    val background = if (warn) MaterialTheme.colorScheme.tertiaryContainer else Color.Transparent
+    val contentColor = if (warn) MaterialTheme.colorScheme.onTertiaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+    Box(
+        modifier = Modifier
+            .clip(IronHabitShapes.full)
+            .background(background)
+            .then(
+                if (dashed) {
+                    Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, IronHabitShapes.full)
+                } else {
+                    Modifier
+                },
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = IronHabitSpacing.lg, vertical = IronHabitSpacing.sm),
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelLarge,
+            color = contentColor,
+        )
     }
 }
 

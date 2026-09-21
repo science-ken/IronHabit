@@ -112,6 +112,12 @@ class StringResourcePlaceholderContractTest {
         entry("ai_review_weight_delta_up", ArgKind.STRING) // 体重格 ↑0.8
         entry("ai_day_value_approx", ArgKind.NUMERIC) // 日卡粗记那天的热量
         entry("ai_day_shortfall", ArgKind.NUMERIC, ArgKind.NUMERIC, ArgKind.NUMERIC) // 日卡：计划 / 实际 / 差几组
+        entry("ai_chip_attendance", ArgKind.NUMERIC, ArgKind.NUMERIC) // 复盘屏 chip：实际/计划天数
+        entry("ai_chip_attendance_q", ArgKind.NUMERIC, ArgKind.NUMERIC) // 同上的完整提问（%2$d 在前，定位式）
+        entry("ai_chip_stalled", ArgKind.NUMERIC) // 复盘屏 chip：停滞周数
+        entry("ai_chip_stalled_q", ArgKind.STRING, ArgKind.NUMERIC, ArgKind.NUMERIC, ArgKind.NUMERIC) // 动作名 + 周数 + 组数
+        entry("ai_chip_no_rpe", ArgKind.NUMERIC) // 复盘屏 chip：没记 RPE 的组数（下界）
+        entry("ai_chip_no_rpe_q", ArgKind.NUMERIC) // 同上的完整提问
 
         // ---------------- 【未使用】strings.xml 有占位符、代码暂无引用 ----------------
         entry("label_week_of", ArgKind.STRING)
