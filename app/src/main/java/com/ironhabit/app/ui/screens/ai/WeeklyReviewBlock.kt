@@ -448,7 +448,10 @@ internal fun WeekPackageSheet(
     onCopied: () -> Unit,
     onDismissRequest: () -> Unit,
 ) {
-    val sheetState = rememberModalBottomSheetState()
+    val sheetState = rememberModalBottomSheetState(
+        // 半屏展开时「复制 JSON」整个在折叠区外，得先上滑才够得着（真机走查 #6）。
+        skipPartiallyExpanded = true,
+    )
     val clipboard = LocalClipboardManager.current
 
     // ⚠️ 复制反馈必须**画在弹层里**：Snackbar 属于外层 Scaffold，会**被底部弹层盖住**
@@ -521,6 +524,17 @@ internal fun WeekPackageSheet(
                 }
             }
 
+            // 确认文案画在按钮**上方**：画在下面时它落在按钮行之外，而按钮行已经贴着
+            // 弹层底边（1080×1920 实测按钮下沿 y≈1895 / 屏高 1920）→ 永远出不了屏，
+            // 用户点了「复制 JSON」看不到任何反应。
+            if (copied) {
+                Text(
+                    text = stringResource(R.string.ai_package_copied),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.md),
@@ -540,14 +554,6 @@ internal fun WeekPackageSheet(
                 TextButton(onClick = onDismissRequest) {
                     Text(text = stringResource(R.string.ai_package_close))
                 }
-            }
-
-            if (copied) {
-                Text(
-                    text = stringResource(R.string.ai_package_copied),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
-                )
             }
         }
     }
