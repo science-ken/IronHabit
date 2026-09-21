@@ -1,5 +1,6 @@
 package com.ironhabit.app.ui.screens.ai
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -26,14 +27,21 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import com.ironhabit.app.R
+import com.ironhabit.app.domain.model.AdviceSource
+import com.ironhabit.app.domain.model.RemoteFallbackReason
 import com.ironhabit.app.domain.model.ReviewNote
 import com.ironhabit.app.domain.model.WeeklyReview
+import com.ironhabit.app.domain.usecase.CoachInsightResult
+import com.ironhabit.app.ui.components.LoadingSkeleton
+import com.ironhabit.app.ui.theme.IronHabitShapes
 import com.ironhabit.app.ui.theme.IronHabitSpacing
 import com.ironhabit.app.ui.theme.IronHabitTypeStyles
 import kotlinx.datetime.LocalDate
@@ -53,75 +61,91 @@ import kotlinx.datetime.toLocalDateTime
  * @param uiState 页面状态（只读，用于取 [AiCoachUiState.weeklyReview] / 加载标志 / 周偏移）
  * @param onWeekChange 切到某一周（`0` = 本周，`-1` = 上一周）
  * @param onExport 生成数据包并打开弹层
+ * @param onReloadInsight 重新向模型要一次解读（解读现在长在**这张卡**的底部，不再单开区块）
  */
 @Composable
 internal fun WeeklyReviewBlock(
     uiState: AiCoachUiState,
     onWeekChange: (Int) -> Unit,
     onExport: () -> Unit,
+    onReloadInsight: () -> Unit,
 ) {
-    SectionTitle(text = stringResource(R.string.ai_review_title))
-    Text(
-        text = stringResource(R.string.ai_review_subtitle),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        TextButton(onClick = { onWeekChange(uiState.weekOffset - 1) }) {
-            Text(text = stringResource(R.string.ai_review_nav_prev))
-        }
-        TextButton(
-            onClick = { onWeekChange(uiState.weekOffset + 1) },
-            // 本周是"最新"的一周：不许再往未来翻（未来的周复盘没有意义）。
-            enabled = uiState.weekOffset < 0,
-        ) {
-            Text(text = stringResource(R.string.ai_review_nav_next))
-        }
-    }
-
     val review: WeeklyReview? = uiState.weeklyReview
     when {
         review == null && uiState.isLoadingReview -> {
-            Text(
-                text = stringResource(R.string.ai_review_loading),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            ReviewPending(text = stringResource(R.string.ai_review_loading))
         }
 
         review == null -> {
-            Text(
-                text = stringResource(R.string.ai_review_note_no_checkin),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            ReviewPending(text = stringResource(R.string.ai_review_note_no_checkin))
         }
 
-        else -> WeeklyReviewCard(review = review, weekOffset = uiState.weekOffset, onExport = onExport)
+        else -> WeeklyReviewCard(
+            review = review,
+            weekOffset = uiState.weekOffset,
+            insight = uiState.insightResult,
+            isLoadingInsight = uiState.isLoadingInsight,
+            onWeekChange = onWeekChange,
+            onExport = onExport,
+            onReloadInsight = onReloadInsight,
+        )
     }
 }
 
-/** 周复盘卡片本体（数字 + 趋势 + 诚实说明 + 导出入口）。 */
+/** 还没算出来 / 这周什么都没有时：只给一行说明，不开一张空卡。 */
+@Composable
+private fun ReviewPending(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+/** 周复盘卡片本体（标题行 + 数字 + 趋势 + 诚实说明 + 导出入口 + 教练解读）。 */
 @Composable
 private fun WeeklyReviewCard(
     review: WeeklyReview,
     weekOffset: Int,
+    insight: CoachInsightResult?,
+    isLoadingInsight: Boolean,
+    onWeekChange: (Int) -> Unit,
     onExport: () -> Unit,
+    onReloadInsight: () -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(IronHabitSpacing.lg),
             verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
         ) {
-            Text(
-                text = weekLabel(weekOffset) + " · " + weekRange(review),
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.xs),
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.ai_review_title),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = weekLabel(weekOffset) + " · " + weekRange(review),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                TextButton(onClick = { onWeekChange(weekOffset - 1) }) {
+                    Text(text = stringResource(R.string.ai_review_nav_prev))
+                }
+                TextButton(
+                    onClick = { onWeekChange(weekOffset + 1) },
+                    // 本周是"最新"的一周：不许再往未来翻（未来的周复盘没有意义）。
+                    enabled = weekOffset < 0,
+                ) {
+                    Text(text = stringResource(R.string.ai_review_nav_next))
+                }
+            }
 
             StatRow(
                 leftLabel = stringResource(R.string.ai_review_stat_days),
@@ -179,8 +203,125 @@ private fun WeeklyReviewCard(
             OutlinedButton(onClick = onExport, modifier = Modifier.fillMaxWidth()) {
                 Text(text = stringResource(R.string.ai_review_export))
             }
+
+            InsightSection(
+                insight = insight,
+                isLoading = isLoadingInsight,
+                weekOffset = weekOffset,
+                onReload = onReloadInsight,
+            )
         }
     }
+}
+
+/**
+ * 卡片底部的「教练解读」。
+ *
+ * ⚠️ 回看旧周时**不给解读、只说明为什么不给**：解读要的是「最近两周」这个窗口，
+ * 翻到上周还挂着这段文字，用户会以为它讲的是上周（数字口径和解读必须同一周）。
+ * 联网拿到的那段是 AI 写的，本地那段是算出来的小结 —— 两者标题不同，不混。
+ */
+@Composable
+private fun InsightSection(
+    insight: CoachInsightResult?,
+    isLoading: Boolean,
+    weekOffset: Int,
+    onReload: () -> Unit,
+) {
+    if (weekOffset != 0) {
+        Text(
+            text = stringResource(R.string.ai_review_insight_past_week),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(IronHabitShapes.cell)
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .padding(IronHabitSpacing.md),
+        )
+        return
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.xs)) {
+        Text(
+            text = stringResource(R.string.ai_insight_section),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        when {
+            isLoading -> LoadingSkeleton()
+
+            insight == null -> Text(
+                text = stringResource(R.string.ai_insight_empty),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            else -> {
+                val context = insight.context
+                val fromAi: Boolean = insight.source == AdviceSource.REMOTE_LLM
+                Text(
+                    text = stringResource(
+                        if (fromAi) R.string.ai_insight_remote_title else R.string.ai_insight_local_title,
+                    ),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    text = stringResource(R.string.ai_insight_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (context.checkInCount > 0) {
+                    Text(
+                        text = stringResource(
+                            R.string.ai_insight_stats,
+                            context.checkInCount,
+                            insightRpeText(context.averageRpe),
+                            insightWeightDeltaText(context.weightDeltaKg),
+                            context.currentStreak,
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+
+                val analysis = insight.text
+                if (fromAi && !analysis.isNullOrBlank()) {
+                    Text(text = analysis, style = MaterialTheme.typography.bodyMedium)
+                } else {
+                    Text(
+                        text = stringResource(R.string.ai_insight_local_body),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    if (insight.fallbackReason == RemoteFallbackReason.REMOTE_ERROR) {
+                        Text(
+                            text = stringResource(R.string.ai_insight_fallback),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            }
+        }
+        TextButton(onClick = onReload) {
+            Text(text = stringResource(R.string.ai_insight_reload))
+        }
+    }
+}
+
+@Composable
+private fun insightRpeText(rpe: Double?): String {
+    if (rpe == null) return stringResource(R.string.ai_insight_unknown)
+    val rounded: Double = kotlin.math.round(rpe * 10.0) / 10.0
+    return rounded.toString()
+}
+
+@Composable
+private fun insightWeightDeltaText(deltaKg: Float?): String {
+    if (deltaKg == null) return stringResource(R.string.ai_insight_unknown)
+    val rounded: Float = kotlin.math.round(deltaKg * 10f) / 10f
+    val sign: String = if (rounded > 0f) "+" else ""
+    return "$sign$rounded"
 }
 
 /** 「AI 会看到什么」弹层：把数据包 JSON 原样摊开给用户看（可复制）。 */

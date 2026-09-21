@@ -503,9 +503,14 @@
     <string name="basis_overload">检测到你上次 %1$d 个动作做满且强度有余量，已自动小幅加重</string>
     <string name="basis_history_none">暂无打卡记录，先用基础目标值，练几次后会自动进阶</string>
 
+    <!-- ===== 教练页顶部分段 ===== -->
+    <string name="ai_tab_review">本周复盘</string>
+    <string name="ai_tab_review_note">数字本地算</string>
+    <string name="ai_tab_ask">问教练</string>
+    <string name="ai_tab_ask_note">每次追问联网</string>
+
     <!-- ===== 周复盘 + 数据包（P2）===== -->
     <string name="ai_review_title">本周复盘</string>
-    <string name="ai_review_subtitle">这一周实际练了什么，全部本地算出来（不联网、不花 token）</string>
     <string name="ai_review_loading">正在整理这一周的数据…</string>
     <string name="ai_review_stat_days">出勤天数</string>
     <string name="ai_review_stat_volume">周总容量 kg</string>
@@ -530,6 +535,7 @@
     <string name="ai_review_week_offset">%1$d 周前</string>
     <string name="ai_review_week_range">%1$s ~ %2$s</string>
     <string name="ai_review_export">导出数据包</string>
+    <string name="ai_review_insight_past_week">回看的旧周只重算这一周的数字，不再附一段解读 —— 解读要的是「最近两周」这个窗口，挂在这周上就是口径不符。</string>
     <string name="ai_review_export_hint">数据包就是这段 JSON：可以复制给任何 AI 看；App 直连 DeepSeek 时用的也是同一份数据</string>
     <string name="ai_package_title">AI 会看到什么</string>
     <string name="ai_package_detail_on">明细 + 汇总</string>

@@ -1,5 +1,8 @@
 package com.ironhabit.app.ui.screens.ai
 
+import androidx.annotation.StringRes
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,9 +23,13 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
@@ -37,6 +44,7 @@ import com.ironhabit.app.ui.components.AppSnackbarHost
 import com.ironhabit.app.ui.components.EmptyState
 import com.ironhabit.app.ui.components.LoadingSkeleton
 import com.ironhabit.app.ui.components.ProfileSummaryCard
+import com.ironhabit.app.ui.theme.IronHabitShapes
 import com.ironhabit.app.ui.theme.IronHabitSpacing
 
 /**
@@ -54,6 +62,7 @@ fun AiCoachScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    var tab by remember { mutableStateOf(AiCoachTab.REVIEW) }
 
     LaunchedEffect(uiState.previewRequested) {
         if (uiState.previewRequested) {
@@ -112,33 +121,28 @@ fun AiCoachScreen(
                 )
             }
 
+            AiCoachTabBar(
+                selected = tab,
+                onSelect = { tab = it },
+            )
+
             when {
                 uiState.isLoading -> {
                     LoadingSkeleton()
                     LoadingSkeleton()
                 }
 
+                tab == AiCoachTab.REVIEW -> WeeklyReviewBlock(
+                    uiState = uiState,
+                    onWeekChange = viewModel::loadWeeklyReview,
+                    onExport = viewModel::onExportPackage,
+                    onReloadInsight = viewModel::loadInsight,
+                )
+
                 else -> {
                     ProfileBlock(
                         uiState = uiState,
                         onEditProfile = onEditProfile,
-                    )
-                    WeeklyReviewBlock(
-                        uiState = uiState,
-                        onWeekChange = viewModel::loadWeeklyReview,
-                        onExport = viewModel::onExportPackage,
-                    )
-                    GeneratePlanBlock(
-                        uiState = uiState,
-                        onGenerate = viewModel::generatePlan,
-                    )
-                    DietBlock(
-                        uiState = uiState,
-                        onGenerateDiet = viewModel::generateDiet,
-                    )
-                    InsightBlock(
-                        uiState = uiState,
-                        onReload = viewModel::loadInsight,
                     )
                     CoachChatCard(
                         canAsk = uiState.canAskCoach,
@@ -148,10 +152,19 @@ fun AiCoachScreen(
                         onInputChange = viewModel::onChatInputChange,
                         onSend = viewModel::onAskCoach,
                     )
+                    GeneratePlanBlock(
+                        uiState = uiState,
+                        onGenerate = viewModel::generatePlan,
+                    )
+                    DietBlock(
+                        uiState = uiState,
+                        onGenerateDiet = viewModel::generateDiet,
+                    )
                     SuggestBlock(
                         uiState = uiState,
                         onAdopt = viewModel::adopt,
-                    )                }
+                    )
+                }
             }
         }
     }
@@ -318,119 +331,6 @@ private fun DietLocalBasisCard() {
             )
         }
     }
-}
-
-/**
- *
- */
-@Composable
-private fun InsightBlock(
-    uiState: AiCoachUiState,
-    onReload: () -> Unit,
-) {
-    SectionTitle(text = stringResource(R.string.ai_insight_section))
-    Text(
-        text = stringResource(R.string.ai_insight_hint),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-
-    val insight = uiState.insightResult
-    when {
-        insight == null && uiState.isLoadingInsight -> LoadingSkeleton()
-
-        insight == null -> Text(
-            text = stringResource(R.string.ai_insight_empty),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-
-        else -> {
-            val context = insight.context
-            val fromAi: Boolean = insight.source == AdviceSource.REMOTE_LLM
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = if (fromAi) {
-                        MaterialTheme.colorScheme.primaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.surfaceVariant
-                    },
-                    contentColor = if (fromAi) {
-                        MaterialTheme.colorScheme.onPrimaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                ),
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(IronHabitSpacing.lg),
-                    verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
-                ) {
-                    Text(
-                        text = stringResource(
-                            if (fromAi) R.string.ai_insight_remote_title else R.string.ai_insight_local_title,
-                        ),
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                    if (context.checkInCount > 0) {
-                        Text(
-                            text = stringResource(
-                                R.string.ai_insight_stats,
-                                context.checkInCount,
-                                insightRpeText(context.averageRpe),
-                                insightWeightDeltaText(context.weightDeltaKg),
-                                context.currentStreak,
-                            ),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                    } else {
-                        Text(
-                            text = stringResource(R.string.ai_insight_empty),
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-
-                    val analysis = insight.text
-                    if (fromAi && !analysis.isNullOrBlank()) {
-                        Text(text = analysis, style = MaterialTheme.typography.bodyMedium)
-                    } else {
-                        Text(
-                            text = stringResource(R.string.ai_insight_local_body),
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        if (insight.fallbackReason == RemoteFallbackReason.REMOTE_ERROR) {
-                            Text(
-                                text = stringResource(R.string.ai_insight_fallback),
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    TextButton(onClick = onReload) {
-        Text(text = stringResource(R.string.ai_insight_reload))
-    }
-}
-
-@Composable
-private fun insightRpeText(rpe: Double?): String {
-    if (rpe == null) return stringResource(R.string.ai_insight_unknown)
-    val rounded: Double = kotlin.math.round(rpe * 10.0) / 10.0
-    return rounded.toString()
-}
-
-@Composable
-private fun insightWeightDeltaText(deltaKg: Float?): String {
-    if (deltaKg == null) return stringResource(R.string.ai_insight_unknown)
-    val rounded: Float = kotlin.math.round(deltaKg * 10f) / 10f
-    val sign: String = if (rounded > 0f) "+" else ""
-    return "$sign$rounded"
 }
 
 /** 鈶?琛ュ厖鍔ㄤ綔 路 涓€閿敹鍏ャ€?*/
@@ -602,3 +502,64 @@ private fun suggestionReasonRes(reason: SuggestionReason): Int = when (reason) {
     SuggestionReason.EQUIPMENT_FIT -> R.string.note_ai_equipment_fit
     SuggestionReason.GOAL_SUPPORT -> R.string.note_ai_goal_support
 }
+
+/**
+ * 顶部两段：把「打开就有、数字全靠本地算」和「每问一次都要联网」分开。
+ *
+ * ⚠️ 小字刻意**没有**照抄设计稿的「本地 0 token」：教练解读已经并进复盘屏的周卡底部，
+ * 那一段文字是联网要来的。标成「0 token」就是谎报，所以改成只声明数字的口径。
+ */
+private enum class AiCoachTab(@StringRes val labelRes: Int, @StringRes val noteRes: Int) {
+    REVIEW(R.string.ai_tab_review, R.string.ai_tab_review_note),
+    ASK(R.string.ai_tab_ask, R.string.ai_tab_ask_note),
+}
+
+@Composable
+private fun AiCoachTabBar(
+    selected: AiCoachTab,
+    onSelect: (AiCoachTab) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(IronHabitShapes.medium)
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(IronHabitSpacing.xs),
+        horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.xs),
+    ) {
+        AiCoachTab.entries.forEach { tab ->
+            val isSelected: Boolean = tab == selected
+            val contentColor = if (isSelected) {
+                MaterialTheme.colorScheme.inverseOnSurface
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            }
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(IronHabitShapes.small)
+                    .background(
+                        if (isSelected) MaterialTheme.colorScheme.inverseSurface else Color.Transparent,
+                    )
+                    .clickable { onSelect(tab) }
+                    .padding(vertical = IronHabitSpacing.sm),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    text = stringResource(tab.labelRes),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = contentColor,
+                )
+                Text(
+                    text = stringResource(tab.noteRes),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = contentColor.copy(alpha = TabNoteAlpha),
+                )
+            }
+        }
+    }
+}
+
+/** 选中态的小字压在深色底上，靠降透明度处理，不再新引一个颜色 token。 */
+private const val TabNoteAlpha: Float = 0.72f
