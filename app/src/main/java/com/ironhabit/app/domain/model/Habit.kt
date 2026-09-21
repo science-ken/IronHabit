@@ -30,7 +30,7 @@ enum class HabitFrequency {
 data class Habit(
     val id: Long = 0L,
     val name: String = "",
-    val emoji: String = "\u2705",
+    val emoji: String = DEFAULT_EMOJI,
     val colorHex: String = "#2196F3",
     val frequency: HabitFrequency = HabitFrequency.DAILY,
     val weeklyDaysMask: Int = 0x7F,
@@ -64,6 +64,15 @@ data class Habit(
         }
 
     companion object {
+        /**
+         * 新建习惯的默认图标。
+         *
+         * ⚠️ **不能是 ✅**（`\u2705`）：习惯行把 emoji 画在行首、真正的完成勾选框在行尾，
+         * 于是"没打卡的习惯"看着像"已经打卡了"（真机走查 #9）。默认值换成不带判定的 💪，
+         * 用户自己选 ✅ 仍然允许 —— 那是他的选择，不是我们替他预设状态。
+         */
+        const val DEFAULT_EMOJI: String = "\uD83D\uDCAA"
+
         /** 全周掩码：bit0..bit6 全为 1。 */
         const val WEEKLY_DAYS_ALL: Int = 0x7F
 

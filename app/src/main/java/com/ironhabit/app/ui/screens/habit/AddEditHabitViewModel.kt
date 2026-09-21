@@ -63,7 +63,8 @@ data class AddEditHabitUiState(
     val saved: Boolean = false,
 )
 
-private const val DEFAULT_EMOJI = "\u2705"
+/** 与 [Habit] 的默认图标同一处定义：两边各写一个字面量迟早漂（走查 #9 就是这么来的）。 */
+private const val DEFAULT_EMOJI: String = Habit.DEFAULT_EMOJI
 private const val DEFAULT_COLOR_HEX = "#2196F3"
 private const val DEFAULT_REMINDER_HOUR = 20
 private const val DEFAULT_REMINDER_MINUTE = 0

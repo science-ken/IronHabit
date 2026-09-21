@@ -67,6 +67,15 @@ class BackupViewModel @Inject constructor(
     /** 消费一次导出 Uri（分享后置空，避免重复弹分享）。 */
     fun onConsumeExportUri() = _uiState.update { it.copy(exportUri = null) }
 
+    /**
+     * 分享面板拉不起来（设备上没有能收 `application/json` 的应用）。
+     *
+     * 只说"失败"是不够的：文件确实已经写进 `files/exports/` 了，
+     * 报"导出失败"会让人以为白点了一次。
+     */
+    fun onExportShareFailed() =
+        _uiState.update { it.copy(snackbarRes = R.string.msg_export_no_share_target) }
+
     /** 已选定待导入文件 → 弹出确认框。 */
     fun onImportPicked(uri: Uri) =
         _uiState.update { it.copy(pendingImportUri = uri, showImportConfirm = true) }

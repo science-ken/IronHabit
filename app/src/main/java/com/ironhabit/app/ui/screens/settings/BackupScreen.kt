@@ -1,5 +1,6 @@
 package com.ironhabit.app.ui.screens.settings
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -66,13 +67,21 @@ fun BackupScreen(
     LaunchedEffect(uiState.exportUri) {
         val uri = uiState.exportUri
         if (uri != null) {
+            viewModel.onConsumeExportUri()
             val sendIntent = Intent(Intent.ACTION_SEND).apply {
                 type = MIME_JSON
                 putExtra(Intent.EXTRA_STREAM, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            context.startActivity(Intent.createChooser(sendIntent, null))
-            viewModel.onConsumeExportUri()
+            // 必须兜住：精简过的 ROM（MuMu 实例就是）没有任何应用接收 application/json，
+            // 原来这里直接 startActivity → ActivityNotFoundException 闪退。
+            // ⚠️ 刻意不用 resolveActivity() 预检查：清单里没有 <queries>，
+            //    Android 11+ 的包可见性过滤会让它看不见真实存在的应用，反而误报"没有应用"。
+            try {
+                context.startActivity(Intent.createChooser(sendIntent, null))
+            } catch (exception: ActivityNotFoundException) {
+                viewModel.onExportShareFailed()
+            }
         }
     }
 
