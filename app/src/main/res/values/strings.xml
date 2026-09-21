@@ -509,7 +509,9 @@
     <string name="ai_tool_diet_again">重新分析饮食</string>
     <string name="ai_tool_diet_note">数字本地算</string>
     <string name="ai_tool_library">动作库</string>
-    <string name="ai_tool_library_note">补充动作在那里</string>
+    <!-- 这枚只把人送到「训练」页；那一页里还要再点一次「动作库」分段。
+         小字必须说实话，否则点下去落在「周计划」就是"点 X 得到 Y"。 -->
+    <string name="ai_tool_library_note">训练页 · 再点动作库</string>
 
     <!-- ===== 周复盘 + 数据包（P2）===== -->
     <string name="ai_review_title">本周复盘</string>

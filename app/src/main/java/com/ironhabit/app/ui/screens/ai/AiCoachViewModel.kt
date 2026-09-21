@@ -5,12 +5,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ironhabit.app.R
 import com.ironhabit.app.data.preferences.AiCredentialsStore
-import com.ironhabit.app.domain.model.BodyMetricType
 import com.ironhabit.app.domain.model.DietTarget
 import com.ironhabit.app.domain.model.RemoteFallbackReason
 import com.ironhabit.app.domain.model.UserProfile
 import com.ironhabit.app.domain.model.WeeklyReview
-import com.ironhabit.app.domain.repository.BodyMetricRepository
 import com.ironhabit.app.domain.repository.SettingsRepository
 import com.ironhabit.app.domain.usecase.AskCoachUseCase
 import com.ironhabit.app.domain.usecase.BuildWeeklyReviewUseCase
@@ -28,12 +26,9 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
@@ -66,7 +61,6 @@ data class DietSummaryUi(
  *
  * @property isLoading 首帧加载中
  * @property profile 用户档案（只读展示 + 规则输入）
- * @property currentWeightKg 当前体重（只读，来自 `body_metrics` 最新 WEIGHT 值；无记录为 `null`）
  * @property isGenerating 生成计划进行中（本地规则为纯计算，通常很快）
  * @property chatMessages 「问教练」最近若干轮消息（**只在内存里，问答不落库**）
  * @property chatInput 「问教练」输入框当前内容
@@ -84,7 +78,6 @@ data class DietSummaryUi(
 data class AiCoachUiState(
     val isLoading: Boolean = true,
     val profile: UserProfile = UserProfile(),
-    val currentWeightKg: Float? = null,
     val isGenerating: Boolean = false,
     /** 预览已备好 → 界面跳一次「本周计划预览」页，跳完立即消费掉。 */
     val previewRequested: Boolean = false,
@@ -163,7 +156,6 @@ data class AiCoachUiState(
 @HiltViewModel
 class AiCoachViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
-    bodyMetricRepository: BodyMetricRepository,
     private val aiCredentialsStore: AiCredentialsStore,
     private val generateTrainingPlan: GenerateTrainingPlanUseCase,
     private val planPreviewHolder: PlanPreviewHolder,
@@ -187,31 +179,22 @@ class AiCoachViewModel @Inject constructor(
      */
     private var lastFailedAction: FailedAction = FailedAction.GENERATE_PLAN
 
-    /** 最新体重（`body_metrics` 为体重唯一真源，档案不存体重）。 */
-    private val latestWeightKg = bodyMetricRepository
-        .observeByType(BodyMetricType.WEIGHT)
-        .map { it.firstOrNull()?.value }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
-
     init {
         viewModelScope.launch {
             combine(
                 settingsRepository.profile(),
                 settingsRepository.aiRemoteEnabled(),
-                latestWeightKg,
-            ) { profile: UserProfile, aiRemote: Boolean, weight: Float? ->
-                Triple(profile, aiRemote, weight)
-            }.collect { (profile, aiRemote, weight) ->
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        profile = profile,
-                        currentWeightKg = weight,
-                        aiRemoteEnabled = aiRemote,
-                        hasApiKey = aiCredentialsStore.isConfigured(),
-                    )
+            ) { profile: UserProfile, aiRemote: Boolean -> profile to aiRemote }
+                .collect { (profile, aiRemote) ->
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            profile = profile,
+                            aiRemoteEnabled = aiRemote,
+                            hasApiKey = aiCredentialsStore.isConfigured(),
+                        )
+                    }
                 }
-            }
         }
         // 开屏只自动要这一次远程（解读）；补充动作建议已经搬去「动作库」分段，
         // 用户真进了那一屏才拉 —— 原来这里发两次，第二次还是没人看的。

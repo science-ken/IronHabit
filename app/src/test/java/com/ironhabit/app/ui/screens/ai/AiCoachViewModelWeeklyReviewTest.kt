@@ -9,7 +9,6 @@ import com.ironhabit.app.domain.model.SuggestionResult
 import com.ironhabit.app.domain.model.TrainingReview
 import com.ironhabit.app.domain.model.UserProfile
 import com.ironhabit.app.domain.model.WeeklyReview
-import com.ironhabit.app.domain.repository.BodyMetricRepository
 import com.ironhabit.app.domain.repository.SettingsRepository
 import com.ironhabit.app.domain.usecase.AskCoachUseCase
 import com.ironhabit.app.domain.usecase.BuildWeeklyReviewUseCase
@@ -56,7 +55,6 @@ class AiCoachViewModelWeeklyReviewTest {
     val mainDispatcherRule = MainDispatcherRule()
 
     private val settingsRepository = mockk<SettingsRepository>()
-    private val bodyMetricRepository = mockk<BodyMetricRepository>()
     private val credentials = mockk<AiCredentialsStore>(relaxed = true)
     private val generateTrainingPlan = mockk<GenerateTrainingPlanUseCase>(relaxed = true)
     private val askCoach = mockk<AskCoachUseCase>(relaxed = true)
@@ -95,7 +93,6 @@ class AiCoachViewModelWeeklyReviewTest {
     ): AiCoachViewModel {
         every { settingsRepository.profile() } returns flowOf(UserProfile())
         every { settingsRepository.aiRemoteEnabled() } returns flowOf(false)
-        every { bodyMetricRepository.observeByType(any()) } returns flowOf(emptyList())
         every { credentials.isConfigured() } returns false
         // 桩按"被请求的那一周"返回对应的复盘 —— 这样断言结果就等于断言"VM 算对了哪一周"。
         coEvery { buildWeeklyReview(any()) } answers {
@@ -104,7 +101,6 @@ class AiCoachViewModelWeeklyReviewTest {
         coEvery { exportWeekPackage(any(), any()) } returns json
         return AiCoachViewModel(
             settingsRepository = settingsRepository,
-            bodyMetricRepository = bodyMetricRepository,
             aiCredentialsStore = credentials,
             generateTrainingPlan = generateTrainingPlan,
             planPreviewHolder = com.ironhabit.app.domain.usecase.PlanPreviewHolder(),
