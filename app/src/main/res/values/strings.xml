@@ -369,8 +369,6 @@
     <!-- 底栏 -->
     <string name="tab_ai_coach">AI 教练</string>
 
-    <!-- 顶部徽标 -->
-    <string name="ai_local_badge">本地规则版 · 完全离线，无需联网</string>
 
     <!-- 计划行编辑 -->
     <string name="action_edit_plan">编辑这条计划</string>
@@ -381,9 +379,6 @@
     <string name="label_source_ai">AI 推荐</string>
     <string name="label_filter_all">全部</string>
 
-    <!-- AI 输出明细 -->
-    <string name="ai_output_title">本次挑了这些动作</string>
-    <string name="ai_output_empty">还没有生成记录，点上面的按钮生成一次</string>
 
     <!-- 区块①：我的身体档案 -->
     <string name="ai_section_profile">我的身体档案</string>
@@ -391,19 +386,8 @@
 
     <!-- 区块②：生成计划 -->
     <string name="ai_section_generate">生成计划</string>
-    <string name="ai_plan_cards_title">本次生成的训练计划</string>
-    <string name="unknown_exercise">未知动作</string>
-    <!-- plan_goal_* 仅供 AI 教练计划卡片（「3组 × 12次」口径，见 PlanGoalText.aiPlanGoalText）；
-         今日页 / 训练页走 label_weight_kg / label_duration_min（「3 × 12」口径，见 PlanGoalText.planGoalText） -->
-    <string name="plan_goal_format">%1$d组 × %2$d次</string>
-    <string name="plan_goal_weight"> · %1$skg</string>
-    <string name="plan_goal_duration"> · 约%1$d分钟</string>
     <string name="ai_generate_plan">生成训练计划</string>
-    <string name="ai_regenerate_plan">重新生成训练计划</string>
     <string name="ai_generate_hint">基于你的档案生成，先进「本周计划预览」，挑要采纳的天才会写入</string>
-    <string name="ai_plan_preserved_hint">已保留你手动改过的 %1$d 条，不会被覆盖</string>
-    <string name="ai_plan_retired_hint">已清理 %1$d 条本次不再出现的旧计划</string>
-    <string name="ai_plan_written_hint">已写入 %1$d 条到本周计划</string>
 
     <!-- 区块③：教练解读（替代"自由问答"） -->
     <string name="ai_section_explain">教练解读</string>
@@ -475,15 +459,6 @@
     <string name="focus_full_body">全身</string>
     <string name="focus_cardio_core">有氧 + 核心</string>
 
-    <!-- "为什么这样排"（PlanReason 枚举 → 文案） -->
-    <string name="reason_primary_lift">主项动作</string>
-    <string name="reason_supplement">辅助动作</string>
-    <string name="reason_equipment_matched">按你拥有的器械选择</string>
-    <string name="reason_injury_safe">避开伤病的安全替代</string>
-    <string name="reason_progressive_overload">上次做满且有余量，本次加重至 %1$s kg</string>
-    <string name="reason_progressive_overload_sets">上次做满且有余量（自重），本次增至 %1$s 组</string>
-    <string name="reason_maintain">上次未做满 / 偏吃力，本次维持 %1$s kg</string>
-    <string name="reason_maintain_plain">上次未做满 / 偏吃力，本次维持原目标</string>
 
     <!-- ===== AI 联网（v3 增量二期 · DeepSeek）===== -->
     <!-- 来源诚实标注 -->
@@ -513,9 +488,6 @@
     <string name="ai_action_go_settings">去开启</string>
 
     <!-- ===== AI 分析 / 本地生成依据（v1.9）===== -->
-    <string name="ai_analysis_title">AI 文字分析</string>
-    <string name="ai_basis_title">本地规则 · 生成依据</string>
-    <string name="ai_basis_subtitle">这份计划根据你的档案自动推算，并非 AI 联网生成</string>
     <string name="basis_frequency">每周安排 %1$d 个训练日（按你在档案里设的天数），并轮换不同训练重点</string>
     <string name="basis_goal">按你的健身目标安排动作侧重与训练量</string>
     <string name="basis_volume">按你的目标：每组 %1$d–%2$d 次、每个动作 %3$d–%4$d 组</string>

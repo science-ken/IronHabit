@@ -34,7 +34,7 @@ import javax.xml.parsers.DocumentBuilderFactory
  *    resId 为变量，静态扫描不可见）以 [channelStringArgs] / [channelIntArgs] 锚定：
  *    - 通道 A：`TodayUiState.snackbarArgs` / `SettingsViewModel.snackbarArgs`
  *      （`List<String>`）→ 资源必须 `%s`、不得 `%d`；
- *    - 通道 B：`AiCoachViewModel.snackbarArgs` / `PlanBasisItem.args`
+ *    - 通道 B：`PlanBasisItem.args`（AiCoach Snackbar 那条 Int 通道随 planResult 一起删掉了）
  *      （`List<Any>`，实参为 Int）→ 资源必须 `%d`、不得 `%s`。
  *
  * 登记表每一条都标注了实参类型的**源码证据位置**（文件:行），改实参类型时同步改这里。
@@ -49,7 +49,7 @@ class StringResourcePlaceholderContractTest {
      *
      * 三类来源：
      * - 【通道 A】String 实参（`List<String>` Snackbar spread）；
-     * - 【通道 B】Int 实参（`List<Any>` Snackbar / PlanBasisItem.args spread）；
+     * - 【通道 B】Int 实参（PlanBasisItem.args spread）；
      * - 【直调】字面量 `stringResource(R.string.x, ...)`（调用点扫描可复核个数）。
      * - 【未使用】`strings.xml` 有占位符但代码暂无引用（登记占位，防止"无主带参资源"）。
      */
@@ -63,8 +63,7 @@ class StringResourcePlaceholderContractTest {
         entry("msg_reminder_set", ArgKind.STRING) // SettingsViewModel:66（formatTime(...)）
         entry("msg_plan_created", ArgKind.STRING) // TodayViewModel:354-357（writtenCount.toString()）
 
-        // ---------------- 【通道 B】Int 实参（List<Any> Snackbar / PlanBasisItem.args） ----------------
-        entry("ai_plan_written_hint", ArgKind.NUMERIC) // AiCoachViewModel:401 + AiCoachScreen:247（writtenCount: Int）
+        // ---------------- 【通道 B】Int 实参（PlanBasisItem.args） ----------------
         entry("basis_overload", ArgKind.NUMERIC) // LocalRuleAdvisor（overloadCount: Int）
         entry("basis_frequency", ArgKind.NUMERIC) // LocalRuleAdvisor:307（trainingDaysPerWeek）
         entry("basis_volume", ArgKind.NUMERIC, ArgKind.NUMERIC, ArgKind.NUMERIC, ArgKind.NUMERIC) // LocalRuleAdvisor（4 个 Int）
@@ -86,14 +85,6 @@ class StringResourcePlaceholderContractTest {
         entry("label_weight_kg", ArgKind.STRING) // PlanGoalText:62 / SettingsScreen:478（toDisplayNumber(): String）
         entry("label_duration_min", ArgKind.NUMERIC) // PlanGoalText:39/44/73（durationMin: Int）
         entry("label_profile_training_days_option", ArgKind.NUMERIC) // SettingsScreen:547（Int 选项值）
-        entry("plan_goal_format", ArgKind.NUMERIC, ArgKind.NUMERIC) // PlanGoalText:58/61/67（sets, reps）
-        entry("plan_goal_weight", ArgKind.STRING) // PlanGoalText:62（formatWeight）
-        entry("plan_goal_duration", ArgKind.NUMERIC) // PlanGoalText:68（durationMin）
-        entry("ai_plan_preserved_hint", ArgKind.NUMERIC) // AiCoachScreen:234（preservedCount）
-        entry("ai_plan_retired_hint", ArgKind.NUMERIC) // AiCoachScreen:241（retiredCount）
-        entry("reason_progressive_overload_sets", ArgKind.STRING) // AiCoachScreen:553（newSets.toString()）
-        entry("reason_progressive_overload", ArgKind.STRING) // AiCoachScreen:555-558（formatWeight）
-        entry("reason_maintain", ArgKind.STRING) // AiCoachScreen:562（formatWeight）
         entry("ai_diet_preserved_hint", ArgKind.NUMERIC) // AiCoachScreen:615（preservedCount）
         entry("ai_explain_bmr", ArgKind.NUMERIC) // AiCoachScreen:858（bmr: Int）
         entry("ai_explain_intake", ArgKind.NUMERIC, ArgKind.NUMERIC) // AiCoachScreen:622（targetKcal/targetProtein: Int）
@@ -142,9 +133,8 @@ class StringResourcePlaceholderContractTest {
         "msg_plan_created",
     )
 
-    /** 通道 B：实参为 `Int` 的动态通道（AiCoach Snackbar / PlanBasisItem）→ 用 `%d`。 */
-    private val channelIntArgs = registry.filterKeys { it.startsWith("basis_") }.keys +
-        listOf("ai_plan_written_hint")
+    /** 通道 B：实参为 `Int` 的动态通道（`PlanBasisItem.args`）→ 用 `%d`。 */
+    private val channelIntArgs = registry.filterKeys { it.startsWith("basis_") }.keys
 
     // ---------------------------------------------------------------------
     // 1）strings.xml → registry：全部带参资源必须登记，且占位符与登记一致

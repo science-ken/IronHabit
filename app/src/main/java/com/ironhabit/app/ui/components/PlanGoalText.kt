@@ -45,35 +45,6 @@ fun planGoalText(sets: Int, reps: Int, weightKg: Float?, durationMin: Int? = nul
     }
 
 /**
- * **AI 教练计划卡片专用**渲染（沿用 v1.8 起的「N组 × M次」措辞）。
- *
- * 与 [planGoalText] **共用同一个纯判定函数** [planGoalSpec]，只有"组次"的措辞不同
- * （AI 卡片用 `3组 × 12次` 更明确）；因此「有氧只显示时长」这条规则在两侧天然一致，
- * 不会出现两套判定各自漂移。改动其一必须同步另一处。
- */
-@Composable
-fun aiPlanGoalText(sets: Int, reps: Int, weightKg: Float?, durationMin: Int? = null): String =
-    when (val spec = planGoalSpec(sets, reps, weightKg, durationMin)) {
-        is PlanGoalSpec.SetsReps ->
-            stringResource(R.string.plan_goal_format, spec.sets, spec.reps)
-
-        is PlanGoalSpec.WithWeight -> {
-            val setsReps = stringResource(R.string.plan_goal_format, spec.sets, spec.reps)
-            val weightText = stringResource(R.string.plan_goal_weight, formatWeight(spec.weightKg))
-            "$setsReps$weightText"
-        }
-
-        is PlanGoalSpec.WithDuration -> {
-            val setsReps = stringResource(R.string.plan_goal_format, spec.sets, spec.reps)
-            val durationText = stringResource(R.string.plan_goal_duration, spec.durationMin)
-            "$setsReps$durationText"
-        }
-
-        is PlanGoalSpec.DurationOnly ->
-            stringResource(R.string.label_duration_min, spec.durationMin)
-    }
-
-/**
  * `Float` 重量 → 展示数字：整数去掉小数点尾巴（`20.0f → "20"`），
  * 小数原样保留（`22.5f → "22.5"`）。与 `AddEditHabitViewModel` 对 `targetValue` 的整数化口径一致。
  */

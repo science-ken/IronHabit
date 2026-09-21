@@ -11,11 +11,8 @@ import com.ironhabit.app.domain.model.BodyMetricType
 import com.ironhabit.app.domain.model.DietTarget
 import com.ironhabit.app.domain.model.ExerciseSuggestion
 import com.ironhabit.app.domain.model.Gender
-import com.ironhabit.app.domain.model.PlanBasisItem
-import com.ironhabit.app.domain.model.PlanNote
 import com.ironhabit.app.domain.model.RemoteFallbackReason
 import com.ironhabit.app.domain.model.UserProfile
-import com.ironhabit.app.domain.model.WeekPlan
 import com.ironhabit.app.domain.model.WeeklyReview
 import com.ironhabit.app.domain.repository.BodyMetricRepository
 import com.ironhabit.app.domain.repository.ExerciseRepository
@@ -47,28 +44,6 @@ import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 
-/** 一次「生成计划」的结果（面向 UI 的纯展示数据）。 */
-data class PlanResultUi(
-    /** 实际写入本周计划的条数。 */
-    val writtenCount: Int = 0,
-    /** 被完整保留的用户手改条数（**未被覆盖**）。 */
-    val preservedCount: Int = 0,
-    /** 本次被回收的陈旧 AI 行条数（上版生成、本次不再出现 → 已停用，修复 C2）。 */
-    val retiredCount: Int = 0,
-    /** 「为什么这样排」的理由列表。 */
-    val notes: List<PlanNote> = emptyList(),
-    /** 本次实际来源（本地规则 / AI 联网）——诚实标注，不许 UI 猜。 */
-    val source: AdviceSource = AdviceSource.LOCAL_RULES,
-    /** 走本地时的回落原因（`null` = 没有回落）。 */
-    val fallbackReason: RemoteFallbackReason? = null,
-    /** 本次写入的计划条目（含 星期/组数/次数/重量），供 UI 卡片化展示。 */
-    val plans: List<WeekPlan> = emptyList(),
-    /** 远端 AI 返回的自由文本分析（仅 REMOTE_LLM 有值；本地规则恒为 null）。 */
-    val analysis: String? = null,
-    /** 本地规则的「生成依据」要点（结构化）。 */
-    val basis: List<PlanBasisItem> = emptyList(),
-)
-
 /**
  * 一次「生成饮食计划」的结果（面向 UI 的纯展示数据，子项 B）。
  *
@@ -97,7 +72,6 @@ data class DietSummaryUi(
  * @property isLoading 首帧加载中
  * @property profile 用户档案（只读展示 + 规则输入）
  * @property currentWeightKg 当前体重（只读，来自 `body_metrics` 最新 WEIGHT 值；无记录为 `null`）
- * @property planResult 最近一次「生成计划」的结果（`null` = 尚未生成过）
  * @property isGenerating 生成计划进行中（本地规则为纯计算，通常很快）
  * @property suggestions 补充动作建议（已排除动作库中已有的）
  * @property adoptedNames 本次会话已收入的动名称（幂等：重复点击不再写入）
@@ -119,7 +93,6 @@ data class AiCoachUiState(
     val isLoading: Boolean = true,
     val profile: UserProfile = UserProfile(),
     val currentWeightKg: Float? = null,
-    val planResult: PlanResultUi? = null,
     val isGenerating: Boolean = false,
     /** 预览已备好 → 界面跳一次「本周计划预览」页，跳完立即消费掉。 */
     val previewRequested: Boolean = false,
@@ -411,7 +384,7 @@ class AiCoachViewModel @Inject constructor(
                     }
                     planPreviewHolder.set(preview)
                     _uiState.update {
-                        it.copy(isGenerating = false, planResult = null, previewRequested = true)
+                        it.copy(isGenerating = false, previewRequested = true)
                     }
                 }
                 .onFailure {
