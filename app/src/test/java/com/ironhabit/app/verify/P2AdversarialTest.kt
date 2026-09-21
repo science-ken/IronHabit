@@ -137,6 +137,10 @@ class P2AdversarialTest {
         // 每个计划日给一条 → distinct dayOfWeek 个数仍等于 plannedWeekdays.size。
         every { planRepository.observeEffectivePlanForWeek(any()) } returns
             flowOf(plannedWeekdays.map { day -> WeekPlan(dayOfWeek = day) })
+        // 复盘会回读"被这周打卡消费过的停用行"补分母。这里不种 planId 就取不到，
+        // 但桩要给着 —— 否则将来谁加一条带 planId 的打卡，先撞见的是 MockK 的硬报错。
+        coEvery { planRepository.getRowsForWeek(any()) } returns emptyList()
+        coEvery { planRepository.getRepeatRows() } returns emptyList()
     }
 
     private fun reviewUseCase(

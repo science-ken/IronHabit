@@ -80,11 +80,29 @@ class BuildWeeklyReviewUseCase @Inject constructor(
         val exercises: Map<Long, Exercise> = exerciseRepository.observeActive().first()
             .associateBy { exercise -> exercise.id }
 
-        // 计划只读一次「本周生效行」：plannedDays、plannedSets、逐日计划组数必须同源，
-        // 而且必须走 resolver —— 模板回落 / 逐天覆盖 / 软删行三条规则只在
-        // `WeekPlanWeekResolver` 有一份，绕开它「12/35」的分母会和今日页清单对不上。
+        // 计划口径必须走 resolver —— 模板回落 / 逐天覆盖 / 软删行三条规则只在
+        // `WeekPlanWeekResolver` 有一份，绕开它分母会和今日页清单对不上。
         val planRows: List<WeekPlan> = planRepository.observeEffectivePlanForWeek(weekStart).first()
-        val plannedSetsByDay: Map<Int, Int> = planRows
+
+        // 分母 = 生效行 **+** 被这周打卡**消费过**的停用行。
+        // 只数生效行会算出「10/3」这种"实际是计划三倍"的数：删槽位（`softDelete`）或
+        // 重新生成回收旧 AI 行（`deactivateGenerated`）会把**已经练过**的那条计划请出分母，
+        // 而打卡记录不会跟着退出分子（2026-09-21 真机实测：9/14 当天生效行只剩 3 组，实际 10 组）。
+        // 只补"被消费过"的：用户主动删掉、从没练过的槽位不该回来虚增分母。
+        // ⚠️ 这条与今日页**刻意不同**：今日页答"今天还剩什么"（删掉的就不该出现），
+        // 复盘答"那天计划了多少、实际做了多少"（做过的计划不能凭空消失）。
+        val effectiveIds: Set<Long> = planRows.map { row -> row.id }.toSet()
+        val consumedPlanIds: Set<Long> = weekCheckIns.mapNotNull { checkIn -> checkIn.planId }.toSet()
+        val retiredConsumedRows: List<WeekPlan> = if (consumedPlanIds.isEmpty()) {
+            emptyList()
+        } else {
+            // 打卡既可能挂在"本周专属行"上，也可能挂在回落用的「每周相同」模板行上 → 两份都要看。
+            (planRepository.getRowsForWeek(weekStart) + planRepository.getRepeatRows())
+                .filter { row -> row.id in consumedPlanIds && row.id !in effectiveIds }
+                .distinctBy { row -> row.id }
+        }
+        val plannedRows: List<WeekPlan> = planRows + retiredConsumedRows
+        val plannedSetsByDay: Map<Int, Int> = plannedRows
             .groupBy { plan -> plan.dayOfWeek }
             .mapValues { (_, rows) -> rows.sumOf { row -> row.targetSets } }
 
@@ -97,7 +115,7 @@ class BuildWeeklyReviewUseCase @Inject constructor(
             // 不能拿「当前周」的天数冒充。`observePlannedWeekdays(weekStart)` 本来就是
             // `observeEffectivePlanForWeek(weekStart)` 的 distinct 投影，这里直接派生，少读一次仓库。
             plannedDays = plannedSetsByDay.size,
-            plannedSets = planRows.sumOf { row -> row.targetSets },
+            plannedSets = plannedRows.sumOf { row -> row.targetSets },
         )
         // 只算一次：body / diet 都会做仓库查询，算两遍既慢又可能出现不一致的快照。
         // 所以**逐日事实和周汇总都从同一次读取派生** —— 周卡说 2,199、日卡加起来不是

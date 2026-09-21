@@ -77,9 +77,11 @@ class BuildWeeklyReviewUseCaseTest {
         reps: Int = 10,
         weightKg: Float? = 40f,
         rpe: Int? = null,
+        planId: Long? = null,
     ): CheckIn = CheckIn(
         exerciseId = exerciseId,
         dateEpochDay = epochDay,
+        planId = planId,
         completedSetsMask = CheckIn.maskFromCount(sets),
         completedReps = reps,
         weightKg = weightKg,
@@ -126,6 +128,8 @@ class BuildWeeklyReviewUseCaseTest {
         meals: List<Meal> = emptyList(),
         itemsByDay: Map<Long, List<MealItem>> = emptyMap(),
         plannedWeekdays: List<Int> = listOf(1, 3, 5),
+        effectiveRows: List<WeekPlan>? = null,
+        retiredRows: List<WeekPlan> = emptyList(),
     ) {
         every { checkInRepository.observeBetween(any(), any()) } answers {
             val start = firstArg<Long>()
@@ -142,11 +146,15 @@ class BuildWeeklyReviewUseCaseTest {
             itemsByDay[firstArg<Long>()].orEmpty()
         }
         // B-9 后复盘按目标周取口径（useCase 传 weekStart）→ 用 any() 匹配任意周参数。
-        // 复盘现在读的是 resolver 之后的**生效行**（plannedDays / plannedSets / 逐日计划组数
-        // 三个都从同一份派生），所以这里给每个计划日一条：distinct dayOfWeek 的个数
-        // 仍等于 plannedWeekdays.size，与旧的 observePlannedWeekdays 桩语义一致。
-        every { planRepository.observeEffectivePlanForWeek(any()) } returns
-            flowOf(plannedWeekdays.map { day -> WeekPlan(dayOfWeek = day) })
+        // 默认给每个计划日一条生效行：distinct dayOfWeek 的个数仍等于 plannedWeekdays.size，
+        // 与旧的 observePlannedWeekdays 桩语义一致。要测"练过的行被删掉"时传 effectiveRows 覆盖。
+        every { planRepository.observeEffectivePlanForWeek(any()) } returns flowOf(
+            effectiveRows ?: plannedWeekdays.map { day -> WeekPlan(dayOfWeek = day) },
+        )
+        // 分母还会回读"被这周打卡消费过的停用行"（走查 #1）。默认空 = 没有这类行，
+        // 老用例的口径一字不变。
+        coEvery { planRepository.getRowsForWeek(any()) } returns retiredRows
+        coEvery { planRepository.getRepeatRows() } returns emptyList()
     }
 
     private fun useCase(): BuildWeeklyReviewUseCase = BuildWeeklyReviewUseCase(
@@ -517,6 +525,46 @@ class BuildWeeklyReviewUseCaseTest {
             review.training.plannedSets,
             review.days.sumOf { day -> day.plannedSets },
         )
+    }
+
+    /**
+     * 练过的计划行被删掉 / 被重新生成回收之后，分母必须留住它（走查 #1）。
+     *
+     * 真机 9/14：当天生效行只剩 1 条 3 组，实际练了 10 组（另两条计划行已 `is_active=0`），
+     * 日卡于是显示「10/3」—— 看着像用户超练了三倍，真相是那两条计划被请出了分母。
+     */
+    @Test
+    fun trainedThenDeletedPlanRow_staysInTheDenominator() = runTest {
+        stub(
+            checkIns = listOf(
+                checkIn(exerciseId = 1L, epochDay = day(0), sets = 3, planId = 91L),
+                checkIn(exerciseId = 2L, epochDay = day(0), sets = 4, planId = 13L),
+            ),
+            effectiveRows = listOf(WeekPlan(id = 91L, exerciseId = 1L, dayOfWeek = 1, targetSets = 3)),
+            retiredRows = listOf(
+                WeekPlan(id = 13L, exerciseId = 2L, dayOfWeek = 1, targetSets = 4, isActive = false),
+            ),
+        )
+
+        val review = useCase()()
+
+        assertEquals("生效 3 组 + 练过之后才被删的 4 组", 7, review.training.plannedSets)
+        assertEquals(7, review.training.totalSets)
+        assertEquals("日卡分母与周汇总同源：周一那一格也是 7", 7, review.days.first().plannedSets)
+    }
+
+    /** 反向守卫：从没练过的删槽位**不该**回来虚增分母，否则完成率凭空变低。 */
+    @Test
+    fun neverTrainedDeletedPlanRow_staysOutOfTheDenominator() = runTest {
+        stub(
+            checkIns = listOf(checkIn(exerciseId = 1L, epochDay = day(0), sets = 3, planId = 91L)),
+            effectiveRows = listOf(WeekPlan(id = 91L, exerciseId = 1L, dayOfWeek = 1, targetSets = 3)),
+            retiredRows = listOf(
+                WeekPlan(id = 13L, exerciseId = 2L, dayOfWeek = 1, targetSets = 4, isActive = false),
+            ),
+        )
+
+        assertEquals(3, useCase()().training.plannedSets)
     }
 
     /** 实际组数按**全部**当天打卡算，含查不到动作名、不进 `items` 的那些行。 */
