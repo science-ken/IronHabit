@@ -33,6 +33,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import com.ironhabit.app.domain.usecase.CoachTurn
+import io.mockk.slot
 
 /**
  * [AiCoachViewModel] 的「问教练」单测（子项 A）。
@@ -108,7 +110,7 @@ class AiCoachViewModelChatTest {
     fun ask_ok_appendsUserThenAnswer_andClearsInput() = runTest(mainDispatcherRule.testDispatcher) {
         val viewModel = newViewModel()
         advanceUntilIdle()
-        coEvery { askCoach("今天要不要练腿") } returns CoachAnswer.Ok("今天练腿，4 组 × 8 次")
+        coEvery { askCoach("今天要不要练腿", any()) } returns CoachAnswer.Ok("今天练腿，4 组 × 8 次")
 
         viewModel.onChatInputChange("今天要不要练腿")
         viewModel.onAskCoach()
@@ -128,7 +130,7 @@ class AiCoachViewModelChatTest {
     fun ask_needsNetwork_appendsHonestBubble_withoutFakingAnswer() = runTest(mainDispatcherRule.testDispatcher) {
         val viewModel = newViewModel()
         advanceUntilIdle()
-        coEvery { askCoach(any()) } returns CoachAnswer.NeedsNetwork(RemoteFallbackReason.REMOTE_DISABLED)
+        coEvery { askCoach(any(), any()) } returns CoachAnswer.NeedsNetwork(RemoteFallbackReason.REMOTE_DISABLED)
 
         viewModel.onChatInputChange("帮我排个计划")
         viewModel.onAskCoach()
@@ -144,7 +146,7 @@ class AiCoachViewModelChatTest {
     fun ask_failed_appendsFailedBubble() = runTest(mainDispatcherRule.testDispatcher) {
         val viewModel = newViewModel()
         advanceUntilIdle()
-        coEvery { askCoach(any()) } returns CoachAnswer.Failed(RemoteFallbackReason.REMOTE_ERROR)
+        coEvery { askCoach(any(), any()) } returns CoachAnswer.Failed(RemoteFallbackReason.REMOTE_ERROR)
 
         viewModel.onChatInputChange("晚饭吃什么")
         viewModel.onAskCoach()
@@ -165,14 +167,14 @@ class AiCoachViewModelChatTest {
         advanceUntilIdle()
 
         assertTrue("空白问题不应产生气泡", viewModel.uiState.value.chatMessages.isEmpty())
-        coVerify(exactly = 0) { askCoach(any()) }
+        coVerify(exactly = 0) { askCoach(any(), any()) }
     }
 
     @Test
-    fun messages_areTrimmedToLastSix() = runTest(mainDispatcherRule.testDispatcher) {
+    fun messages_keepWholeRoundsAndNeverStartOnHalfATurn() = runTest(mainDispatcherRule.testDispatcher) {
         val viewModel = newViewModel()
         advanceUntilIdle()
-        coEvery { askCoach(any()) } returns CoachAnswer.Ok("好的")
+        coEvery { askCoach(any(), any()) } returns CoachAnswer.Ok("好的")
 
         repeat(4) { round ->
             viewModel.onChatInputChange("问题${round + 1}")
@@ -181,8 +183,58 @@ class AiCoachViewModelChatTest {
         }
 
         val messages = viewModel.uiState.value.chatMessages
-        assertEquals("只保留最近 6 条（3 轮）", 6, messages.size)
+        assertEquals("只保留最近 3 轮 = 6 条", 6, messages.size)
         assertEquals("最早的一轮已被挤掉", "问题2", messages.first().text)
         assertEquals("最后一条是第 4 轮的回答", "好的", messages.last().text)
+        assertEquals(
+            "截完第一条必须是**提问**：以回答开头就是留了半轮，模型没有上文可接",
+            CoachChatKind.USER,
+            messages.first().kind,
+        )
+    }
+
+    /**
+     * D2 的承重断言：追问必须把**已经完成的轮次**一起发出去。
+     *
+     * 以前 `askCoach(question)` 只带这一句，模型每次都是全新对话 —— 界面上气泡还在，
+     * 模型却完全看不到上文，"那饮食呢"只能被泛泛回答。
+     */
+    @Test
+    fun followUpQuestion_sendsCompletedTurnsAsHistory() = runTest(mainDispatcherRule.testDispatcher) {
+        val viewModel = newViewModel()
+        advanceUntilIdle()
+        coEvery { askCoach("要不要练腿", any()) } returns CoachAnswer.Ok("练，4 组 × 8 次")
+        coEvery { askCoach("那饮食呢", any()) } returns CoachAnswer.Ok("多吃蛋白")
+
+        viewModel.onChatInputChange("要不要练腿")
+        viewModel.onAskCoach()
+        advanceUntilIdle()
+        viewModel.onChatInputChange("那饮食呢")
+        viewModel.onAskCoach()
+        advanceUntilIdle()
+
+        val slot = slot<List<CoachTurn>>()
+        coVerify { askCoach("那饮食呢", capture(slot)) }
+        assertEquals(
+            "第二问必须带上第一轮的完整问答，且不能把正在问的这句也算进历史",
+            listOf("要不要练腿" to "练，4 组 × 8 次"),
+            slot.captured.map { turn -> turn.question to turn.answer },
+        )
+    }
+
+    /** 首轮没有任何历史，必须发空列表而不是把 UI 的占位气泡当历史。 */
+    @Test
+    fun firstQuestion_sendsEmptyHistory() = runTest(mainDispatcherRule.testDispatcher) {
+        val viewModel = newViewModel()
+        advanceUntilIdle()
+        coEvery { askCoach(any(), any()) } returns CoachAnswer.Ok("好")
+
+        viewModel.onChatInputChange("第一个问题")
+        viewModel.onAskCoach()
+        advanceUntilIdle()
+
+        val slot = slot<List<CoachTurn>>()
+        coVerify { askCoach("第一个问题", capture(slot)) }
+        assertTrue("首轮 history 必须是空的", slot.captured.isEmpty())
     }
 }

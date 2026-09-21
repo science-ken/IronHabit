@@ -10,6 +10,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.ironhabit.app.domain.usecase.CoachTurn
 
 /**
  * [RemoteChatPromptBuilder] 单测（子项 A · AI 自由问答）。
@@ -92,6 +93,43 @@ class RemoteChatPromptBuilderTest {
         assertTrue("空计划应是空数组", json.contains("\"weeklyPlan\":[]"))
         assertTrue("无 RPE 记录应是 null", json.contains("\"averageRpe\":null"))
         assertTrue("无体重对比应是 null", json.contains("\"weightDeltaKg\":null"))
+    }
+
+    /**
+     * D2 的最后一环：ViewModel 把轮次交给 UseCase 之后，**必须真的序列化进载荷**。
+     *
+     * 少这一条的话，把 history 传进 `buildChatUserPrompt` 却忘了塞进 `ChatPayload`
+     * 也能全绿 —— 而模型看到的还是只有一句孤零零的"那饮食呢"。
+     */
+    @Test
+    fun chatUserPrompt_carriesCompletedTurnsAsHistory() {
+        val json = RemoteChatPromptBuilder.buildChatUserPrompt(
+            question = "那饮食呢",
+            context = CoachContext(),
+            history = listOf(
+                CoachTurn(question = "要不要练腿", answer = "练，4 组 × 8 次"),
+                CoachTurn(question = "几点练", answer = "下班后 30 分钟内"),
+            ),
+        )
+
+        assertTrue("history 必须进载荷", json.contains("\"history\":["))
+        assertTrue("上一轮的问题", json.contains("\"question\":\"要不要练腿\""))
+        assertTrue("上一轮的回答", json.contains("\"answer\":\"练，4 组 × 8 次\""))
+        assertTrue(
+            "旧→新排：第一轮必须出现在第二轮之前",
+            json.indexOf("要不要练腿") < json.indexOf("几点练"),
+        )
+    }
+
+    /** 首轮没历史：`history` 是空数组，不是缺字段也不是 null（模型侧好判断）。 */
+    @Test
+    fun chatUserPrompt_firstTurnHasEmptyHistory() {
+        val json = RemoteChatPromptBuilder.buildChatUserPrompt(
+            question = "第一个问题",
+            context = CoachContext(),
+        )
+
+        assertTrue(json.contains("\"history\":[]"))
     }
 
     // ---------------- 回答解析 ----------------

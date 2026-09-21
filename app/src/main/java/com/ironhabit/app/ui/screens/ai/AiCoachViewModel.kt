@@ -22,6 +22,7 @@ import com.ironhabit.app.domain.usecase.ExportWeekPackageUseCase
 import com.ironhabit.app.domain.usecase.GenerateDietPlanUseCase
 import com.ironhabit.app.domain.usecase.PlanPreviewHolder
 import com.ironhabit.app.domain.usecase.GenerateTrainingPlanUseCase
+import com.ironhabit.app.domain.usecase.CoachTurn
 import com.ironhabit.app.domain.util.DateUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -490,7 +491,10 @@ class AiCoachViewModel @Inject constructor(
     }
 
     /**
-     * 发送一条问题给 AI 教练（**问答不落库**：只在内存里保留最近 [MAX_CHAT_MESSAGES] 条消息）。
+     * 发送一条问题给 AI 教练（**问答不落库**：只在内存里保留最近 [MAX_CHAT_TURNS] 轮）。
+     *
+     * 发出去的不只是这一句：最近几轮**成对**问答会一起进提示词（见 [toCoachTurns]），
+     * 否则"那饮食呢"这种追问模型根本没有上文可接。
      *
      * 三态由 [AskCoachUseCase] 的**可识别结果**决定，UI 不做任何猜测：
      * - [CoachAnswer.Ok] → 正常回答气泡（内容来自 DeepSeek）；
@@ -506,6 +510,8 @@ class AiCoachViewModel @Inject constructor(
         if (question.isEmpty()) return
 
         viewModelScope.launch {
+            // 历史要在**把这句问题加进气泡之前**取：否则刚问的这句会同时出现在 history 和 question 里。
+            val history: List<CoachTurn> = snapshot.chatMessages.toCoachTurns()
             _uiState.update {
                 it.copy(
                     chatInput = "",
@@ -517,7 +523,7 @@ class AiCoachViewModel @Inject constructor(
             }
 
             val answer: CoachAnswer = try {
-                askCoach(question)
+                askCoach(question, history)
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (unexpected: Exception) {
@@ -551,16 +557,51 @@ private enum class FailedAction {
     GENERATE_DIET,
 }
 
-/** 「问教练」内存里保留的消息条数上限（6 条 = 3 轮问答）。 */
-private const val MAX_CHAT_MESSAGES: Int = 6
+/**
+ * 「问教练」内存里保留的**轮数**（一问一答算一轮）。
+ *
+ * 以前是 `MAX_CHAT_MESSAGES = 6` 按**条**截：砍在第 6 条上时，列表和发给模型的历史
+ * 第一条可能是上一轮的**回答**——半轮对话没有上文可接，模型只能瞎猜。
+ */
+private const val MAX_CHAT_TURNS: Int = 3
 
 /** 一周的天数（周偏移换算用）。 */
 private const val DAYS_PER_WEEK: Int = 7
 
 /**
- * 追加一条消息，并只保留最近 [MAX_CHAT_MESSAGES] 条。
+ * 追加一条消息，保留最近 [MAX_CHAT_TURNS] 轮，并且**永远不以半轮开头**。
  *
  * 问答**不落库**：页面退出即丢弃，因此这里用纯内存截断，不做任何持久化。
  */
-private fun List<CoachChatMessage>.appendChat(message: CoachChatMessage): List<CoachChatMessage> =
-    (this + message).takeLast(MAX_CHAT_MESSAGES)
+internal fun List<CoachChatMessage>.appendChat(message: CoachChatMessage): List<CoachChatMessage> {
+    val kept: List<CoachChatMessage> = (this + message).takeLast(MAX_CHAT_TURNS * 2)
+    // 截完开头若是"答"，那是上一轮被砍剩的半轮 —— 丢到只剩完整轮次为止。
+    return kept.dropWhile { first -> first.kind != CoachChatKind.USER }
+}
+
+/**
+ * 把内存气泡压成**成对轮次**，用来发给模型。
+ *
+ * ⚠️ 只算"问了、并且模型真答了"的轮次：[CoachChatKind.NEEDS_NETWORK] /
+ * [CoachChatKind.FAILED] 是 UI 状态气泡、不是模型输出，把它们当历史发过去
+ * 等于告诉模型"你刚才说过这句话"，那是编造。这种轮次整轮丢掉。
+ */
+internal fun List<CoachChatMessage>.toCoachTurns(): List<CoachTurn> {
+    val turns = mutableListOf<CoachTurn>()
+    var pending: String? = null
+    forEach { message ->
+        when (message.kind) {
+            CoachChatKind.USER -> pending = message.text
+            CoachChatKind.ANSWER -> {
+                val question: String? = pending
+                if (question != null) {
+                    turns += CoachTurn(question = question, answer = message.text)
+                    pending = null
+                }
+            }
+            // 未联网 / 失败：这一轮没有可信的模型回答，问题也一起作废，不留下悬空的一半。
+            CoachChatKind.NEEDS_NETWORK, CoachChatKind.FAILED -> pending = null
+        }
+    }
+    return turns.takeLast(MAX_CHAT_TURNS)
+}

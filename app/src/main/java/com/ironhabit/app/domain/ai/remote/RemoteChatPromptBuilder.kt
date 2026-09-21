@@ -2,6 +2,7 @@ package com.ironhabit.app.domain.ai.remote
 
 import com.ironhabit.app.domain.model.DietTarget
 import com.ironhabit.app.domain.usecase.CoachContext
+import com.ironhabit.app.domain.usecase.CoachTurn
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -21,11 +22,19 @@ internal object RemoteChatPromptBuilder {
     fun buildChatSystemPrompt(): String = CHAT_SYSTEM_PROMPT
 
     /**
-     * 自由问答的 user 段：用户问题 + 一份用户现状上下文（档案 / 本周计划 / 近期打卡 / 今日饮食）。
+     * 自由问答的 user 段：用户问题 + 一份用户现状上下文（档案 / 本周计划 / 近期打卡 / 今日饮食）
+     * + **本次会话最近几轮的成对问答**。
+     *
+     * 没有 history 时模型每问一次都是全新对话 —— "那饮食呢""再具体点""刚才那个几组"全部接不上，
+     * 只能重新泛泛答一遍。
      *
      * ⚠️ **绝不把 API Key 拼进提示词**（Key 只进 Authorization header，见红线）。
      */
-    fun buildChatUserPrompt(question: String, context: CoachContext): String {
+    fun buildChatUserPrompt(
+        question: String,
+        context: CoachContext,
+        history: List<CoachTurn> = emptyList(),
+    ): String {
         val payload = ChatPayload(
             profile = ChatProfilePayload(
                 gender = context.profile.gender?.name,
@@ -57,6 +66,9 @@ internal object RemoteChatPromptBuilder {
                 planKcal = context.todayPlanKcal,
             ),
             question = question,
+            history = history.map { turn ->
+                ChatTurnPayload(question = turn.question, answer = turn.answer)
+            },
         )
         return chatJson.encodeToString(ChatPayload.serializer(), payload)
     }
@@ -186,6 +198,15 @@ internal object RemoteChatPromptBuilder {
         val weightDeltaKg: Float? = null,
         val todayDiet: ChatDietPayload,
         val question: String,
+        /** 本次会话最近几轮的成对问答（旧→新）；首轮是空列表。 */
+        val history: List<ChatTurnPayload> = emptyList(),
+    )
+
+    /** 一轮已完成的问答。只有**模型真写出来的回答**才算一轮（未联网 / 失败不进来了）。 */
+    @Serializable
+    private data class ChatTurnPayload(
+        val question: String,
+        val answer: String,
     )
 
     @Serializable
@@ -259,6 +280,7 @@ internal object RemoteChatPromptBuilder {
 4. 用简体中文回答。
 5. 回答控制在 200 字以内，直接给可执行的建议（做什么、几组几次、怎么吃、注意什么）。
 6. 只输出一个 JSON 对象（不要使用 Markdown 代码块围栏），形如 {"answer":"你的回答"}，把简体中文回答正文放进 answer 字段。
+7. 载荷里的 history 是**你和这个用户在本次会话里已经完成的问答**（旧→新）。出现"那饮食呢""再具体点""刚才那几条做几组"这类追问时，必须接着上文回答，不要重新自我介绍、不要重复上文已经给过的数字。history 为空就是第一个问题。
 
 输出格式：
 {"answer":"结合你上周的训练与今日饮食，建议……"}

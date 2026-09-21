@@ -36,7 +36,19 @@ sealed interface CoachAnswer {
 }
 
 /**
- * AI 自由问答（子项 A）：把用户问题 + 现有上下文交给 DeepSeek，取回一段中文回答。
+ * 本次会话里已经问过 / 答过的一轮 —— 追问要靠它才知道"那饮食呢"接的是什么。
+ *
+ * ⚠️ 只装**成对**的轮次：一问配一答，且答必须是模型真写出来的正文。
+ * 未联网 / 失败那两种气泡不是模型输出，不进来（见 `toCoachTurns`）。
+ */
+data class CoachTurn(
+    val question: String,
+    val answer: String,
+)
+
+/**
+ * AI 自由问答（子项 A）：把用户问题 + 现有上下文 + **本次会话已成对的轮次**交给 DeepSeek，
+ * 取回一段中文回答。
  *
  * ## 红线
  * - **诚实**：未联网（开关关 / 无 Key）返回 [CoachAnswer.NeedsNetwork]，**绝不本地编造回答**冒充 AI；
@@ -48,6 +60,7 @@ sealed interface CoachAnswer {
  * 远端是**阻塞 HTTP**（[DeepSeekApi.complete]，30s 超时）→ 整段包 `withContext(ioDispatcher)`。
  *
  * @param question 用户问题；空白 → 直接 [CoachAnswer.Failed]（不发网络）。
+ * @param history 本次会话最近几轮**成对**问答；空 = 首轮提问（提示词里就不带 history 字段）。
  */
 class AskCoachUseCase @Inject constructor(
     private val buildCoachContext: BuildCoachContextUseCase,
@@ -57,7 +70,10 @@ class AskCoachUseCase @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
 
-    suspend operator fun invoke(question: String): CoachAnswer = withContext(ioDispatcher) {
+    suspend operator fun invoke(
+        question: String,
+        history: List<CoachTurn> = emptyList(),
+    ): CoachAnswer = withContext(ioDispatcher) {
         val trimmed: String = question.trim()
         if (trimmed.isEmpty()) {
             return@withContext CoachAnswer.Failed(RemoteFallbackReason.REMOTE_ERROR)
@@ -73,7 +89,7 @@ class AskCoachUseCase @Inject constructor(
             val context = buildCoachContext(DEFAULT_WINDOW_DAYS)
             val raw: String = deepSeekApi.complete(
                 systemPrompt = RemoteChatPromptBuilder.buildChatSystemPrompt(),
-                userPrompt = RemoteChatPromptBuilder.buildChatUserPrompt(trimmed, context),
+                userPrompt = RemoteChatPromptBuilder.buildChatUserPrompt(trimmed, context, history),
                 apiKey = apiKey,
             )
             RemoteChatPromptBuilder.parseChatAnswer(raw)
