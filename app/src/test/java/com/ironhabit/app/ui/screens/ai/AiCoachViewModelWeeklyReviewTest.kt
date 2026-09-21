@@ -10,7 +10,6 @@ import com.ironhabit.app.domain.model.TrainingReview
 import com.ironhabit.app.domain.model.UserProfile
 import com.ironhabit.app.domain.model.WeeklyReview
 import com.ironhabit.app.domain.repository.BodyMetricRepository
-import com.ironhabit.app.domain.repository.ExerciseRepository
 import com.ironhabit.app.domain.repository.SettingsRepository
 import com.ironhabit.app.domain.usecase.AskCoachUseCase
 import com.ironhabit.app.domain.usecase.BuildWeeklyReviewUseCase
@@ -19,7 +18,6 @@ import com.ironhabit.app.domain.usecase.ExplainDietUseCase
 import com.ironhabit.app.domain.usecase.ExportWeekPackageUseCase
 import com.ironhabit.app.domain.usecase.GenerateDietPlanUseCase
 import com.ironhabit.app.domain.usecase.GenerateTrainingPlanUseCase
-import com.ironhabit.app.domain.usecase.SuggestExercisesUseCase
 import com.ironhabit.app.test.MainDispatcherRule
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -59,10 +57,8 @@ class AiCoachViewModelWeeklyReviewTest {
 
     private val settingsRepository = mockk<SettingsRepository>()
     private val bodyMetricRepository = mockk<BodyMetricRepository>()
-    private val exerciseRepository = mockk<ExerciseRepository>()
     private val credentials = mockk<AiCredentialsStore>(relaxed = true)
     private val generateTrainingPlan = mockk<GenerateTrainingPlanUseCase>(relaxed = true)
-    private val suggestExercises = mockk<SuggestExercisesUseCase>()
     private val askCoach = mockk<AskCoachUseCase>(relaxed = true)
     private val generateDietPlan = mockk<GenerateDietPlanUseCase>(relaxed = true)
     private val explainDiet = mockk<ExplainDietUseCase>(relaxed = true)
@@ -100,12 +96,7 @@ class AiCoachViewModelWeeklyReviewTest {
         every { settingsRepository.profile() } returns flowOf(UserProfile())
         every { settingsRepository.aiRemoteEnabled() } returns flowOf(false)
         every { bodyMetricRepository.observeByType(any()) } returns flowOf(emptyList())
-        every { exerciseRepository.observeActive() } returns flowOf(emptyList())
         every { credentials.isConfigured() } returns false
-        coEvery { suggestExercises.suggest() } returns SuggestionResult(
-            suggestions = emptyList(),
-            source = AdviceSource.LOCAL_RULES,
-        )
         // 桩按"被请求的那一周"返回对应的复盘 —— 这样断言结果就等于断言"VM 算对了哪一周"。
         coEvery { buildWeeklyReview(any()) } answers {
             review(firstArg<Long?>() ?: thisWeekStart)
@@ -114,11 +105,9 @@ class AiCoachViewModelWeeklyReviewTest {
         return AiCoachViewModel(
             settingsRepository = settingsRepository,
             bodyMetricRepository = bodyMetricRepository,
-            exerciseRepository = exerciseRepository,
             aiCredentialsStore = credentials,
             generateTrainingPlan = generateTrainingPlan,
             planPreviewHolder = com.ironhabit.app.domain.usecase.PlanPreviewHolder(),
-            suggestExercises = suggestExercises,
             askCoach = askCoach,
             generateDietPlan = generateDietPlan,
             explainDiet = explainDiet,

@@ -3,6 +3,7 @@ package com.ironhabit.app.ui.screens.train
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ironhabit.app.R
+import com.ironhabit.app.domain.model.AdoptResult
 import com.ironhabit.app.domain.model.Exercise
 import com.ironhabit.app.domain.model.WeekPlan
 import com.ironhabit.app.domain.repository.CheckInRepository
@@ -10,6 +11,7 @@ import com.ironhabit.app.domain.repository.ExerciseRepository
 import com.ironhabit.app.domain.repository.PlanRepository
 import com.ironhabit.app.domain.usecase.AddExerciseToPlanUseCase
 import com.ironhabit.app.domain.usecase.ResetPlanItemUseCase
+import com.ironhabit.app.domain.usecase.SuggestExercisesUseCase
 import com.ironhabit.app.domain.util.DateUtils
 import com.ironhabit.app.domain.util.TodayClock
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -44,6 +46,7 @@ class TrainViewModel @Inject constructor(
     private val exerciseRepository: ExerciseRepository,
     private val checkInRepository: CheckInRepository,
     private val addToPlan: AddExerciseToPlanUseCase,
+    private val suggestExercises: SuggestExercisesUseCase,
     private val todayClock: TodayClock,
 ) : ViewModel() {
 
@@ -230,6 +233,64 @@ class TrainViewModel @Inject constructor(
         }
     }
 
+    // ---------------- 补充动作建议（从 AI 教练页搬来）----------------
+
+    /**
+     * 拉一次「还能收入哪些补充动作」。
+     *
+     * 只在用户真的进到「动作库」分段时才要：联网时这是一次 completion，
+     * 不该在开屏就花掉 —— 原来它挂在 AI 教练页 init 上，是那一页开屏自动发两次远程的原因之一。
+     */
+    fun loadSuggestions() {
+        if (_uiState.value.isLoadingSuggestions) return
+        viewModelScope.launch {
+            _uiState.update { state -> state.copy(isLoadingSuggestions = true) }
+            runCatching { suggestExercises.suggest() }
+                .onSuccess { result ->
+                    _uiState.update { state ->
+                        state.copy(
+                            isLoadingSuggestions = false,
+                            suggestions = result.suggestions,
+                            suggestionSource = result.source,
+                            suggestionFallbackReason = result.fallbackReason,
+                        )
+                    }
+                }
+                .onFailure {
+                    _uiState.update { state ->
+                        state.copy(isLoadingSuggestions = false, errorRes = R.string.error_load_failed)
+                    }
+                }
+        }
+    }
+
+    /**
+     * 收入一条补充动作到动作库（**幂等**）：库里已有 / 本次已收入过的只提示，不重复写。
+     *
+     * 写入后 `observeActive()` 会重emit，动作列表自己就长出这一条（来源标「AI 推荐」，
+     * 可被来源筛选条筛出），所以这里只记 `adoptedNames` 让按钮变灰，再重拉一次建议列表。
+     */
+    fun onAdoptSuggestion(name: String) {
+        viewModelScope.launch {
+            runCatching { suggestExercises.adopt(name) }
+                .onSuccess { result ->
+                    _uiState.update { state ->
+                        state.copy(
+                            adoptedNames = state.adoptedNames + name,
+                            snackbarRes = when (result) {
+                                AdoptResult.ADDED -> R.string.ai_suggest_adopted
+                                AdoptResult.ALREADY_EXISTS -> R.string.ai_suggest_already_exists
+                            },
+                        )
+                    }
+                    loadSuggestions()
+                }
+                .onFailure {
+                    _uiState.update { state -> state.copy(errorRes = R.string.error_save_failed) }
+                }
+        }
+    }
+
     /** 消费一次 Snackbar。 */
     fun onConsumeSnackbar() {
         _uiState.update { state -> state.copy(snackbarRes = null) }
@@ -259,6 +320,13 @@ class TrainViewModel @Inject constructor(
         addToPlanSheetExercise = local.addToPlanSheetExercise ?: data.addToPlanSheetExercise,
         isSubmittingAdd = local.isSubmittingAdd,
         errorRes = data.errorRes ?: local.errorRes,
+        // ⚠️ 补充动作这五个字段**不在** dataState 里（它是一次性 suspend 拉的，不是响应式流），
+        // 不加这一段就会在每次 Room 重emit 时被静默清回默认值 —— 列表闪一下自己变空。
+        suggestions = local.suggestions,
+        adoptedNames = local.adoptedNames,
+        suggestionSource = local.suggestionSource,
+        suggestionFallbackReason = local.suggestionFallbackReason,
+        isLoadingSuggestions = local.isLoadingSuggestions,
     )
 
     private fun List<WeekPlan>.toDaysByExercise(): Map<Long, Set<Int>> =

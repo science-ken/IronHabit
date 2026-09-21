@@ -49,17 +49,20 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.Exercise
+import com.ironhabit.app.domain.model.ExerciseSuggestion
 import com.ironhabit.app.domain.model.ExerciseCategory
 import com.ironhabit.app.domain.model.ExerciseSource
 import com.ironhabit.app.ui.components.ExerciseSourceChip
 import com.ironhabit.app.ui.components.exerciseSourceLabelRes
 import com.ironhabit.app.ui.components.hasVisibleSourceChip
+import com.ironhabit.app.domain.model.SuggestionReason
 import com.ironhabit.app.domain.model.WeekPlan
 import com.ironhabit.app.ui.components.EmptyState
 import com.ironhabit.app.ui.components.LoadingSkeleton
 import com.ironhabit.app.ui.components.LocalSnackbarHostState
 import com.ironhabit.app.ui.components.planGoalText
 import com.ironhabit.app.ui.components.weekRangeText
+import com.ironhabit.app.ui.screens.ai.SourceLine
 import com.ironhabit.app.ui.theme.IronHabitSpacing
 import kotlinx.datetime.LocalDate
 
@@ -96,6 +99,12 @@ fun TrainScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = LocalSnackbarHostState.current
     var selectedTab by remember { mutableStateOf(TrainTab.PLAN) }
+
+    // 补充动作只在真的进「动作库」这一段时才拉：联网时那是一次 completion，
+    // 不该在开 App / 开这一页时就花掉。
+    LaunchedEffect(selectedTab) {
+        if (selectedTab == TrainTab.LIBRARY) viewModel.loadSuggestions()
+    }
 
     val snackbarText: String? = uiState.snackbarRes?.let { res -> stringResource(res) }
     LaunchedEffect(snackbarText) {
@@ -151,6 +160,7 @@ fun TrainScreen(
                 onAddExercise = onAddExercise,
                 onOpenExercise = onOpenExercise,
                 onOpenAddToPlan = viewModel::onOpenAddToPlanSheet,
+                onAdoptSuggestion = viewModel::onAdoptSuggestion,
             )
 
             else -> HistorySection(
@@ -345,6 +355,7 @@ private fun LibrarySection(
     onAddExercise: () -> Unit,
     onOpenExercise: (Long) -> Unit,
     onOpenAddToPlan: (Exercise) -> Unit,
+    onAdoptSuggestion: (String) -> Unit,
 ) {
     // v6 起动作无"停用"概念（开关已下线，数据库列退化为永真标记），动作库即全量动作。
     if (uiState.exercises.isEmpty()) {
@@ -403,6 +414,14 @@ private fun LibrarySection(
                     )
                 }
             }
+        }
+        item(key = "ai-suggestions") {
+            // 放在筛选条**上方**：这批是「库里还没有」的动作，搜索 / 来源 / 肌群三个筛选
+            // 都只作用于下面的库列表 —— 混进去会让人以为筛掉了推荐项。
+            AiSuggestionSection(
+                uiState = uiState,
+                onAdopt = onAdoptSuggestion,
+            )
         }
         item(key = "source-filter") {
             SourceFilterRow(
@@ -472,6 +491,92 @@ private fun LibrarySection(
             }
         }
     }
+}
+
+/**
+ * 「补充动作 · 一键收入动作库」—— 原来长在 AI 教练页，2026-09-21 搬到这里。
+ *
+ * 搬的理由：点「收入」会隐藏地再花一次 completion（`SuggestExercisesUseCase.adopt` 内部
+ * 要重新问一次顾问才能确认这个名字在候选里）。把动作库的维护做成付费操作不合理，
+ * 而现在它只在用户主动进「动作库」分段时才拉。
+ */
+@Composable
+private fun AiSuggestionSection(
+    uiState: TrainUiState,
+    onAdopt: (String) -> Unit,
+) {
+    Column {
+        Text(
+            text = stringResource(R.string.ai_section_suggest),
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(top = IronHabitSpacing.xs, bottom = IronHabitSpacing.xs),
+        )
+        Text(
+            text = stringResource(R.string.ai_suggest_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        SourceLine(
+            source = uiState.suggestionSource,
+            fallback = uiState.suggestionFallbackReason,
+        )
+        when {
+            uiState.isLoadingSuggestions -> LoadingSkeleton()
+
+            uiState.suggestions.isEmpty() -> Text(
+                text = stringResource(R.string.ai_suggest_all_adopted),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            else -> uiState.suggestions.forEach { suggestion ->
+                SuggestionRow(
+                    suggestion = suggestion,
+                    adopted = suggestion.name in uiState.adoptedNames,
+                    onAdopt = { onAdopt(suggestion.name) },
+                )
+                HorizontalDivider()
+            }
+        }
+    }
+}
+
+@Composable
+private fun SuggestionRow(
+    suggestion: ExerciseSuggestion,
+    adopted: Boolean,
+    onAdopt: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = IronHabitSpacing.xs),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = suggestion.name,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = stringResource(suggestionReasonRes(suggestion.reason)),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        TextButton(onClick = onAdopt, enabled = !adopted) {
+            Text(text = stringResource(R.string.ai_suggest_adopt))
+        }
+    }
+}
+
+private fun suggestionReasonRes(reason: SuggestionReason): Int = when (reason) {
+    SuggestionReason.INJURY_SWAP -> R.string.note_ai_injury_swap
+    SuggestionReason.EQUIPMENT_FIT -> R.string.note_ai_equipment_fit
+    SuggestionReason.GOAL_SUPPORT -> R.string.note_ai_goal_support
 }
 
 /**

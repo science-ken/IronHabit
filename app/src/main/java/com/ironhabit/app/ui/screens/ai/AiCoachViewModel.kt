@@ -5,16 +5,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ironhabit.app.R
 import com.ironhabit.app.data.preferences.AiCredentialsStore
-import com.ironhabit.app.domain.model.AdoptResult
-import com.ironhabit.app.domain.model.AdviceSource
 import com.ironhabit.app.domain.model.BodyMetricType
 import com.ironhabit.app.domain.model.DietTarget
-import com.ironhabit.app.domain.model.ExerciseSuggestion
 import com.ironhabit.app.domain.model.RemoteFallbackReason
 import com.ironhabit.app.domain.model.UserProfile
 import com.ironhabit.app.domain.model.WeeklyReview
 import com.ironhabit.app.domain.repository.BodyMetricRepository
-import com.ironhabit.app.domain.repository.ExerciseRepository
 import com.ironhabit.app.domain.repository.SettingsRepository
 import com.ironhabit.app.domain.usecase.AskCoachUseCase
 import com.ironhabit.app.domain.usecase.BuildWeeklyReviewUseCase
@@ -26,7 +22,6 @@ import com.ironhabit.app.domain.usecase.ExportWeekPackageUseCase
 import com.ironhabit.app.domain.usecase.GenerateDietPlanUseCase
 import com.ironhabit.app.domain.usecase.PlanPreviewHolder
 import com.ironhabit.app.domain.usecase.GenerateTrainingPlanUseCase
-import com.ironhabit.app.domain.usecase.SuggestExercisesUseCase
 import com.ironhabit.app.domain.util.DateUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -72,9 +67,6 @@ data class DietSummaryUi(
  * @property profile 用户档案（只读展示 + 规则输入）
  * @property currentWeightKg 当前体重（只读，来自 `body_metrics` 最新 WEIGHT 值；无记录为 `null`）
  * @property isGenerating 生成计划进行中（本地规则为纯计算，通常很快）
- * @property suggestions 补充动作建议（已排除动作库中已有的）
- * @property adoptedNames 本次会话已收入的动名称（幂等：重复点击不再写入）
- * @property exerciseNames 动作 id → 名称（用于把"为什么这样排"里的 id 显示成动作名）
  * @property chatMessages 「问教练」最近若干轮消息（**只在内存里，问答不落库**）
  * @property chatInput 「问教练」输入框当前内容
  * @property isAsking 正在等 AI 回答（发送中：输入框与按钮都禁用）
@@ -95,13 +87,6 @@ data class AiCoachUiState(
     val isGenerating: Boolean = false,
     /** 预览已备好 → 界面跳一次「本周计划预览」页，跳完立即消费掉。 */
     val previewRequested: Boolean = false,
-    val suggestions: List<ExerciseSuggestion> = emptyList(),
-    val adoptedNames: Set<String> = emptySet(),
-    val exerciseNames: Map<Long, String> = emptyMap(),
-    /** 最近一次建议结果的来源（本地规则 / AI 联网）。 */
-    val suggestionSource: AdviceSource = AdviceSource.LOCAL_RULES,
-    /** 建议走本地时的回落原因（`null` = 没有回落）。 */
-    val suggestionFallbackReason: RemoteFallbackReason? = null,
     /** 「AI 联网增强」开关（默认关）。 */
     val aiRemoteEnabled: Boolean = false,
     /** 是否已配置 API Key（快照；加密文件无响应式流，写入后由 ViewModel 手动刷新）。 */
@@ -163,10 +148,9 @@ data class AiCoachUiState(
  * 「AI 教练」ViewModel（联网可选 · 本地规则兜底）。
  *
  * 职责：
- * - 暴露档案流与最新体重（用于「教练解读」的 BMR / 建议摄入）；
+ * - 暴露档案流与最新体重（用于「教练解读」的统计口径 / 建议摄入）；
  * - 调 [GenerateTrainingPlanUseCase] 生成计划（**手改行由 UseCase 保证不被覆盖**）；
  * - 调 [GenerateDietPlanUseCase] 生成饮食（数值全部本地算，见 [ExplainDietUseCase] 只补文字）；
- * - 调 [SuggestExercisesUseCase] 取补充动作建议并支持「一键收入」（幂等由 UseCase 保证）；
  * - 调 [AskCoachUseCase] 做自由问答、[CoachInsightUseCase] 做进度解读。
  *
  * ⚠️ **诚实原则（每条都必须成立）**：
@@ -179,11 +163,9 @@ data class AiCoachUiState(
 class AiCoachViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     bodyMetricRepository: BodyMetricRepository,
-    exerciseRepository: ExerciseRepository,
     private val aiCredentialsStore: AiCredentialsStore,
     private val generateTrainingPlan: GenerateTrainingPlanUseCase,
     private val planPreviewHolder: PlanPreviewHolder,
-    private val suggestExercises: SuggestExercisesUseCase,
     private val askCoach: AskCoachUseCase,
     private val generateDietPlan: GenerateDietPlanUseCase,
     private val explainDiet: ExplainDietUseCase,
@@ -201,9 +183,8 @@ class AiCoachViewModel @Inject constructor(
      * 最近一次失败的动作（供 [onRetry] 决定重跑哪一个）。
      *
      * 私有字段：只影响「重试跑什么」，不进 [AiCoachUiState]，界面文案一律走资源 id。
-     * 初值取「加载建议」——页面首帧本来就会拉一次建议。
      */
-    private var lastFailedAction: FailedAction = FailedAction.LOAD_SUGGESTIONS
+    private var lastFailedAction: FailedAction = FailedAction.GENERATE_PLAN
 
     /** 最新体重（`body_metrics` 为体重唯一真源，档案不存体重）。 */
     private val latestWeightKg = bodyMetricRepository
@@ -231,20 +212,16 @@ class AiCoachViewModel @Inject constructor(
                 }
             }
         }
-        loadSuggestions()
+        // 开屏只自动要这一次远程（解读）；补充动作建议已经搬去「动作库」分段，
+        // 用户真进了那一屏才拉 —— 原来这里发两次，第二次还是没人看的。
         loadInsight()
         loadWeeklyReview()
-        viewModelScope.launch {
-            exerciseRepository.observeActive().collect { exercises ->
-                _uiState.update { it.copy(exerciseNames = exercises.associate { e -> e.id to e.name }) }
-            }
-        }
     }
 
     /**
      * 进度解读（子项 C）。
      *
-     * 页面打开时自动跑一次（与 [loadSuggestions] 同口径）：离线只做**本地聚合**（瞬间完成，不发网络），
+     * 页面打开时自动跑这一次（开屏唯一自动发出的远程）：离线只做**本地聚合**（瞬间完成，不发网络），
      * 联网且已配 Key 时额外取一段 AI 文案（[CoachInsightResult.source] 会如实标注来源）。
      * 失败也会返回带本地数字的结果，因此这里**不会**写 [AiCoachUiState.errorRes]。
      *
@@ -486,69 +463,18 @@ class AiCoachViewModel @Inject constructor(
     /** 今天（本地时区）：饮食计划按「今天」生成。 */
     private fun todayEpochDay(): Long = DateUtils.todayEpochDay(clock, timeZone)
 
-    /** 刷新补充动作建议（已在动作库中的不会出现在结果里）。 */
-    fun loadSuggestions() {
-        viewModelScope.launch {
-            runCatching { suggestExercises.suggest() }
-                .onSuccess { result ->
-                    _uiState.update {
-                        it.copy(
-                            suggestions = result.suggestions,
-                            suggestionSource = result.source,
-                            suggestionFallbackReason = result.fallbackReason,
-                        )
-                    }
-                }
-                .onFailure {
-                    lastFailedAction = FailedAction.LOAD_SUGGESTIONS
-                    _uiState.update { it.copy(errorRes = R.string.error_save_failed) }
-                }
-        }
-    }
-
-    /**
-     * 收入一条补充动作。
-     *
-     * **幂等**：已在动作库 / 本次会话已收入的，直接提示"已存在"，**不重复写入**。
-     */
-    fun adopt(name: String) {
-        viewModelScope.launch {
-            runCatching { suggestExercises.adopt(name) }
-                .onSuccess { result ->
-                    val messageRes = when (result) {
-                        AdoptResult.ADDED -> R.string.ai_suggest_adopted
-                        AdoptResult.ALREADY_EXISTS -> R.string.ai_suggest_already_exists
-                    }
-                    _uiState.update {
-                        it.copy(
-                            adoptedNames = it.adoptedNames + name,
-                            snackbarRes = messageRes,
-                            snackbarArgs = emptyList(),
-                        )
-                    }
-                    loadSuggestions()
-                }
-                .onFailure {
-                    // 收入失败也按「重跑建议加载」处理：重试后列表回到与库一致的状态。
-                    lastFailedAction = FailedAction.LOAD_SUGGESTIONS
-                    _uiState.update { it.copy(errorRes = R.string.error_save_failed) }
-                }
-        }
-    }
-
     /**
      * 重试上一次失败的动作。
      *
      * 失败不再静默（页面上有内联错误卡），用户点「重试」时回到这里：
      * 先清掉 [AiCoachUiState.errorRes]，再**重跑那个失败的动作** ——
-     * 生成计划失败就重跑 [generatePlan]，其余（建议加载 / 收入失败）重跑 [loadSuggestions]。
+     * 生成计划失败就重跑 [generatePlan]，饮食失败重跑 [generateDiet]。
      */
     fun onRetry() {
         val failed: FailedAction = lastFailedAction
         _uiState.update { it.copy(errorRes = null) }
         when (failed) {
             FailedAction.GENERATE_PLAN -> generatePlan()
-            FailedAction.LOAD_SUGGESTIONS -> loadSuggestions()
             FailedAction.GENERATE_DIET -> generateDiet()
         }
     }
@@ -620,9 +546,6 @@ class AiCoachViewModel @Inject constructor(
 private enum class FailedAction {
     /** 生成计划失败 → 重试重跑生成。 */
     GENERATE_PLAN,
-
-    /** 建议加载 / 收入失败 → 重试重新加载建议。 */
-    LOAD_SUGGESTIONS,
 
     /** 生成饮食计划失败 → 重试重新生成饮食。 */
     GENERATE_DIET,

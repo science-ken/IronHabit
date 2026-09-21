@@ -6,7 +6,6 @@ import com.ironhabit.app.domain.model.RemoteFallbackReason
 import com.ironhabit.app.domain.model.SuggestionResult
 import com.ironhabit.app.domain.model.UserProfile
 import com.ironhabit.app.domain.repository.BodyMetricRepository
-import com.ironhabit.app.domain.repository.ExerciseRepository
 import com.ironhabit.app.domain.repository.SettingsRepository
 import com.ironhabit.app.domain.usecase.AskCoachUseCase
 import com.ironhabit.app.domain.usecase.CoachAnswer
@@ -17,7 +16,6 @@ import com.ironhabit.app.domain.usecase.ExportWeekPackageUseCase
 import com.ironhabit.app.domain.usecase.ExplainDietUseCase
 import com.ironhabit.app.domain.usecase.GenerateDietPlanUseCase
 import com.ironhabit.app.domain.usecase.GenerateTrainingPlanUseCase
-import com.ironhabit.app.domain.usecase.SuggestExercisesUseCase
 import com.ironhabit.app.test.MainDispatcherRule
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -50,10 +48,8 @@ class AiCoachViewModelChatTest {
 
     private val settingsRepository = mockk<SettingsRepository>()
     private val bodyMetricRepository = mockk<BodyMetricRepository>()
-    private val exerciseRepository = mockk<ExerciseRepository>()
     private val credentials = mockk<AiCredentialsStore>(relaxed = true)
     private val generateTrainingPlan = mockk<GenerateTrainingPlanUseCase>(relaxed = true)
-    private val suggestExercises = mockk<SuggestExercisesUseCase>()
     private val askCoach = mockk<AskCoachUseCase>()
     private val generateDietPlan = mockk<GenerateDietPlanUseCase>(relaxed = true)
     private val explainDiet = mockk<ExplainDietUseCase>(relaxed = true)
@@ -71,22 +67,15 @@ class AiCoachViewModelChatTest {
         every { settingsRepository.profile() } returns flowOf(UserProfile())
         every { settingsRepository.aiRemoteEnabled() } returns flowOf(aiRemote)
         every { bodyMetricRepository.observeByType(any()) } returns flowOf(emptyList())
-        every { exerciseRepository.observeActive() } returns flowOf(emptyList())
         every { credentials.isConfigured() } returns hasKey
-        coEvery { suggestExercises.suggest() } returns SuggestionResult(
-            suggestions = emptyList(),
-            source = AdviceSource.LOCAL_RULES,
-        )
         // init 里会自动跑一次进度解读（子项 C），这里显式桩掉，避免依赖 relaxed 的默认值。
         coEvery { coachInsight(any()) } returns CoachInsightResult()
         return AiCoachViewModel(
             settingsRepository = settingsRepository,
             bodyMetricRepository = bodyMetricRepository,
-            exerciseRepository = exerciseRepository,
             aiCredentialsStore = credentials,
             generateTrainingPlan = generateTrainingPlan,
             planPreviewHolder = com.ironhabit.app.domain.usecase.PlanPreviewHolder(),
-            suggestExercises = suggestExercises,
             askCoach = askCoach,
             generateDietPlan = generateDietPlan,
             explainDiet = explainDiet,

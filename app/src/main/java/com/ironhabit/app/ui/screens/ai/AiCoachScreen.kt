@@ -160,10 +160,6 @@ fun AiCoachScreen(
                         uiState = uiState,
                         onGenerateDiet = viewModel::generateDiet,
                     )
-                    SuggestBlock(
-                        uiState = uiState,
-                        onAdopt = viewModel::adopt,
-                    )
                 }
             }
         }
@@ -333,71 +329,11 @@ private fun DietLocalBasisCard() {
     }
 }
 
-/** 鈶?琛ュ厖鍔ㄤ綔 路 涓€閿敹鍏ャ€?*/
-@Composable
-private fun SuggestBlock(
-    uiState: AiCoachUiState,
-    onAdopt: (String) -> Unit,
-) {
-    SectionTitle(text = stringResource(R.string.ai_section_suggest))
-    Text(
-        text = stringResource(R.string.ai_suggest_hint),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    SourceLine(source = uiState.suggestionSource, fallback = uiState.suggestionFallbackReason)
-
-    if (uiState.suggestions.isEmpty()) {
-        EmptyState(text = stringResource(R.string.ai_suggest_all_adopted))
-        return
-    }
-
-    uiState.suggestions.forEach { suggestion ->
-        SuggestionRow(
-            suggestion = suggestion,
-            adopted = suggestion.name in uiState.adoptedNames,
-            onAdopt = { onAdopt(suggestion.name) },
-        )
-        HorizontalDivider()
-    }
-}
-
-@Composable
-private fun SuggestionRow(
-    suggestion: ExerciseSuggestion,
-    adopted: Boolean,
-    onAdopt: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = IronHabitSpacing.md),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = suggestion.name,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Text(
-                text = stringResource(suggestionReasonRes(suggestion.reason)),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        TextButton(onClick = onAdopt, enabled = !adopted) {
-            Text(text = stringResource(R.string.ai_suggest_adopt))
-        }
-    }
-}
-
 /**
  *
  */
 @Composable
-private fun SourceLine(
+internal fun SourceLine(
     source: AdviceSource,
     fallback: RemoteFallbackReason?,
 ) {
@@ -495,12 +431,6 @@ internal fun SectionTitle(text: String) {
         color = MaterialTheme.colorScheme.onSurface,
         modifier = Modifier.fillMaxWidth(),
     )
-}
-
-private fun suggestionReasonRes(reason: SuggestionReason): Int = when (reason) {
-    SuggestionReason.INJURY_SWAP -> R.string.note_ai_injury_swap
-    SuggestionReason.EQUIPMENT_FIT -> R.string.note_ai_equipment_fit
-    SuggestionReason.GOAL_SUPPORT -> R.string.note_ai_goal_support
 }
 
 /**
