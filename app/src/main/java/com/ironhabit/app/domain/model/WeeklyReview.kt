@@ -14,7 +14,9 @@ package com.ironhabit.app.domain.model
  * @property training 训练汇总
  * @property body 体重汇总
  * @property diet 饮食汇总
- * @property days 逐日逐条明细（导出数据包用；界面也可用来摊开看每天练了什么）
+ * @property days 逐日逐条明细（导出数据包 + 界面摊开看每天练了什么）
+ * @property todayEpochDay 今天是哪天，用于把"进行中"那一格标出来；
+ *   `null` = 调用方没给时钟基准，界面就不标今天（**不拿周一凑数**）
  * @property notes 数据不足的诚实说明（顺序固定：CHECKIN → RPE → WEIGHT → DIET → WEEK_IN_PROGRESS）
  */
 data class WeeklyReview(
@@ -24,6 +26,7 @@ data class WeeklyReview(
     val body: BodyReview,
     val diet: DietReview,
     val days: List<WeekDayDetail> = emptyList(),
+    val todayEpochDay: Long? = null,
     val notes: List<ReviewNote> = emptyList(),
 )
 

@@ -120,6 +120,7 @@ class BuildWeeklyReviewUseCase @Inject constructor(
                 weightByDay = body.weightByDay,
                 plannedSetsByDay = plannedSetsByDay,
             ),
+            todayEpochDay = today,
             notes = buildNotes(
                 training = training,
                 body = body.review,

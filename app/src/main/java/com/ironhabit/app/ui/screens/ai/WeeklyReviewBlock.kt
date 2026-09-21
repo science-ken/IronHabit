@@ -46,6 +46,14 @@ import com.ironhabit.app.ui.theme.IronHabitSpacing
 import com.ironhabit.app.ui.theme.IronHabitTypeStyles
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.toLocalDateTime
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.draw.scale
+import com.ironhabit.app.domain.model.WeekDayDetail
 
 /**
  * 「周复盘」区块（P2）：这一周**实际**练了什么 —— 数据全部本地算（[WeeklyReview]），不联网、不花 token。
@@ -70,6 +78,9 @@ internal fun WeeklyReviewBlock(
     onExport: () -> Unit,
     onReloadInsight: () -> Unit,
 ) {
+    // 选中哪一格。按周翻篇重置 —— 同一个下标在另一周指的是另一天。
+    var selectedDayIndex by remember(uiState.weekOffset) { mutableStateOf<Int?>(null) }
+
     val review: WeeklyReview? = uiState.weeklyReview
     when {
         review == null && uiState.isLoadingReview -> {
@@ -80,15 +91,26 @@ internal fun WeeklyReviewBlock(
             ReviewPending(text = stringResource(R.string.ai_review_note_no_checkin))
         }
 
-        else -> WeeklyReviewCard(
-            review = review,
-            weekOffset = uiState.weekOffset,
-            insight = uiState.insightResult,
-            isLoadingInsight = uiState.isLoadingInsight,
-            onWeekChange = onWeekChange,
-            onExport = onExport,
-            onReloadInsight = onReloadInsight,
-        )
+        else -> {
+            WeeklyReviewCard(
+                review = review,
+                weekOffset = uiState.weekOffset,
+                insight = uiState.insightResult,
+                isLoadingInsight = uiState.isLoadingInsight,
+                onWeekChange = onWeekChange,
+                onExport = onExport,
+                onReloadInsight = onReloadInsight,
+                selectedDayIndex = selectedDayIndex,
+                onSelectDay = { index -> selectedDayIndex = index },
+            )
+
+
+            val openIndex: Int? = selectedDayIndex
+            val day: WeekDayDetail? = openIndex?.let { review.days.getOrNull(it) }
+            if (day != null) {
+                WeekDaySheet(day = day, onDismiss = { selectedDayIndex = null })
+            }
+        }
     }
 }
 
@@ -112,6 +134,8 @@ private fun WeeklyReviewCard(
     onWeekChange: (Int) -> Unit,
     onExport: () -> Unit,
     onReloadInsight: () -> Unit,
+    selectedDayIndex: Int?,
+    onSelectDay: (Int) -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
@@ -124,13 +148,15 @@ private fun WeeklyReviewCard(
                 horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.xs),
             ) {
                 Column(modifier = Modifier.weight(1f)) {
+                    // 标题跟着周偏移走：以前翻到上周，卡里还顶着「本周复盘」四个字，
+                    // 下面一行却写「上一周 · 9/14 ~ 9/20」—— 同一张卡自相矛盾。
                     Text(
-                        text = stringResource(R.string.ai_review_title),
+                        text = weekLabel(weekOffset),
                         style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                     Text(
-                        text = weekLabel(weekOffset) + " · " + weekRange(review),
+                        text = weekRange(review),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -147,35 +173,83 @@ private fun WeeklyReviewCard(
                 }
             }
 
-            StatRow(
-                leftLabel = stringResource(R.string.ai_review_stat_days),
-                leftValue = "${review.training.completedDays} / ${review.training.plannedDays}",
-                rightLabel = stringResource(R.string.ai_review_stat_volume),
-                rightValue = formatKg(review.training.totalVolumeKg),
-            )
-            StatRow(
-                leftLabel = stringResource(R.string.ai_review_stat_rpe),
-                leftValue = review.training.avgRpe?.let { formatKg(it) }
-                    ?: stringResource(R.string.ai_review_value_missing),
-                rightLabel = stringResource(R.string.ai_review_stat_weight),
-                rightValue = review.body.deltaKg?.let { delta ->
-                    (if (delta > 0f) "+" else "") + formatKg(delta)
-                } ?: stringResource(R.string.ai_review_value_missing),
-            )
-            StatRow(
-                leftLabel = stringResource(R.string.ai_review_stat_diet),
-                // 只要**有任何一天是打勾估的**，日均前面就得带「约」：
-                // 只在"全是估的"时才标，会让一周里记一天明细就把另外六天的猜测洗成准数
-                // —— 而 AI 会照着这个数开建议（Q31 = B）。
-                leftValue = review.diet.avgKcal?.let { kcal ->
-                    if (review.diet.preciseDays < review.diet.loggedDays) {
-                        stringResource(R.string.ai_review_diet_approx, kcal)
-                    } else {
-                        kcal.toString()
+            val training = review.training
+            MetricRow(
+                cells = buildList {
+                    if (training.totalVolumeKg > 0f) {
+                        add(MetricCell(stringResource(R.string.ai_review_stat_capacity), capacityText(training.totalVolumeKg)))
                     }
-                } ?: stringResource(R.string.ai_review_value_missing),
-                rightLabel = null,
-                rightValue = null,
+                    if (training.totalSets > 0 || training.plannedSets > 0) {
+                        add(
+                            MetricCell(
+                                stringResource(R.string.ai_review_stat_sets),
+                                if (training.plannedSets > 0) {
+                                    stringResource(R.string.ai_review_sets_ratio, training.totalSets, training.plannedSets)
+                                } else {
+                                    training.totalSets.toString()
+                                },
+                            ),
+                        )
+                    }
+                    training.avgRpe?.let { rpe ->
+                        add(MetricCell(stringResource(R.string.ai_review_stat_rpe), formatKg(rpe)))
+                    }
+                    review.body.latestWeightKg?.let { weight ->
+                        add(
+                            MetricCell(
+                                stringResource(R.string.ai_review_stat_weight_now),
+                                formatKg(weight),
+                                sub = review.body.deltaKg?.let { delta -> weightDeltaText(delta) },
+                            ),
+                        )
+                    }
+                },
+            )
+            MetricRow(
+                cells = buildList {
+                    add(
+                        MetricCell(
+                            stringResource(R.string.ai_review_stat_days),
+                            "${training.completedDays}/${training.plannedDays}",
+                        ),
+                    )
+                    review.diet.avgKcal?.let { kcal ->
+                        // 只要有任何一天是打勾估的，日均前面就得带「约」：只在"全是估的"时才标，
+                        // 会让一周里记一天明细就把另外六天的猜测洗成准数 —— 而 AI 会照着这个数开建议。
+                        val approx: Boolean = review.diet.preciseDays < review.diet.loggedDays
+                        add(
+                            MetricCell(
+                                stringResource(
+                                    if (approx) R.string.ai_day_stat_kcal_approx else R.string.ai_review_stat_diet,
+                                ),
+                                if (approx) stringResource(R.string.ai_review_diet_approx, kcal) else kcal.toString(),
+                            ),
+                        )
+                    }
+                    review.diet.avgProteinG?.let { protein ->
+                        add(MetricCell(stringResource(R.string.ai_review_stat_protein), protein.toString()))
+                    }
+                    if (review.body.sampleCount > 0) {
+                        add(
+                            MetricCell(
+                                stringResource(R.string.ai_review_stat_weighins),
+                                stringResource(R.string.ai_review_unit_weighins, review.body.sampleCount),
+                            ),
+                        )
+                    }
+                },
+            )
+
+            WeekHeatStrip(
+                days = review.days,
+                todayEpochDay = review.todayEpochDay,
+                selected = selectedDayIndex,
+                onSelect = onSelectDay,
+            )
+            Text(
+                text = stringResource(R.string.ai_review_heat_basis),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
             trendLines(review)?.let { lines ->
@@ -439,52 +513,185 @@ internal fun WeekPackageSheet(
     }
 }
 
-/** 两列统计行（右列给 `null` 就只显示左列）。 */
+/** 一格指标：`sub` 是数字下面那行小字（体重格用它带 ↓0.8）。 */
+private data class MetricCell(
+    val label: String,
+    val value: String,
+    val sub: String? = null,
+)
+
+/**
+ * 一行指标格。
+ *
+ * ⚠️ 调用方**只把有数据的格塞进来**：`null` 不渲染成 0、也不渲染成破折号冒充有数
+ * （用户定的「磁贴必须诚实」）。所以一行可能 1–4 格，宽度按格数均分。
+ */
 @Composable
-private fun StatRow(
-    leftLabel: String,
-    leftValue: String,
-    rightLabel: String?,
-    rightValue: String?,
-) {
+private fun MetricRow(cells: List<MetricCell>) {
+    if (cells.isEmpty()) return
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.md),
+        horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
     ) {
-        StatCell(label = leftLabel, value = leftValue, modifier = Modifier.weight(1f))
-        if (rightLabel != null && rightValue != null) {
-            StatCell(label = rightLabel, value = rightValue, modifier = Modifier.weight(1f))
+        cells.forEach { cell ->
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = cell.value,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = cell.label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                cell.sub?.let { sub ->
+                    Text(
+                        text = sub,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
         }
     }
 }
 
+/**
+ * 七天热力条。
+ *
+ * ⚠️ 和「今日」页那条 [com.ironhabit.app.ui.screens.today] 的 `WeekHeatStrip` **口径不同**：
+ * 那条的填色来自打卡**行数**，这条来自**完成组数**。所以页面上必须写清依据
+ * （见 `ai_review_heat_basis`），否则同一周两屏两种深浅一定被当成 bug。
+ *
+ * 七格**全部可点**，含计划 0 组也没打卡的空天 —— 空天恰恰是教练最该被问的一天。
+ */
 @Composable
-private fun StatCell(label: String, value: String, modifier: Modifier = Modifier) {
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-        ),
-    ) {
-        Column(
+private fun WeekHeatStrip(
+    days: List<WeekDayDetail>,
+    todayEpochDay: Long?,
+    selected: Int?,
+    onSelect: (Int) -> Unit,
+) {
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.xs),
+        ) {
+            days.forEachIndexed { index, day ->
+                HeatCell(
+                    day = day,
+                    weekdayIndex = index,
+                    isToday = todayEpochDay != null && day.dateEpochDay == todayEpochDay,
+                    selected = selected == index,
+                    modifier = Modifier.weight(1f),
+                    onClick = { onSelect(index) },
+                )
+            }
+        }
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = IronHabitSpacing.sm, horizontal = IronHabitSpacing.md),
-            horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+                .padding(top = IronHabitSpacing.xxs),
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Text(
-                text = value,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
+                text = stringResource(R.string.weekday_short_mon),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                text = label,
+                text = stringResource(R.string.ai_review_heat_hint),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = stringResource(R.string.weekday_short_sun),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
 }
+
+@Composable
+private fun HeatCell(
+    day: WeekDayDetail,
+    weekdayIndex: Int,
+    isToday: Boolean,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    // 沿用「今日」页磁贴的按压手感（实测 2.44% 缩放）；格子能按就必须给按压反馈。
+    val scale by animateFloatAsState(targetValue = if (pressed) 0.975f else 1f, label = "heatCellScale")
+
+    val done: Boolean = day.completedSets > 0 &&
+        (day.plannedSets == 0 || day.completedSets >= day.plannedSets)
+    val partial: Boolean = day.completedSets > 0 && day.plannedSets > day.completedSets
+
+    val fill: androidx.compose.ui.graphics.Color = when {
+        done -> MaterialTheme.colorScheme.primary
+        partial -> MaterialTheme.colorScheme.primary.copy(alpha = 0.42f)
+        isToday -> MaterialTheme.colorScheme.secondaryContainer
+        else -> MaterialTheme.colorScheme.surfaceVariant
+    }
+    val labelColor = if (done) {
+        MaterialTheme.colorScheme.onPrimary
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    // days 由 buildDays 按周一→周日固定产出 7 项，下标就是星期几，不必再从 epochDay 反推。
+    val weekdayRes: Int = WEEKDAY_SHORT_RES[weekdayIndex.coerceIn(0, 6)]
+
+    Box(
+        modifier = modifier
+            .scale(scale)
+            .heightIn(min = 26.dp)
+            .clip(IronHabitShapes.cell)
+            .background(fill)
+            .then(
+                if (selected) {
+                    Modifier.border(2.dp, MaterialTheme.colorScheme.onSurface, IronHabitShapes.cell)
+                } else {
+                    Modifier
+                },
+            )
+            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = stringResource(weekdayRes),
+            style = MaterialTheme.typography.labelSmall,
+            color = labelColor,
+            modifier = Modifier.padding(vertical = IronHabitSpacing.xs),
+        )
+    }
+}
+
+/** 容量：够一吨就换成吨（四列窄格里 "24300" 放不下，而且吨才是人读的数）。 */
+@Composable
+private fun capacityText(volumeKg: Float): String = if (volumeKg >= 1000f) {
+    stringResource(R.string.ai_review_capacity_tonnes, formatKg(volumeKg / 1000f))
+} else {
+    stringResource(R.string.ai_review_capacity_kg, formatKg(volumeKg))
+}
+
+/** 体重变化：正数 ↑、负数 ↓，都不带正负号（箭头已经表达了方向）。 */
+@Composable
+private fun weightDeltaText(deltaKg: Float): String =
+    stringResource(
+        if (deltaKg < 0f) R.string.ai_review_weight_delta_down else R.string.ai_review_weight_delta_up,
+        formatKg(kotlin.math.abs(deltaKg)),
+    )
+
+private val WEEKDAY_SHORT_RES = listOf(
+    R.string.weekday_short_mon, R.string.weekday_short_tue, R.string.weekday_short_wed,
+    R.string.weekday_short_thu, R.string.weekday_short_fri, R.string.weekday_short_sat,
+    R.string.weekday_short_sun,
+)
 
 /** 进步 / 停滞两行；两者都为空 → 返回 `null`（UI 显示"还看不出来"）。 */
 @Composable

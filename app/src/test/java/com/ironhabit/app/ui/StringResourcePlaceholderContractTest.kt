@@ -104,6 +104,14 @@ class StringResourcePlaceholderContractTest {
         entry("label_meal_kcal_approx", ArgKind.NUMERIC, ArgKind.NUMERIC) // MealBlock 粗记态（kcal, 蛋白 g）
         entry("msg_meal_item_limit", ArgKind.STRING) // TodayViewModel（上限走 snackbarArgs: List<String> → 只能 %1$s）
         entry("ai_review_diet_approx", ArgKind.NUMERIC) // WeeklyReviewBlock（avgKcal: Int，全是粗记时给日均前面加「约」）
+        entry("ai_review_unit_weighins", ArgKind.NUMERIC) // WeeklyReviewBlock 称重格（sampleCount: Int）
+        entry("ai_review_sets_ratio", ArgKind.NUMERIC, ArgKind.NUMERIC) // WeeklyReviewBlock 组数格（totalSets, plannedSets）
+        entry("ai_review_capacity_tonnes", ArgKind.STRING) // WeeklyReviewBlock 容量格（Kotlin 里取好小数再塞 %s）
+        entry("ai_review_capacity_kg", ArgKind.STRING) // 同上，不到 1 吨时退回 kg
+        entry("ai_review_weight_delta_down", ArgKind.STRING) // 体重格 ↓0.8
+        entry("ai_review_weight_delta_up", ArgKind.STRING) // 体重格 ↑0.8
+        entry("ai_day_value_approx", ArgKind.NUMERIC) // 日卡粗记那天的热量
+        entry("ai_day_shortfall", ArgKind.NUMERIC, ArgKind.NUMERIC, ArgKind.NUMERIC) // 日卡：计划 / 实际 / 差几组
 
         // ---------------- 【未使用】strings.xml 有占位符、代码暂无引用 ----------------
         entry("label_week_of", ArgKind.STRING)

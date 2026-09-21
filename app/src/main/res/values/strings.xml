@@ -537,6 +537,35 @@
     <string name="ai_review_week_range">%1$s ~ %2$s</string>
     <string name="ai_review_export">导出数据包</string>
     <string name="ai_review_insight_past_week">回看的旧周只重算这一周的数字，不再附一段解读 —— 解读要的是「最近两周」这个窗口，挂在这周上就是口径不符。</string>
+
+    <!-- ===== 周卡：两行四列 + 星期热力条 ===== -->
+    <string name="ai_review_stat_capacity">容量</string>
+    <string name="ai_review_stat_sets">组数</string>
+    <string name="ai_review_stat_weight_now">体重</string>
+    <string name="ai_review_stat_protein">蛋白</string>
+    <string name="ai_review_stat_weighins">称重</string>
+    <string name="ai_review_unit_weighins">%1$d 次</string>
+    <string name="ai_review_sets_ratio">%1$d/%2$d</string>
+    <string name="ai_review_capacity_tonnes">%1$s t</string>
+    <string name="ai_review_capacity_kg">%1$s kg</string>
+    <string name="ai_review_weight_delta_down">↓%1$s</string>
+    <string name="ai_review_weight_delta_up">↑%1$s</string>
+    <string name="ai_review_heat_hint">点某天看当天 · 计划 vs 实际</string>
+    <!-- 与「今日」页那条热力条口径不同，必须写在页面上，否则同一周两屏两种深浅会被当成 bug -->
+    <string name="ai_review_heat_basis">这条按完成组数上色；「今日」页那条按打卡条数上色，两者深浅不必一致</string>
+
+    <!-- ===== 只读日卡 ===== -->
+    <string name="ai_day_stat_sets">组数</string>
+    <string name="ai_day_stat_weight">体重</string>
+    <string name="ai_day_stat_kcal">热量</string>
+    <string name="ai_day_stat_kcal_approx">热量 · 粗记</string>
+    <string name="ai_day_stat_protein">蛋白</string>
+    <string name="ai_day_value_approx">约 %1$d</string>
+    <string name="ai_day_items_label">训练实际（RPE 是整条动作的，不是逐组）</string>
+    <string name="ai_day_rpe_missing">未记 RPE</string>
+    <string name="ai_day_shortfall">计划 %1$d 组 · 实际 %2$d 组，还差 %3$d 组。具体是哪几条没做，数据库里没留，列不出来。</string>
+    <string name="ai_day_empty">这天没有记录：计划 0 组、实际 0 组、没称重、没记饮食。</string>
+    <string name="ai_day_readonly_note">只读。看不到逐组是哪几组（只在打卡掩码里）、动作时长、逐组 RPE、计划容量 —— 数据层没有这些，宁可不显示也不编。</string>
     <string name="ai_review_export_hint">数据包就是这段 JSON：可以复制给任何 AI 看；App 直连 DeepSeek 时用的也是同一份数据</string>
     <string name="ai_package_title">AI 会看到什么</string>
     <string name="ai_package_detail_on">明细 + 汇总</string>
