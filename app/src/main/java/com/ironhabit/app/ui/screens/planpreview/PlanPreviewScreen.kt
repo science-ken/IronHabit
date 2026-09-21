@@ -25,6 +25,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ironhabit.app.R
+import com.ironhabit.app.ui.components.LocalSnackbarHostState
 import com.ironhabit.app.ui.theme.IronHabitSpacing
 
 /** 周一~周日（下标 0 = 周一）。 */
@@ -45,6 +46,19 @@ fun PlanPreviewScreen(
     viewModel: PlanPreviewViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val snackbarHostState = LocalSnackbarHostState.current
+
+    // 「已写入 N 条计划」以前从来没被看见过：ViewModel 一直在设 snackbarRes，
+    // 也有 onConsumeSnackbar()，但这一页过去根本没接 Snackbar host。
+    val snackbarText: String? = uiState.snackbarRes?.let { res ->
+        uiState.snackbarArg?.let { arg -> stringResource(res, arg) } ?: stringResource(res)
+    }
+    LaunchedEffect(snackbarText) {
+        if (snackbarText != null) {
+            snackbarHostState.showSnackbar(snackbarText)
+            viewModel.onConsumeSnackbar()
+        }
+    }
 
     LaunchedEffect(uiState.finished) {
         if (uiState.finished) onBack()
@@ -81,6 +95,33 @@ fun PlanPreviewScreen(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        // 模型每次都写好了这段「为什么这么排」，以前这一页 grep analysis 零命中 ——
+        // 等于白花钱生成再扔掉。本地规则不产中文（LocalRuleAdvisor 只吐资源名），
+        // 所以 analysis 为 null 时整块不显示，不拿规则文案硬凑一段看起来像 AI 写的话。
+        val analysis: String? = uiState.analysis
+        if (!analysis.isNullOrBlank()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                ),
+            ) {
+                Column(
+                    modifier = Modifier.padding(IronHabitSpacing.lg),
+                    verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.xs),
+                ) {
+                    Text(
+                        text = stringResource(R.string.plan_preview_analysis_label),
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                    Text(
+                        text = analysis,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
+        }
         if (uiState.preservedCount > 0) {
             Text(
                 text = stringResource(R.string.plan_preview_preserved, uiState.preservedCount),

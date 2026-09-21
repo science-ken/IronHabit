@@ -72,6 +72,7 @@
     <!-- ===== 计划预览（生成 → 逐天采纳 → 不写库）===== -->
     <string name="title_plan_preview">本周计划预览 · %1$s</string>
     <string name="plan_preview_hint">这些还没写进你的计划。挑要练的天点「采纳这天」，没点的一条都不会进库。</string>
+    <string name="plan_preview_analysis_label">教练说明</string>
     <string name="plan_preview_preserved">已保留你手动改过的 %1$d 条，不会被覆盖</string>
     <string name="plan_preview_day_meta">%1$d 个动作 · %2$d 组</string>
     <string name="plan_preview_adopt_day">采纳这天</string>

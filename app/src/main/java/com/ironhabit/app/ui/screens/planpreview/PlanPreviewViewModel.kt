@@ -63,6 +63,11 @@ class PlanPreviewViewModel @Inject constructor(
         val sourceIsAi: Boolean = false,
         val days: List<Day> = emptyList(),
         val preservedCount: Int = 0,
+        /**
+         * 模型这次写好的「为什么这么排」（远端才有；本地规则恒为 `null`，
+         * 因为 `LocalRuleAdvisor` 只吐资源名、不产中文）。
+         */
+        val analysis: String? = null,
         val busy: Boolean = false,
         @StringRes val snackbarRes: Int? = null,
         val snackbarArg: String? = null,
@@ -94,6 +99,7 @@ class PlanPreviewViewModel @Inject constructor(
                 state.copy(
                     weekRange = weekRangeText(snapshot.weekStartEpochDay),
                     sourceIsAi = snapshot.source == AdviceSource.REMOTE_LLM,
+                    analysis = snapshot.analysis,
                     preservedCount = snapshot.preservedCount,
                     days = (MIN_DAY..MAX_DAY).map { day ->
                         val rows: List<WeekPlan>? = snapshot.draftsByDay[day]
