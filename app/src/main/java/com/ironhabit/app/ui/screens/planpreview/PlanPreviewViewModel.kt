@@ -61,6 +61,8 @@ class PlanPreviewViewModel @Inject constructor(
     data class UiState(
         val weekRange: String = "",
         val sourceIsAi: Boolean = false,
+        /** 本次是"想用 AI 但失败了才落到本地规则"，不是"用户本来就关着 AI"。 */
+        val fellBackFromRemote: Boolean = false,
         val days: List<Day> = emptyList(),
         val preservedCount: Int = 0,
         /**
@@ -99,6 +101,7 @@ class PlanPreviewViewModel @Inject constructor(
                 state.copy(
                     weekRange = weekRangeText(snapshot.weekStartEpochDay),
                     sourceIsAi = snapshot.source == AdviceSource.REMOTE_LLM,
+                    fellBackFromRemote = snapshot.fallbackReason != null,
                     analysis = snapshot.analysis,
                     preservedCount = snapshot.preservedCount,
                     days = (MIN_DAY..MAX_DAY).map { day ->

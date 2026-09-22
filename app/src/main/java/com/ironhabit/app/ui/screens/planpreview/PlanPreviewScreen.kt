@@ -90,6 +90,15 @@ fun PlanPreviewScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        // 断网或远端报错时结果同样是本地规则，而这页原来只写「本地规则」三个字 ——
+        // 用户白等一次超时却读不到原因。AI 教练屏早就有这句话（`SourceLine`），同一件事说同一句。
+        if (uiState.fellBackFromRemote) {
+            Text(
+                text = stringResource(R.string.ai_source_fallback),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         Text(
             text = stringResource(R.string.plan_preview_hint),
             style = MaterialTheme.typography.bodySmall,
