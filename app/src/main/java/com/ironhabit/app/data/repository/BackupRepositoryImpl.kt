@@ -133,9 +133,12 @@ class BackupRepositoryImpl @Inject constructor(
             "备份文件版本过高（v${payload.schemaVersion}），请升级 App 后再导入"
         }
 
-        // 老备份（v1/v2）不携带 `createdAt` → 回落到**本次导入时刻**，避免 `created_at = 0`
-        // 破坏 `ORDER BY created_at DESC` 的历史排序（同一个值，保证同批数据次序稳定）。
-        val importMillis = clock.now().toEpochMilliseconds()
+        // 兜底值按版本决定：v1/v2 缺字段 → 导入时刻（否则整表没有创建时刻，历史排序会乱）；
+        // v3+ 的 0 是合法值 → 兜底为 0，即原样写回。理由见 `BackupRestoreRules.createdAtFallback`。
+        val createdAtFallback: Long = BackupRestoreRules.createdAtFallback(
+            schemaVersion = payload.schemaVersion,
+            importMillis = clock.now().toEpochMilliseconds(),
+        )
 
         database.withTransaction {
             exerciseDao.clearAll()
@@ -160,18 +163,18 @@ class BackupRepositoryImpl @Inject constructor(
                 mealDao.clearAll()
             }
 
-            exerciseDao.insertAll(payload.exercises.map { it.toEntity(importMillis) })
-            weekPlanDao.insertAll(payload.weekPlans.map { it.toEntity(importMillis) })
-            checkInDao.insertAll(payload.checkIns.map { it.toEntity(importMillis) })
-            habitDao.insertAll(payload.habits.map { it.toEntity(importMillis) })
-            habitLogDao.insertAll(payload.habitLogs.map { it.toEntity(importMillis) })
-            bodyMetricDao.insertAll(payload.bodyMetrics.map { it.toEntity(importMillis) })
+            exerciseDao.insertAll(payload.exercises.map { it.toEntity(createdAtFallback) })
+            weekPlanDao.insertAll(payload.weekPlans.map { it.toEntity(createdAtFallback) })
+            checkInDao.insertAll(payload.checkIns.map { it.toEntity(createdAtFallback) })
+            habitDao.insertAll(payload.habits.map { it.toEntity(createdAtFallback) })
+            habitLogDao.insertAll(payload.habitLogs.map { it.toEntity(createdAtFallback) })
+            bodyMetricDao.insertAll(payload.bodyMetrics.map { it.toEntity(createdAtFallback) })
             if (replacesDiet) {
                 // 写入顺序 = 外键方向：`meals` / `foods` 先落，`food_servings` 与 `meal_items` 才有父行可指。
-                mealDao.insertAll(payload.meals.map { it.toEntity(importMillis) })
-                foodDao.insertAll(payload.foods.map { it.toEntity(importMillis) })
+                mealDao.insertAll(payload.meals.map { it.toEntity(createdAtFallback) })
+                foodDao.insertAll(payload.foods.map { it.toEntity(createdAtFallback) })
                 foodDao.insertAllServings(payload.foods.flatMap { it.toServingEntities() })
-                mealItemDao.insertAll(payload.mealItems.map { it.toEntity(importMillis) })
+                mealItemDao.insertAll(payload.mealItems.map { it.toEntity(createdAtFallback) })
             }
         }
 
@@ -318,14 +321,30 @@ internal object BackupRestoreRules {
     fun replacesDietTables(schemaVersion: Int): Boolean =
         carriesMeals(schemaVersion) && carriesDietDetail(schemaVersion)
 
+    /** 备份自 v3 起携带每行的 `createdAt`。 */
+    const val CREATED_AT_SCHEMA_VERSION: Int = 3
+
+    /**
+     * 「本次导入时刻」在这个版本的备份上**能不能**当 `createdAt` 的兜底值。
+     *
+     * v1/v2 压根没有这个键（解码即 `0`）→ 能，否则整表都没有创建时刻、历史排序会乱；
+     * v3+ 的 `0` 是**合法值**（播种的内置食物与老计划行本来就没有创建时刻）→ 不能。
+     * 拿导入时刻去盖它，等于"导出自己的备份再导回来"也会改写数据
+     * （D16：2026-09-22 实测一次往返改写了 50 行 —— `foods` 29 / `week_plans` 17 / `exercises` 4）。
+     *
+     * @return 可以当兜底的值；v3+ 返回 `0`，表示"没有兜底，原样写回"。
+     */
+    fun createdAtFallback(schemaVersion: Int, importMillis: Long): Long =
+        if (schemaVersion >= CREATED_AT_SCHEMA_VERSION) 0L else importMillis
+
     /**
      * 备份 `createdAt` → 实体 `createdAt`。
      *
-     * v1/v2 老备份没有该字段（解码为 `0L`）→ 回落到 [importMillis]（本次导入时刻），
-     * 保证 `ORDER BY created_at DESC` 仍有确定次序；v3+ 备份原样透传。
+     * 兜底值由上面的 [createdAtFallback] 按版本算好（v3+ 恒为 `0`）：
+     * 备份里带真实时间戳就用它，否则用兜底 —— 兜底是 `0` 时即原样透传。
      */
-    fun resolveCreatedAt(backupCreatedAt: Long, importMillis: Long): Long =
-        backupCreatedAt.takeIf { it > 0L } ?: importMillis
+    fun resolveCreatedAt(backupCreatedAt: Long, createdAtFallback: Long): Long =
+        backupCreatedAt.takeIf { it > 0L } ?: createdAtFallback
 
     /**
      * 集合字段是否写回。
@@ -359,7 +378,7 @@ private fun ExerciseEntity.toBackup(): ExerciseBackup = ExerciseBackup(
 )
 
 @Suppress("DEPRECATION")
-private fun ExerciseBackup.toEntity(importMillis: Long): ExerciseEntity {
+private fun ExerciseBackup.toEntity(createdAtFallback: Long): ExerciseEntity {
     // v2 备份直接用 source；v1 老备份 source 为空 → 由 isBuiltIn 推导三态来源。
     val resolvedSource = parseExerciseSource(source)
         ?: if (isBuiltIn) ExerciseSource.BUILT_IN else ExerciseSource.CUSTOM
@@ -378,7 +397,7 @@ private fun ExerciseBackup.toEntity(importMillis: Long): ExerciseEntity {
         defaultDurationSec = defaultDurationSec ?: 0,
         timesUsed = timesUsed,
         sortOrder = sortOrder,
-        createdAt = BackupRestoreRules.resolveCreatedAt(createdAt, importMillis),
+        createdAt = BackupRestoreRules.resolveCreatedAt(createdAt, createdAtFallback),
     )
 }
 
@@ -397,7 +416,7 @@ private fun WeekPlanEntity.toBackup(): WeekPlanBackup = WeekPlanBackup(
     createdAt = createdAt,
 )
 
-private fun WeekPlanBackup.toEntity(importMillis: Long): WeekPlanEntity = WeekPlanEntity(
+private fun WeekPlanBackup.toEntity(createdAtFallback: Long): WeekPlanEntity = WeekPlanEntity(
     id = id,
     exerciseId = exerciseId,
     dayOfWeek = dayOfWeek,
@@ -409,7 +428,7 @@ private fun WeekPlanBackup.toEntity(importMillis: Long): WeekPlanEntity = WeekPl
     isActive = isActive,
     isUserEdited = isUserEdited,
     weekStartEpochDay = weekStartEpochDay,
-    createdAt = BackupRestoreRules.resolveCreatedAt(createdAt, importMillis),
+    createdAt = BackupRestoreRules.resolveCreatedAt(createdAt, createdAtFallback),
 )
 
 private fun CheckInEntity.toBackup(): CheckInBackup = CheckInBackup(
@@ -430,7 +449,7 @@ private fun CheckInEntity.toBackup(): CheckInBackup = CheckInBackup(
     createdAt = createdAt,
 )
 
-private fun CheckInBackup.toEntity(importMillis: Long): CheckInEntity {
+private fun CheckInBackup.toEntity(createdAtFallback: Long): CheckInEntity {
     // 唯一真源是 mask；老备份（mask == null）由 completedSets 折算为低 n 位全 1。
     val mask = completedSetsMask ?: CheckIn.maskFromCount(completedSets)
     return CheckInEntity(
@@ -448,7 +467,7 @@ private fun CheckInBackup.toEntity(importMillis: Long): CheckInEntity {
         notes = notes,
         isQuick = isQuick,
         loggedAtMillis = loggedAtMillis,
-        createdAt = BackupRestoreRules.resolveCreatedAt(createdAt, importMillis),
+        createdAt = BackupRestoreRules.resolveCreatedAt(createdAt, createdAtFallback),
     )
 }
 
@@ -470,7 +489,7 @@ private fun HabitEntity.toBackup(): HabitBackup = HabitBackup(
     createdAt = createdAt,
 )
 
-private fun HabitBackup.toEntity(importMillis: Long): HabitEntity = HabitEntity(
+private fun HabitBackup.toEntity(createdAtFallback: Long): HabitEntity = HabitEntity(
     id = id,
     name = name,
     emoji = emoji,
@@ -485,7 +504,7 @@ private fun HabitBackup.toEntity(importMillis: Long): HabitEntity = HabitEntity(
     targetUnit = targetUnit,
     isActive = isActive,
     sortOrder = sortOrder,
-    createdAt = BackupRestoreRules.resolveCreatedAt(createdAt, importMillis),
+    createdAt = BackupRestoreRules.resolveCreatedAt(createdAt, createdAtFallback),
 )
 
 private fun HabitLogEntity.toBackup(): HabitLogBackup = HabitLogBackup(
@@ -499,7 +518,7 @@ private fun HabitLogEntity.toBackup(): HabitLogBackup = HabitLogBackup(
     createdAt = createdAt,
 )
 
-private fun HabitLogBackup.toEntity(importMillis: Long): HabitLogEntity = HabitLogEntity(
+private fun HabitLogBackup.toEntity(createdAtFallback: Long): HabitLogEntity = HabitLogEntity(
     id = id,
     habitId = habitId,
     dateEpochDay = dateEpochDay,
@@ -507,7 +526,7 @@ private fun HabitLogBackup.toEntity(importMillis: Long): HabitLogEntity = HabitL
     isCompleted = isCompleted,
     note = note,
     loggedAtMillis = loggedAtMillis,
-    createdAt = BackupRestoreRules.resolveCreatedAt(createdAt, importMillis),
+    createdAt = BackupRestoreRules.resolveCreatedAt(createdAt, createdAtFallback),
 )
 
 private fun BodyMetricEntity.toBackup(): BodyMetricBackup = BodyMetricBackup(
@@ -521,7 +540,7 @@ private fun BodyMetricEntity.toBackup(): BodyMetricBackup = BodyMetricBackup(
     createdAt = createdAt,
 )
 
-private fun BodyMetricBackup.toEntity(importMillis: Long): BodyMetricEntity = BodyMetricEntity(
+private fun BodyMetricBackup.toEntity(createdAtFallback: Long): BodyMetricEntity = BodyMetricEntity(
     id = id,
     type = parseMetricType(type),
     value = value,
@@ -529,7 +548,7 @@ private fun BodyMetricBackup.toEntity(importMillis: Long): BodyMetricEntity = Bo
     dateEpochDay = dateEpochDay,
     dateStartMillis = dateStartMillis,
     note = note,
-    createdAt = BackupRestoreRules.resolveCreatedAt(createdAt, importMillis),
+    createdAt = BackupRestoreRules.resolveCreatedAt(createdAt, createdAtFallback),
 )
 
 private fun MealEntity.toBackup(): MealBackup = MealBackup(
@@ -546,7 +565,7 @@ private fun MealEntity.toBackup(): MealBackup = MealBackup(
     createdAt = createdAt,
 )
 
-private fun MealBackup.toEntity(importMillis: Long): MealEntity = MealEntity(
+private fun MealBackup.toEntity(createdAtFallback: Long): MealEntity = MealEntity(
     id = id,
     dateEpochDay = dateEpochDay,
     mealType = mealType,
@@ -557,7 +576,7 @@ private fun MealBackup.toEntity(importMillis: Long): MealEntity = MealEntity(
     sortOrder = sortOrder,
     isActive = isActive,
     isUserEdited = isUserEdited,
-    createdAt = BackupRestoreRules.resolveCreatedAt(createdAt, importMillis),
+    createdAt = BackupRestoreRules.resolveCreatedAt(createdAt, createdAtFallback),
 )
 
 private fun FoodWithServings.toBackup(): FoodBackup = FoodBackup(
@@ -584,7 +603,7 @@ private fun FoodWithServings.toBackup(): FoodBackup = FoodBackup(
     },
 )
 
-private fun FoodBackup.toEntity(importMillis: Long): FoodEntity = FoodEntity(
+private fun FoodBackup.toEntity(createdAtFallback: Long): FoodEntity = FoodEntity(
     id = id,
     name = name,
     kcalPer100g = kcalPer100g,
@@ -597,7 +616,7 @@ private fun FoodBackup.toEntity(importMillis: Long): FoodEntity = FoodEntity(
     isActive = isActive,
     isUserEdited = isUserEdited,
     sortOrder = sortOrder,
-    createdAt = BackupRestoreRules.resolveCreatedAt(createdAt, importMillis),
+    createdAt = BackupRestoreRules.resolveCreatedAt(createdAt, createdAtFallback),
 )
 
 /**
@@ -633,7 +652,7 @@ private fun MealItemEntity.toBackup(): MealItemBackup = MealItemBackup(
 )
 
 /** 营养四项与 [foodName] **原样透传**：那是快照，回查 `foods` 重算等于让换机改写历史。 */
-private fun MealItemBackup.toEntity(importMillis: Long): MealItemEntity = MealItemEntity(
+private fun MealItemBackup.toEntity(createdAtFallback: Long): MealItemEntity = MealItemEntity(
     id = id,
     mealId = mealId,
     foodId = foodId,
@@ -646,7 +665,7 @@ private fun MealItemBackup.toEntity(importMillis: Long): MealItemEntity = MealIt
     carbsG = carbsG,
     fatG = fatG,
     sortOrder = sortOrder,
-    createdAt = BackupRestoreRules.resolveCreatedAt(createdAt, importMillis),
+    createdAt = BackupRestoreRules.resolveCreatedAt(createdAt, createdAtFallback),
 )
 
 /** 设置 + 用户档案 + AI 联网开关 → 备份快照（枚举一律存 `name`，与 [SettingsDataStore] 同口径）。 */

@@ -12,7 +12,7 @@ import org.junit.Test
  * ⚠️ `BackupRepositoryImpl` 自身需要 `AppDatabase` / `SettingsDataStore`（Room + Context + Hilt）
  * 才能构造，无法在纯 JVM 单测里实例化；因此把与 Android 无关的**映射规则**抽成同文件的
  * `internal object BackupRestoreRules`，此处直接测该对象。**仓库对外 API 未改动**，
- * `toEntity(importMillis)` 也逐个调用它，所以规则本身是生产路径上的同一份实现。
+ * `toEntity(createdAtFallback)` 也逐个调用它，所以规则本身是生产路径上的同一份实现。
  */
 class BackupRestoreRulesTest {
 
@@ -47,6 +47,55 @@ class BackupRestoreRulesTest {
         val importMillis = 1_700_000_000_000L
 
         assertEquals(importMillis, BackupRestoreRules.resolveCreatedAt(-1L, importMillis))
+    }
+
+    /**
+     * D16：v3+ 的 `0` 是**合法值**（播种的内置食物、老计划行本来就没有创建时刻）。
+     * 拿导入时刻去盖它，等于"导出自己的备份再原样导回来"也会改写数据 ——
+     * 2026-09-22 真机一次往返改掉了 50 行（`foods` 29 / `week_plans` 17 / `exercises` 4）。
+     */
+    @Test
+    fun currentBackupsNeverRewriteCreatedAt() {
+        val importMillis = 1_700_000_000_000L
+
+        assertEquals(
+            "v3 起兜底恒为 0",
+            0L,
+            BackupRestoreRules.createdAtFallback(3, importMillis),
+        )
+        assertEquals(
+            0L,
+            BackupRestoreRules.createdAtFallback(BackupPayload.CURRENT_SCHEMA_VERSION, importMillis),
+        )
+        assertEquals(
+            "v5 备份里 created_at=0 的行，导入之后仍然是 0",
+            0L,
+            BackupRestoreRules.resolveCreatedAt(
+                0L,
+                BackupRestoreRules.createdAtFallback(5, importMillis),
+            ),
+        )
+    }
+
+    @Test
+    fun legacyBackupsStillFallBackToImportMillis() {
+        val importMillis = 1_700_000_000_000L
+
+        assertEquals(importMillis, BackupRestoreRules.createdAtFallback(1, importMillis))
+        assertEquals(importMillis, BackupRestoreRules.createdAtFallback(2, importMillis))
+        assertEquals(
+            "v1/v2 压根没有这个键 → 必须回落，否则整表都没有创建时刻、历史排序会乱",
+            importMillis,
+            BackupRestoreRules.resolveCreatedAt(
+                0L,
+                BackupRestoreRules.createdAtFallback(2, importMillis),
+            ),
+        )
+        assertEquals(
+            "createdAt 与档案快照同为 v3 引入 —— 两个起始版本若漂移，说明有人只改了其中一处",
+            BackupRestoreRules.PROFILE_SNAPSHOT_SCHEMA_VERSION,
+            BackupRestoreRules.CREATED_AT_SCHEMA_VERSION,
+        )
     }
 
     // ---------------- 档案携带判定：v2 不携带 → 恢复时跳过（bug a）----------------
