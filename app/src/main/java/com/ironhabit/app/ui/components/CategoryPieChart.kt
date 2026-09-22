@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -73,8 +72,11 @@ fun CategoryPieChart(
             }
         }
 
+        // `weight(1f)` 而不是 `fillMaxSize()`：这是 `Row` 的子项，父容器是「我的」页那根可滚
+        // `Column`（无限高约束）—— 要满父宽满父高会把图例列的高度撑失控，与饼图也不居中了。
+        // 横向吃剩余宽度交给 weight，纵向对齐交给上面的 `CenterVertically`。
         Column(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.Center,
         ) {
             nonEmpty.forEachIndexed { index, share ->
