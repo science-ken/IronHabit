@@ -21,7 +21,8 @@ import kotlinx.datetime.TimeZone
  * 「生成 / 重新生成饮食计划」的结果摘要（纯数据，供 UI 展示"写了几餐 / 保留了几餐 / 是否用了默认值"）。
  *
  * @property writtenCount 本次实际写入的餐数
- * @property preservedCount 被完整保留的**用户手改行**餐数（含软删行），对应「不会被覆盖」提示
+ * @property preservedCount 对应「不会被覆盖」提示的餐数：**界面上还看得见**的用户手改餐
+ *   （被手改后又删掉的餐同样不被覆盖，但不计进这个数，因为用户找不到它）
  * @property target 本次使用的目标（供 UI 展示"已摄入 / 目标"）
  * @property filteredCount 本次因**忌口**丢弃的食物条目总数（供 UI 诚实提示，见 `msg_diet_filtered`）
  * @property appliedRestrictions 本次生效的忌口集合（`filteredCount == 0` 时 UI 不提示）
@@ -77,6 +78,13 @@ class GenerateDietPlanUseCase @Inject constructor(
             .filter { it.isUserEdited }
             .map { it.mealType }
             .toSet()
+        // 「已保留 N 餐」只数界面上找得着的。`softDelete` 会同时置 `is_user_edited = 1`，
+        // 所以"用户删掉的那一餐"也在 [blockedTypes] 里 —— 保护它（不复活）是对的，
+        // 但把它报进数字，就是拿一条看不见的餐骗用户"我们替你留住了改动"。
+        val visiblePreservedTypes: Set<MealType> = existing
+            .filter { it.isUserEdited && it.isActive }
+            .map { it.mealType }
+            .toSet()
 
         val nowMillis: Long = clock.now().toEpochMilliseconds()
         // 忌口过滤在纯函数内完成（§7.5.2 `dietaryAvoid`）：丢弃 tags ∩ 忌口 ≠ ∅ 的条目，
@@ -90,7 +98,7 @@ class GenerateDietPlanUseCase @Inject constructor(
 
         return@withContext GeneratedDietSummary(
             writtenCount = written,
-            preservedCount = blockedTypes.size,
+            preservedCount = visiblePreservedTypes.size,
             target = target,
             filteredCount = filteredCount,
             appliedRestrictions = profile.dietaryAvoid,

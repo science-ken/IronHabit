@@ -27,7 +27,9 @@ import kotlinx.datetime.toLocalDateTime
  * 「生成训练计划 / 重新生成」的结果摘要（纯数据，供 UI 展示"写了几条 / 保留了几条 / 为什么这样排"）。
  *
  * @property writtenCount 本次实际写入的计划条目数
- * @property preservedCount 被完整保留的**用户手改行**条数（含软删除行）
+ * @property preservedCount 「已保留 N 条」的 N：**本周界面上找得着**的手改行条数。
+ *   保护范围比它宽（模板手改行与软删行同样不被覆盖、不被复活），只是那些行用户看不到，
+ *   不计进这个数。
  * @property retiredCount 本次**被回收的陈旧 AI 行**条数（上版生成、本次不再出现 → 已停用，修复 C2）
  * @property notes "为什么这样排"的确定性理由（`PlanReason` 枚举，文案由界面侧决定要不要摊开）
  * @property source 本次实际使用的来源（本地规则 / AI 联网生成；联网失败回落时为 LOCAL_RULES）
@@ -190,6 +192,14 @@ class GenerateTrainingPlanUseCase @Inject constructor(
             .filter { day -> day !in weekActiveDays }
             .toSet()
 
+        // 「已保留 N 条」只数**用户在界面上找得着**的行。
+        // 模板手改行（`week_start = 0`）与软删行同样受保护（上面两件事照旧），但它们不会
+        // 出现在本周的卡片里 —— 把它们报进数字，就是"提示说保留了 4 条，用户一条都找不到"。
+        val visibleEditedThisWeek: Set<Long> = weekRows
+            .filter { plan -> plan.isActive && plan.isUserEdited }
+            .map { plan -> plan.id }
+            .toSet()
+
         // ② 只把"可写槽位"收集成待写列表，**整批**交给仓库（内部仍逐条显式 upsert）。
         val drafts: List<WeekPlan> = proposal.days.flatMap { day ->
             if (day.dayOfWeek in userOwnedDays) {
@@ -222,7 +232,7 @@ class GenerateTrainingPlanUseCase @Inject constructor(
             // `invoke()` 变成两次 `getRowsForWeek`，而"只读一次"是既有单测钉住的口径。
             weekRowsForRetirement = weekRows,
             templateOwnedDays = userOwnedDays,
-            preservedCount = proposal.preservedUserEditedIds.size,
+            preservedCount = proposal.preservedUserEditedIds.count { id -> id in visibleEditedThisWeek },
             notes = proposal.notes,
             source = proposal.source,
             fallbackReason = advisor.lastFallbackReason,

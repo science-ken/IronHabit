@@ -715,7 +715,12 @@ class P1AdversarialTest {
             "手改行（含软删除）永不被回收：实际回收了 $retiredIds",
             retiredIds.none { it == 11L || it == 12L },
         )
-        assertEquals("保留条数应如实等于手改行数", 2, summary.preservedCount)
+        assertEquals(
+            "「已保留」= 本周界面上看得见的手改行数（id 11 启用；id 12 已被用户删掉，" +
+                "仍受保护但不计进数字）",
+            1,
+            summary.preservedCount,
+        )
 
         coVerify(exactly = 0) { planRepository.delete(any()) }
         coVerify(exactly = 0) { planRepository.upsert(any()) }

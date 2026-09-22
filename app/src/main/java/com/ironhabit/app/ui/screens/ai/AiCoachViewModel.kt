@@ -41,7 +41,7 @@ import kotlinx.datetime.TimeZone
  * 远端 AI 只提供文字分析，不参与任何数值计算。
  *
  * @property writtenCount 本次实际写入的餐数
- * @property preservedCount 被完整保留的用户手改餐数（含软删行）
+ * @property preservedCount 界面上还看得见的用户手改餐数（删掉的那一餐同样不被覆盖，但不计数）
  * @property targetKcal 本地目标热量
  * @property targetProtein 本地目标蛋白质
  * @property usedDefaults 是否用了默认目标值（档案/体重未填全）

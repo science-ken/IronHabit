@@ -150,7 +150,7 @@ class GenerateTrainingPlanUseCaseTest {
         coVerify(exactly = 1) { planRepository.upsertGenerated(capture(slot)) }
         val written = slot.captured
 
-        assertEquals("两条手改行（含 1 条软删除行）都要计入「已保留」", 2, summary.preservedCount)
+        assertEquals("「已保留」只数界面上看得见的那条（软删那条仍受保护，见下面两条断言）", 1, summary.preservedCount)
         assertFalse(
             "手改行槽位（周一 × 动作1）不得被写入 —— 否则覆盖用户改动",
             written.any { it.dayOfWeek == 1 && it.exerciseId == 1L },
@@ -351,7 +351,7 @@ class GenerateTrainingPlanUseCaseTest {
             "本周自有专属行、且模板未动过的天（周五）照常生成",
             written.captured.any { it.dayOfWeek == 5 },
         )
-        assertEquals("两条模板手改行都要计入「已保留」", 2, summary.preservedCount)
+        assertEquals("模板手改行仍受保护，但它不属于本周界面 → 不计进「已保留」", 0, summary.preservedCount)
     }
 
     /**
@@ -425,7 +425,7 @@ class GenerateTrainingPlanUseCaseTest {
             "但模板手改的**槽位**（周一 × 动作1）仍受保护，不得写入",
             written.captured.any { it.dayOfWeek == 1 && it.exerciseId == 1L },
         )
-        assertEquals("模板手改行计入「已保留」", 1, summary.preservedCount)
+        assertEquals("模板手改行的槽位仍受保护，但不计进本周的「已保留」", 0, summary.preservedCount)
     }
 
     private companion object {
