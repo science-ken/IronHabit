@@ -586,7 +586,8 @@
     <string name="ai_chip_one_weighin_q">本周只称了一次体重，算不出变化。现在该看什么指标？</string>
     <string name="ai_chip_none">这周没有异常 · 问问教练</string>
     <string name="ai_chip_none_q">这周整体怎么样？</string>
-    <!-- 与「今日」页那条热力条口径不同，必须写在页面上，否则同一周两屏两种深浅会被当成 bug -->
+    <!-- 这条只说本页那条的口径。与「今日」页那条（按打卡条数上色）**刻意不同**，
+         差异不再写进用户可见文案（走查 #4），要改先两处一起看。 -->
     <string name="ai_review_heat_basis">颜色深浅 = 当天练完的组数</string>
 
     <!-- ===== 只读日卡 ===== -->
@@ -598,13 +599,13 @@
     <string name="ai_day_value_approx">约 %1$d</string>
     <string name="ai_day_items_label">训练实际（RPE 是整条动作的，不是逐组）</string>
     <string name="ai_day_rpe_missing">未记 RPE</string>
-    <string name="ai_day_shortfall">计划 %1$d 组 · 实际 %2$d 组，还差 %3$d 组。具体是哪几条没做，数据库里没留，列不出来。</string>
+    <string name="ai_day_shortfall">计划 %1$d 组 · 实际 %2$d 组，还差 %3$d 组</string>
     <string name="ai_day_empty">这天没有记录：计划 0 组、实际 0 组、没称重、没记饮食。</string>
     <string name="ai_day_readonly_note">只读 · 要改这天的训练，去「今日」页</string>
     <string name="ai_review_export_hint">数据包就是这段 JSON：可以复制给任何 AI 看；App 直连 DeepSeek 时用的也是同一份数据</string>
     <string name="ai_package_title">AI 会看到什么</string>
     <string name="ai_package_detail_on">明细 + 汇总</string>
-    <string name="ai_package_detail_off">只传汇总（省 token）</string>
+    <string name="ai_package_detail_off">只传汇总</string>
     <string name="ai_package_copy">复制 JSON</string>
     <string name="ai_package_copied">已复制到剪贴板</string>
     <string name="ai_package_close">关闭</string>
