@@ -3,6 +3,7 @@ package com.ironhabit.app.ui.screens.discipline
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ironhabit.app.R
+import com.ironhabit.app.domain.model.Habit
 import com.ironhabit.app.domain.model.HabitItem
 import com.ironhabit.app.domain.model.HeatmapCell
 import com.ironhabit.app.domain.repository.CheckInRepository
@@ -11,6 +12,7 @@ import com.ironhabit.app.domain.repository.StatsRepository
 import com.ironhabit.app.domain.usecase.CalculateStreakUseCase
 import com.ironhabit.app.domain.usecase.DeleteHabitUseCase
 import com.ironhabit.app.domain.usecase.GetHeatmapUseCase
+import com.ironhabit.app.domain.usecase.RestoreHabitUseCase
 import com.ironhabit.app.domain.usecase.ToggleHabitUseCase
 import com.ironhabit.app.domain.util.DateUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -47,6 +49,7 @@ class DisciplineViewModel @Inject constructor(
     private val statsRepository: StatsRepository,
     private val toggleHabit: ToggleHabitUseCase,
     private val deleteHabit: DeleteHabitUseCase,
+    private val restoreHabit: RestoreHabitUseCase,
     private val habitRepository: HabitRepository,
     private val checkInRepository: CheckInRepository,
     private val calculateStreak: CalculateStreakUseCase,
@@ -81,6 +84,10 @@ class DisciplineViewModel @Inject constructor(
             }
         }
 
+    /** 软删掉的习惯（`is_active = 0`）。它们不进 [habitItemsFlow]，但必须能在页面上找回来。 */
+    private val deletedHabitsFlow: Flow<List<Habit>> =
+        habitRepository.observeAllHabits().map { habits -> habits.filter { !it.isActive } }
+
     /** 热力图（打卡后自动刷新）。 */
     private val heatmapFlow: Flow<List<HeatmapCell>> =
         checkInRepository.observeActiveDaysSince(TRIGGER_SINCE_EPOCH_DAY)
@@ -106,12 +113,14 @@ class DisciplineViewModel @Inject constructor(
         .flatMapLatest {
             combine(
                 habitItemsFlow,
+                deletedHabitsFlow,
                 heatmapFlow,
                 monthRateFlow,
-            ) { habits, heatmap, monthRate ->
+            ) { habits, deletedHabits, heatmap, monthRate ->
                 DisciplineUiState(
                     isLoading = false,
                     habits = habits,
+                    deletedHabits = deletedHabits,
                     heatmap = heatmap,
                     monthCompletionRate = monthRate.rate,
                     hasAnyCheckIn = monthRate.hasAnyCheckIn,
@@ -153,7 +162,28 @@ class DisciplineViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 deleteHabit(habitId)
-                _uiState.update { state -> state.copy(snackbarRes = R.string.msg_deleted) }
+                // 删完立刻把「已删除」展开：用户的下一个问题必然是"那它去哪了"，
+                // 收起着就等于让他对着一个突然少了一行的列表找不着北。
+                _uiState.update { state ->
+                    state.copy(snackbarRes = R.string.msg_deleted, showDeleted = true)
+                }
+            } catch (throwable: Throwable) {
+                _uiState.update { state -> state.copy(errorRes = R.string.error_generic) }
+            }
+        }
+    }
+
+    /** 展开 / 收起「已删除 N 条」。 */
+    fun onToggleDeleted() {
+        _uiState.update { state -> state.copy(showDeleted = !state.showDeleted) }
+    }
+
+    /** 恢复一条已删除的习惯（`is_active` 翻回 1，历史日志原样接上）。 */
+    fun onRestoreHabit(habitId: Long) {
+        viewModelScope.launch {
+            try {
+                restoreHabit(habitId)
+                _uiState.update { state -> state.copy(snackbarRes = R.string.msg_restored) }
             } catch (throwable: Throwable) {
                 _uiState.update { state -> state.copy(errorRes = R.string.error_generic) }
             }
@@ -182,6 +212,8 @@ class DisciplineViewModel @Inject constructor(
     private fun merge(local: DisciplineUiState, data: DisciplineUiState): DisciplineUiState = data.copy(
         snackbarRes = local.snackbarRes,
         errorRes = data.errorRes ?: local.errorRes,
+        // 展开/收起是用户在这一个页面里的临时视角，数据刷新不该把它弹回去。
+        showDeleted = local.showDeleted,
     )
 
     private fun todayEpochDay(): Long = DateUtils.todayEpochDay(clock, timeZone)

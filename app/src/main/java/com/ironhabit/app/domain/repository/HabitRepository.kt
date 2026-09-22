@@ -13,10 +13,18 @@ interface HabitRepository {
     fun observeActiveHabits(): Flow<List<Habit>>
 
     /**
+     * 观察**全部**习惯（含 `is_active = 0` 的已删除行）。
+     *
+     * 给自律页的「已删除 N 条」用：软删的行如果界面上完全找不到，用户就只剩"重建一条同名习惯"
+     * 这条路，而重建会拿到新 id、与老日志的关联永久断掉（热力图与连续天数按 habitId 逐条算）。
+     */
+    fun observeAllHabits(): Flow<List<Habit>>
+
+    /**
      * 一次性快照：**含已停用 / 已软删**的全部习惯。
      *
      * 只给提醒重排用 —— 重排必须能把"曾经排过、现在不该再响"的那些槽撤掉，
-     * 只看启用中的习惯就找不到它们了。界面不要用它（会把已删习惯渲染出来）。
+     * 只看启用中的习惯就找不到它们了。界面要列已删除的请用 [observeAllHabits]（响应式）。
      */
     suspend fun allHabits(): List<Habit>
 
@@ -50,6 +58,9 @@ interface HabitRepository {
 
     /** 软删除习惯（`isActive = false`），保留其历史日志。 */
     suspend fun deleteHabit(habitId: Long)
+
+    /** 撤销软删除（`isActive = true`）。历史日志一直在，所以恢复之后连续天数原样接上。 */
+    suspend fun restoreHabit(habitId: Long)
 
     /** 习惯排序：按 [orderedIds] 的顺序依次写 `sortOrder`（`0, 1, 2, …`）。 */
     suspend fun reorderHabits(orderedIds: List<Long>)

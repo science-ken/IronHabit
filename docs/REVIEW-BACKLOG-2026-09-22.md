@@ -41,14 +41,14 @@
 | A7 | **`remember` 放在 `if` 分支里**：`TodayBento.kt:255-257`。Compose 要求 remember 调用点位置稳定，`onClick` 在 null/非 null 之间切换时槽位漂移 → 按压态偶发丢失或串格。改成无条件 remember、取值处再判 | 报告 P1-4 | 10min |
 | ~~A8~~ | ~~加餐的份数无校验 + 显式输入被隐式推断覆盖~~ **已修 `dc95e5f`**：`AddMealItemUseCase.kt:60` `serving ?: food.servings.firstOrNull()`（调用方明确传了 `grams` 时被丢掉，见勘误第 2 行 —— 当前不可达，但这是颗地雷）；`InputLimits.isValidServings` 零调用；加餐走份数时**不卡 2000g 上限**，改的时候却卡 → "能加不能改" | 报告 P0-3（降级后） | 30min |
 | ~~A9~~ | ~~习惯色板绕过主题系统~~ **已修（第 5 步）**：六个 hex 从 `AddEditHabitScreen.kt:376-383` 搬进 `Color.kt` 新增的「五、习惯主题色板」，默认色收敛成**全工程唯一字面量** `Habit.DEFAULT_COLOR_HEX`（色板首项 / `HabitEntity` 列默认 / `BackupPayload` / ViewModel 四处都指它，原来是四份各写一遍）。对比度那半条**报告说反了**：六个 hex 对浅底 `#FFFFFF` 是 3.12/2.78/2.16/4.35/6.30/3.67，对深底 `#111111` 是 6.04/6.79/8.76/4.34/2.99/5.14（顺序＝蓝/绿/橙/粉/紫/青）—— 深底上只有紫（2.99）差一点，浅底上橙（2.16）与绿（2.78）反而更差。hex 是**数据**（写库、随备份往返），不能为了对比度改色，所以治法是给圆点补一圈 `outline` 描边（深浅两套截图 `b5-swatches-light.png` / `b5-swatches-dark.png` 均已目测）。数字表在 `Color.kt`「五、习惯主题色板」 | 报告 P1-5 | 1h（含深浅两套目测） |
-| A10 | **习惯删除是单向门**（修 A1 时查出来的第二层，报告没有这条）：`deleteHabit` 其实是软删（`HabitRepositoryImpl.kt:79-82` → `is_active = 0`，`habit_logs` 原样保留），但**所有**消费方都过 `is_active = 1`，连 `AddEditHabitViewModel.kt:110` 也只读启用行 → 删掉的习惯在界面上再也看不见，没有恢复入口。比 #13 食物停用更糟一点：重建一条同名习惯会拿到**新 id**，与老日志的关联永久断掉（热力图与连续天数按 habitId 逐条算）。改法照抄今天食物库那套：「已删除 N 条」筛选 + 恢复按钮，或直接给带「撤销」的 snackbar（软删本来就支持撤销，这条比食物那条更做得干净） | B 组 D18 | 1h |
+| ~~A10~~ | ~~**习惯删除是单向门**~~ **已修（第 21 刀）**：照食物库那套做完了 —— `HabitDao.observeAll()` + `restore(id)`、`HabitRepository.observeAllHabits()` / `restoreHabit()`、新 `RestoreHabitUseCase`（**恢复时必须 `rescheduleAll`**：删除那里刻意 `cancelHabit` 过，只翻 `is_active` 的话提醒永远不再响）、自律页「已删除 N 条」chip + 「恢复」行。门控在 `DisciplineUiState.visibleDeletedHabits` / `nothingToShow`，所以「只剩已删除习惯」时不会画成空态把入口藏起来（3 条单测钉住）。**真机往返**：新建 `qarestore` → 勾一次（`habit_logs` 出现 `4/20718`）→ 删 → chip 自动展开 → 恢复 → 行回到列表原位且「连续 0 天」变「连续 **1** 天」（日志没断的证据）；DB 侧 `is_active` 1→0→1、日志全程一行未动。**顺带修掉一处自相矛盾**：确认框原文写着「无法撤销」，而我刚把撤销做出来了 —— 已改成「在「已删除」里可以恢复」。测试习惯与其日志已按 id 物理清掉，收工全库 diff 仍只有两条 emoji | B 组 D18 | 1h |
 | A11 | **习惯「主题色」没有任何渲染点**（修 A9 时查出来的，报告没有这条）：`colorHex` 全 app 只被选色器自己读一次（`AddEditHabitScreen.kt:177`），习惯行/磁贴/热力图都不用它 —— 用户挑完颜色哪儿都没变。A9 那半边（色板归位、圆点描边）已修，这条是它的后半段：**颜色要显示在哪儿是产品决定**，我没有替你选。详见 `.scratch/defects.md` D19 | 本轮自查 | 待定（先要一个决定） |
 
 ### B 组 · 无障碍与文案一致性（小、独立、可批量）
 
 | # | 事项 | 来源 | 代价 |
 |---|---|---|---|
-| ~~B1~~ | ~~装饰性「›」是真实文本节点，TalkBack 会念~~ **已修 `940927f`，但还剩一处**：`TodayBento.kt:293-302` 与 `FoodLibrarySheet` 的「›」已换成 `Icon(ChevronRight, contentDescription = null)`；`ProfileSummaryCard.kt:97` 本来就是 Icon。**漏网的是 `strings.xml:566 ai_review_nav_next` = 「下一周 ›」**，它整串是一个 `TextButton` 的标签（`WeeklyReviewBlock.kt:186`），箭头烧在文案里 → 拆成 Icon + 文字才算修完，10min，不在本轮颜色步骤里 | 报告 P2-2 | 15min + 10min 补漏 |
+| ~~B1~~ | ~~装饰性「›」是真实文本节点，TalkBack 会念~~ **已修 `940927f` + 补漏（第 21 刀）**：`TodayBento.kt:293-302` 与 `FoodLibrarySheet` 的「›」已换成 `Icon(ChevronRight, contentDescription = null)`；`ProfileSummaryCard.kt:97` 本来就是 Icon。**漏网的是 `ai_review_nav_prev` / `ai_review_nav_next` 两条字符串把 `‹ ›` 烧进了文案**（`WeeklyReviewBlock` 的翻页 `TextButton`）→ 已拆成 `Icon(AutoMirrored.ArrowBack/Forward, contentDescription = null)` + 纯文字。真机无障碍树读数：节点文本从「‹ 上一周」变成「上一周」，箭头照样画得出来（`shots/b7-nav-icons.png`）| 报告 P2-2 | 15min + 10min 补漏 |
 | ~~B2~~ | ~~习惯色板触摸目标 36dp（`SWATCH_SIZE = 36.dp`），且无 `contentDescription` / `role` → 无障碍用户不知道这里有一组可选颜色~~ **已修 `940927f`**：视觉留 36dp、触摸区补到 48dp，加 `Role.RadioButton` 与颜色名描述 | 报告 P2-3 | 20min |
 | ~~B3~~ | ~~`MealBlock.kt:146` 就地 `fontWeight = FontWeight.SemiBold`，违反 `Type.kt:27` 的自定规矩，**全 ui/ 唯一一处**~~ **已修 `940927f`**：补 `labelMediumStrong` 语义样式 | 报告 P2-4 | 15min |
 | ~~B4~~ | ~~通知权限引导条的按钮文案取的是页面标题（`SettingsScreen.kt:253` `actionText = title_settings` → 按钮写「设置」，实际跳系统通知设置）~~ **已修 `940927f`**：与本页标题撞词的按钮改成自解释文案 | 报告 P2-5 | 10min |
@@ -107,7 +107,8 @@
 | 5 | ~~**A9 + C1–C5**（色板入主题、配色五处收敛）~~ ✅ 做完（A9/C1/C5 改，**C4 不采纳**，另查出 **A11 = D19** 挂着待你定。**C2/C3 挪到第 6 步** —— 那两条是版式改动、要单独看图，混进换色值的一刀里两边都看不清改了什么） | 必须一起看：都是颜色，分开改会出现"改了一半"的中间态。改完浅色/深色各过一遍 —— 四张截图已拍（`b5-today-light/dark`、`b5-swatches-light/dark`），主题设置读回原值 `LIGHT`、DataStore 字节一致 |
 | 6 | ~~**C2 + C3**（streak 字号 + 状态提示条）~~ ✅ 已做完（本刀） | 两条都在今日页同一屏，改完一次截图过 |
 | 7 | **C6–C12**（「我的」页重构） | 单独一轮、单独一个 PR，约 300 行，别和上面混 |
-| 8 | **D1–D4 + E1–E3 + F1–F2** | 尾巴与外部条件 |
+| 8 | ~~**A10 + B1 补漏**~~ ✅ 已做完（第 21 刀） | 两条都不需要你拍板：A10 照你已批的食物库那套，B1 是上一刀的漏网之鱼 |
+| 9 | **D1–D4 + E1–E3 + F1–F2** | 尾巴与外部条件 |
 
 **统一验收口径**：每轮结束都跑 `dev.sh test`（`--rerun-tasks`）+ 装包 + `dev.sh crash`；动到界面的那几轮必须真机读，不接受"单测全绿"当结论。
 数据纪律照旧：跑 `.scratch/qa_db.py` 之前**必须先 `dev.sh sql` 拉库**（本轮就在这上面栽过一次，五次"收工一致"比的是同一份陈旧副本）。

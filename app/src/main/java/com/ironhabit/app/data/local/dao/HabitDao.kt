@@ -24,6 +24,15 @@ interface HabitDao {
     @Query("SELECT * FROM habits WHERE is_active = 1 ORDER BY sort_order, id")
     fun observeActive(): Flow<List<HabitEntity>>
 
+    /**
+     * 观察**全部**习惯行（含 `is_active = 0` 的已删除行）。
+     *
+     * 与 `FoodDao.observeAllWithServings()` 同一个理由：软删之后行还在，但界面上找不到，
+     * 用户就只剩"重建一条同名习惯"这一条路 —— 而重建会拿到新 id，与老日志的关联永久断掉。
+     */
+    @Query("SELECT * FROM habits ORDER BY sort_order, id")
+    fun observeAll(): Flow<List<HabitEntity>>
+
     @Query("SELECT * FROM habits WHERE is_active = 1 ORDER BY sort_order, id")
     suspend fun getActive(): List<HabitEntity>
 
@@ -71,6 +80,10 @@ interface HabitDao {
     /** 软删除（`is_active = 0`），不做物理 DELETE，保留历史日志关联。 */
     @Query("UPDATE habits SET is_active = 0 WHERE id = :id")
     suspend fun softDelete(id: Long)
+
+    /** 撤销软删除（`is_active = 1`）。走 `UPDATE` 保住原 rowid，历史日志的关联原样回来。 */
+    @Query("UPDATE habits SET is_active = 1 WHERE id = :id")
+    suspend fun restore(id: Long)
 
     /** 写排序值（习惯排序）。 */
     @Query("UPDATE habits SET sort_order = :sortOrder WHERE id = :id")

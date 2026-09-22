@@ -104,6 +104,7 @@ class StringResourcePlaceholderContractTest {
         entry("label_food_serving_summary", ArgKind.STRING, ArgKind.NUMERIC) // FoodLibrarySheet（unit: String, grams: Int）
         entry("label_food_library_count", ArgKind.NUMERIC) // FoodLibraryEntry（allFoods.size: Int）
         entry("chip_food_inactive_count", ArgKind.NUMERIC) // FoodLibrarySheet（inactiveFoods.size: Int）
+        entry("chip_habit_deleted_count", ArgKind.NUMERIC) // DisciplineScreen（deletedHabits.size: Int）
         entry("label_food_inactive_summary", ArgKind.NUMERIC) // FoodLibrarySheet 停用行（kcalPer100g: Int）
         entry("label_meal_item_summary", ArgKind.STRING, ArgKind.STRING, ArgKind.NUMERIC) // MealBlock（名称 · 份量 · kcal）
         entry("label_meal_kcal_approx", ArgKind.NUMERIC, ArgKind.NUMERIC) // MealBlock 粗记态（kcal, 蛋白 g）

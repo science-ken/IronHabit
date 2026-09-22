@@ -38,6 +38,11 @@ class HabitRepositoryImpl @Inject constructor(
             .map { entities -> entities.map { entity -> HabitMapper.toDomain(entity) } }
             .flowOn(ioDispatcher)
 
+    override fun observeAllHabits(): Flow<List<Habit>> =
+        habitDao.observeAll()
+            .map { entities -> entities.map { entity -> HabitMapper.toDomain(entity) } }
+            .flowOn(ioDispatcher)
+
     override suspend fun allHabits(): List<Habit> =
         habitDao.getAll().map { entity -> HabitMapper.toDomain(entity) }
 
@@ -79,6 +84,11 @@ class HabitRepositoryImpl @Inject constructor(
     override suspend fun deleteHabit(habitId: Long) {
         // 软删除：保留历史日志关联，仅置 is_active = 0。
         habitDao.softDelete(habitId)
+    }
+
+    override suspend fun restoreHabit(habitId: Long) {
+        // 只翻回 is_active：日志一行都没动过，所以恢复之后连续天数与热力图原样接上。
+        habitDao.restore(habitId)
     }
 
     /**

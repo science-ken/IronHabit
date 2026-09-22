@@ -5,16 +5,22 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -175,7 +181,11 @@ private fun WeeklyReviewCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                // 箭头是装饰性图标：`contentDescription = null` 让它不进无障碍树，TalkBack 只念「上一周」。
+                // 以前箭头烧在字符串里（「‹ 上一周」），无障碍读出来就是一个多余的尖括号 —— B1 那条的漏网之鱼。
                 TextButton(onClick = { onWeekChange(weekOffset - 1) }) {
+                    Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                    Spacer(modifier = Modifier.width(IronHabitSpacing.xs))
                     Text(text = stringResource(R.string.ai_review_nav_prev))
                 }
                 TextButton(
@@ -184,6 +194,8 @@ private fun WeeklyReviewCard(
                     enabled = weekOffset < 0,
                 ) {
                     Text(text = stringResource(R.string.ai_review_nav_next))
+                    Spacer(modifier = Modifier.width(IronHabitSpacing.xs))
+                    Icon(imageVector = Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null)
                 }
             }
 

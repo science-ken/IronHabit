@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -31,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ironhabit.app.R
+import com.ironhabit.app.domain.model.Habit
 import com.ironhabit.app.domain.model.HabitItem
 import com.ironhabit.app.ui.components.EmptyState
 import com.ironhabit.app.ui.components.HabitRow
@@ -113,7 +115,7 @@ fun DisciplineScreen(
                         )
                     }
                 }
-                if (uiState.habits.isEmpty()) {
+                if (uiState.nothingToShow) {
                     EmptyState(
                         text = stringResource(R.string.empty_habit),
                         actionText = stringResource(R.string.action_create),
@@ -133,6 +135,32 @@ fun DisciplineScreen(
                             onEdit = { onEditHabit(item.habit.id) },
                             onDelete = { habitToDelete = item },
                         )
+                    }
+                }
+
+                // 已删除的习惯：软删的行一直在库里，以前只是没有任何地方能再看见它们
+                // （删掉重建一条同名的会拿到新 id，老日志就此断开）。chip 在空态之外，
+                // 所以"只剩已删除的"那种状态下它照样出现 —— 否则又是一次单向门。
+                if (uiState.deletedHabits.isNotEmpty()) {
+                    FilterChip(
+                        selected = uiState.showDeleted,
+                        onClick = { viewModel.onToggleDeleted() },
+                        label = {
+                            Text(
+                                text = stringResource(
+                                    R.string.chip_habit_deleted_count,
+                                    uiState.deletedHabits.size,
+                                ),
+                            )
+                        },
+                    )
+                    if (uiState.showDeleted) {
+                        uiState.deletedHabits.forEach { habit ->
+                            HabitDeletedRow(
+                                habit = habit,
+                                onRestore = { viewModel.onRestoreHabit(habit.id) },
+                            )
+                        }
                     }
                 }
 
@@ -209,6 +237,47 @@ private fun MonthSummaryCard(completionRate: Float, hasAnyCheckIn: Boolean) {
                     color = MaterialTheme.colorScheme.primary,
                 )
             }
+        }
+    }
+}
+
+/**
+ * 已删除习惯的一行：名字压暗、右侧只留一个「恢复」。
+ *
+ * 不给编辑、不给勾选：这条已经不在任何统计里了，这一行要回答的只有"它还能不能回来"。
+ * 恢复走 `is_active = 1`，日志一行都没动，所以连续天数与热力图原样接上。
+ */
+@Composable
+private fun HabitDeletedRow(
+    habit: Habit,
+    onRestore: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = IronHabitSpacing.xs),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
+    ) {
+        Text(
+            text = habit.emoji,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = habit.name,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = stringResource(R.string.label_habit_deleted_summary),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        TextButton(onClick = onRestore) {
+            Text(text = stringResource(R.string.action_restore))
         }
     }
 }
