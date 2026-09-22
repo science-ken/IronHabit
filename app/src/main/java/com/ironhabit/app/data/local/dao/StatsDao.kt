@@ -32,15 +32,21 @@ interface StatsDao {
     )
     suspend fun heatmapRows(startEpochDay: Long, endEpochDay: Long): List<TrendRaw>
 
-    /** 各动作分类的打卡次数。 */
+    /**
+     * 各动作分类的打卡次数，**限定在 `[start, end]` 这段区间内**。
+     *
+     * ⚠️ 以前它没有区间参数（全历史累计），而同一屏的趋势卡是「近 30 天」——
+     * 两张图并排放着却说着两段时间，界面上还不标注。
+     */
     @Query(
         """
         SELECT e.category AS category, COUNT(*) AS count
         FROM check_ins c INNER JOIN exercises e ON c.exercise_id = e.id
+        WHERE c.date_epoch_day BETWEEN :startEpochDay AND :endEpochDay
         GROUP BY e.category
         """
     )
-    suspend fun categoryShareRows(): List<CategoryRaw>
+    suspend fun categoryShareRows(startEpochDay: Long, endEpochDay: Long): List<CategoryRaw>
 
     /** 区间内打卡总次数。 */
     @Query("SELECT COUNT(*) FROM check_ins WHERE date_epoch_day BETWEEN :startEpochDay AND :endEpochDay")

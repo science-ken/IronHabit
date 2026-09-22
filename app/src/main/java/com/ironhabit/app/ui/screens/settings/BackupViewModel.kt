@@ -5,6 +5,7 @@ import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ironhabit.app.R
+import com.ironhabit.app.domain.repository.BackupImportReport
 import com.ironhabit.app.domain.usecase.ExportDataUseCase
 import com.ironhabit.app.domain.usecase.ImportDataUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -31,6 +32,22 @@ data class BackupUiState(
     val pendingImportUri: Uri? = null,
     @StringRes val snackbarRes: Int? = null,
 )
+
+/**
+ * 导入结果 → 提示文案。分档规则单独抽成顶层纯函数是为了能在 JVM 里逐档测
+ * （`BackupViewModel` 要 `Uri` 与协程，起测试的成本高得多）。
+ *
+ * 优先级这样排是刻意的：**"数据进去了但设置没写回" 盖过 "老备份没带饮食表"** ——
+ * 前者要用户去做一件事（去设置里确认提醒时间），后者只是少恢复了一张表；
+ * 两条同时命中时先说更要紧的那条，不能指望用户读完一条提示还期待下一条。
+ */
+@StringRes
+internal fun importSnackbarRes(report: BackupImportReport?): Int = when {
+    report == null -> R.string.msg_import_failed
+    !report.settingsApplied || !report.alarmsRescheduled -> R.string.msg_import_partial_settings
+    report.dietSkipped -> R.string.msg_import_success_diet_skipped
+    else -> R.string.msg_import_success
+}
 
 /**
  * 「数据备份」ViewModel：导出 JSON 分享 / 选择文件导入（导入前二次确认）。
@@ -91,15 +108,9 @@ class BackupViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val result = importData(uri)
-                val snackbarRes = result.getOrNull()?.let { report ->
-                    // 备份早于 v5 时饮食四张表**没被替换**（本机记录保住了）。不说的话，
-                    // 用户看到"导入成功"会以为食物库和明细也回来了。
-                    if (report.dietSkipped) {
-                        R.string.msg_import_success_diet_skipped
-                    } else {
-                        R.string.msg_import_success
-                    }
-                } ?: R.string.msg_import_failed
+                // 备份早于 v5 时饮食四张表**没被替换**（本机记录保住了）；设置/闹钟在事务外，
+                // 也可能没写回。这些都要说出来 —— 分档规则见 `importSnackbarRes`。
+                val snackbarRes: Int = importSnackbarRes(result.getOrNull())
                 _uiState.update {
                     it.copy(isBusy = false, pendingImportUri = null, snackbarRes = snackbarRes)
                 }

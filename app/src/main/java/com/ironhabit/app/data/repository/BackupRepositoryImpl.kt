@@ -178,15 +178,22 @@ class BackupRepositoryImpl @Inject constructor(
             }
         }
 
-        // 数据库导入成功后同步设置快照（DataStore 不参与 Room 事务）。
-        applySettings(payload.settings, payload.schemaVersion)
+        // 走到这里，10 张表已经整体替换并**提交** —— "导入"这件事本身成了。
+        // 下面两步都在事务外（DataStore 不参与 Room 事务；重排闹钟是系统副作用），
+        // 它们失败绝不能让整次导入报 failure：那会让用户看到「导入失败」而数据其实已被清空重写，
+        // 他自然会再点一次 = 二次全量清表（审查报告 P1-1）。改成各记各的成败，由界面分档提示。
+        val settingsApplied: Boolean =
+            runCatching { applySettings(payload.settings, payload.schemaVersion) }.isSuccess
 
         // B-7：设置（提醒时间/开关）与习惯提醒可能都变了 → 重排全部 AlarmManager 闹钟。
-        // 必须放在事务与设置写回**都成功之后**：此时 DataStore 里才是最终生效的提醒配置。
-        reminderScheduler.rescheduleAll()
+        // 即使上面写设置失败也照样重排：它读的是 DataStore 里**当前实际生效**的配置，
+        // 重排一次至少让闹钟与设置对齐，不会比放着不管更糟。
+        val alarmsRescheduled: Boolean = runCatching { reminderScheduler.rescheduleAll() }.isSuccess
 
         BackupImportReport(
             dietSkipped = !BackupRestoreRules.replacesDietTables(payload.schemaVersion),
+            settingsApplied = settingsApplied,
+            alarmsRescheduled = alarmsRescheduled,
         )
     }
 

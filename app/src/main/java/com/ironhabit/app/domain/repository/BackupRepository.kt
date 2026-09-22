@@ -11,6 +11,15 @@ package com.ironhabit.app.domain.repository
  */
 data class BackupImportReport(
     val dietSkipped: Boolean,
+    /**
+     * 设置快照有没有写回 DataStore。
+     *
+     * ⚠️ 它在 Room 事务**之外**，失败不回滚已经导入的数据 —— 所以"设置没写回"不等于"导入失败"，
+     * 必须分开告诉用户（见 `importSnackbarRes`），否则他会以为什么都没动而再导一次。
+     */
+    val settingsApplied: Boolean,
+    /** 闹钟有没有重排（提醒时间/开关可能随备份变了）。与上一条同为事务外副作用。 */
+    val alarmsRescheduled: Boolean,
 )
 
 /**

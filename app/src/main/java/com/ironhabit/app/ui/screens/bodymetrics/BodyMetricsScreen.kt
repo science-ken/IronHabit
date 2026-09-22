@@ -15,6 +15,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -24,10 +25,13 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Path
@@ -58,6 +62,11 @@ fun BodyMetricsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = LocalSnackbarHostState.current
+
+    // 这一页的删除是**物理 DELETE**（`BodyMetricDao.kt:73`），不像习惯/食物/计划行那样留软删行，
+    // 也就没有任何"恢复"这条路 —— 记录是用户一条一条量出来的，误触一下就永久少一个点。
+    // 补一道确认，形状与「数据备份」导入、「删除习惯」一致（三处同类动作不该长三种样子）。
+    var recordToDelete: BodyMetric? by remember { mutableStateOf(null) }
 
     val snackbarText: String? = uiState.snackbarRes?.let { res -> stringResource(res) }
     LaunchedEffect(snackbarText) {
@@ -154,12 +163,45 @@ fun BodyMetricsScreen(
                     uiState.records.forEach { record ->
                         MetricRecordRow(
                             record = record,
-                            onDelete = { viewModel.onDeleteRecord(record.id) },
+                            onDelete = { recordToDelete = record },
                         )
                     }
                 }
             }
         }
+    }
+
+    val pending: BodyMetric? = recordToDelete
+    if (pending != null) {
+        AlertDialog(
+            onDismissRequest = { recordToDelete = null },
+            title = { Text(text = stringResource(R.string.dialog_delete_body_metric_title)) },
+            text = {
+                // 把"哪一条"念出来：日期 + 值 + 单位，与行里显示的同形，用户能一眼对上。
+                Text(
+                    text = stringResource(
+                        R.string.dialog_delete_body_metric_message,
+                        formatMonthDay(pending.dateEpochDay),
+                        "${pending.value} ${pending.unit}",
+                    ),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        recordToDelete = null
+                        viewModel.onDeleteRecord(pending.id)
+                    },
+                ) {
+                    Text(text = stringResource(R.string.action_delete))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { recordToDelete = null }) {
+                    Text(text = stringResource(R.string.action_cancel))
+                }
+            },
+        )
     }
 }
 

@@ -181,7 +181,7 @@
     <!-- ===== 我的页 ===== -->
     <string name="title_profile">我的</string>
     <string name="title_trend_chart">近 30 天趋势</string>
-    <string name="title_category_chart">训练类型占比</string>
+    <string name="title_category_chart">训练类型占比 · 近 30 天</string>
     <string name="title_body_metrics">身体数据</string>
     <string name="title_settings">设置</string>
     <string name="title_backup">数据备份</string>
@@ -192,6 +192,8 @@
     <string name="entry_food_library">食物库</string>
     <string name="empty_charts">数据还不够，继续打卡就能看到趋势啦</string>
     <string name="empty_body_metrics">还没有身体数据，点「+」记录第一条</string>
+    <string name="dialog_delete_body_metric_title">删除这条记录？</string>
+    <string name="dialog_delete_body_metric_message">%1$s 的「%2$s」会被删掉，无法恢复</string>
 
     <!-- 身体数据 -->
     <string name="title_add_body_metric">记录身体数据</string>
@@ -233,6 +235,7 @@
     <string name="msg_export_no_share_target">备份文件已生成，但这台设备没有可接收它的应用</string>
     <string name="msg_export_failed">导出失败，请重试</string>
     <string name="msg_import_success">导入成功</string>
+    <string name="msg_import_partial_settings">数据已导入，但提醒与偏好设置没能全部写回，请去设置里确认一遍</string>
     <string name="msg_import_success_diet_skipped">导入成功；这份备份不含食物库与饮食明细，本机饮食记录未改动</string>
     <string name="msg_import_failed">导入失败：文件格式不正确</string>
     <string name="dialog_import_confirm_title">确认导入？</string>

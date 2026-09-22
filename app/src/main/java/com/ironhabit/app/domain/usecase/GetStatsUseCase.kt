@@ -43,7 +43,7 @@ class GetStatsUseCase @Inject constructor(
 
         return StatsBundle(
             trend = statsRepository.trendPoints(span),
-            categoryShare = statsRepository.categoryShare(),
+            categoryShare = statsRepository.categoryShare(span),
             comparison = PeriodComparison(
                 currentTotal = currentTotal,
                 previousTotal = previousTotal,
@@ -53,7 +53,12 @@ class GetStatsUseCase @Inject constructor(
     }
 
     companion object {
-        /** 默认展示近 30 天。 */
+        /**
+         * 默认展示近 30 天。
+         *
+         * ⚠️ 「近 30 天」这四个字写死在 `title_trend_chart` 与 `title_category_chart` 两条串里
+         * （饼图与趋势卡现在同走这个区间）。改这个常量必须同时改那两条串，否则标题就开始说谎。
+         */
         const val DEFAULT_DAYS: Int = 30
         private const val PERCENT_SCALE: Float = 100f
     }

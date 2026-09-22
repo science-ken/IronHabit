@@ -31,8 +31,9 @@ class StatsRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun categoryShare(): List<CategoryShare> {
-        val rows = statsDao.categoryShareRows()
+    override suspend fun categoryShare(days: Int): List<CategoryShare> {
+        val range = dayRange(days)
+        val rows = statsDao.categoryShareRows(range.first, range.second)
         val total = rows.sumOf { it.count }
         return rows.map { row ->
             CategoryShare(

@@ -12,8 +12,12 @@ interface StatsRepository {
     /** 近 [days] 天的每日打卡次数趋势（含无打卡的日期补 0）。 */
     suspend fun trendPoints(days: Int): List<TrendPoint>
 
-    /** 各动作分类的打卡占比。 */
-    suspend fun categoryShare(): List<CategoryShare>
+    /**
+     * 近 [days] 天各动作分类的打卡占比。
+     *
+     * 区间参数与 [trendPoints] 对齐：同一屏的两张图必须说同一段时间（以前饼图是全历史累计）。
+     */
+    suspend fun categoryShare(days: Int): List<CategoryShare>
 
     /** 近 [days] 天的热力图数据（含无打卡的日期补 0）。 */
     suspend fun heatmap(days: Int): List<HeatmapCell>

@@ -1,6 +1,7 @@
 package com.ironhabit.app.domain.usecase
 
 import com.ironhabit.app.domain.model.Food
+import com.ironhabit.app.domain.model.FoodNutrition
 import com.ironhabit.app.domain.model.FoodNutritionCalculator
 import com.ironhabit.app.domain.model.FoodServing
 import com.ironhabit.app.domain.model.InputLimits
@@ -57,22 +58,31 @@ class AddMealItemUseCase @Inject constructor(
         val food: Food = foodRepository.getFood(foodId)?.takeIf { it.isActive }
             ?: return AddMealItemResult.FoodMissing
 
-        val resolvedServing: FoodServing? = serving ?: food.servings.firstOrNull()
-        val nutrition = if (resolvedServing != null) {
-            FoodNutritionCalculator.forServings(food, resolvedServing, servingCount)
-        } else {
-            grams?.let { FoodNutritionCalculator.forGrams(food, it) }
-        } ?: return AddMealItemResult.InvalidPortion
+        // 显式输入优先（审查报告 P0-3）：调用方直接给了克数就按克数记，不能拿食物的第一个份量顶掉它
+        // —— 界面写「先按 100g 起记」而库里落成「一碗 200g」是说不通的。
+        // 顺序：给了份就按份 → 给了克就按克 → 两者都没给才回落到食物的第一个份量。
+        val resolvedServing: FoodServing? =
+            serving ?: if (grams == null) food.servings.firstOrNull() else null
 
-        val actualGrams: Double = if (resolvedServing != null) {
-            resolvedServing.grams * servingCount
-        } else {
-            grams ?: 0.0
-        }
-        // 按克直接填时才卡上限；按份填的克数由食物定义决定，已在表单侧校验过。
-        if (resolvedServing == null && !InputLimits.isValidServingGrams(actualGrams.roundToIntOrZero())) {
+        // 份数以前全程不校验（`InputLimits.isValidServings` 定义了却零调用），
+        // 传 200 份也能落库；这里补上，与表单侧同一区间（0.1–20）。
+        if (resolvedServing != null && !InputLimits.isValidServings(servingCount)) {
             return AddMealItemResult.InvalidPortion
         }
+
+        val actualGrams: Double = resolvedServing?.let { serving -> serving.grams * servingCount }
+            ?: grams
+            ?: 0.0
+        // 两条路径都卡总克数上限：按份算出来的同样可能超（2000g × 2 份 = 4000g），
+        // 而「改这一条」一直卡着 —— 之前"能加进去却改不动"就是两边口径不一致。
+        if (!InputLimits.isValidServingGrams(actualGrams.roundToIntOrZero())) {
+            return AddMealItemResult.InvalidPortion
+        }
+
+        val nutrition: FoodNutrition = (resolvedServing?.let { serving ->
+            FoodNutritionCalculator.forServings(food, serving, servingCount)
+        } ?: grams?.let { FoodNutritionCalculator.forGrams(food, it) })
+            ?: return AddMealItemResult.InvalidPortion
 
         val item = MealItem(
             mealId = mealId,
