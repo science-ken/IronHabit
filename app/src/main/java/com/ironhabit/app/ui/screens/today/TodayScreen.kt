@@ -27,6 +27,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -563,10 +565,16 @@ private fun RepeatWeeklyRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        // 与 `SetCheckboxRow` 里那条同一教训：没有 contentDescription 的控件在无障碍
+        // 与 uiautomator 里都是隐形的（本轮走查时 dump 里只看得见「每周相同」这行字，
+        // 开关本身是一个无文字节点，落点只能靠截图量）。
+        // `semantics {}` 的 lambda 不是 @Composable，所以 `stringResource` 必须先取出来。
+        val switchLabel: String = stringResource(R.string.action_repeat_weekly)
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,
             enabled = enabled,
+            modifier = Modifier.semantics { contentDescription = switchLabel },
         )
     }
 }

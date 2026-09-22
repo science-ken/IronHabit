@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -39,6 +40,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -271,18 +275,33 @@ private fun HabitColorPicker(
                 Color(android.graphics.Color.parseColor(hex))
             }
             val selected = selectedHex.equals(hex, ignoreCase = true)
+            val colorName: String = stringResource(colorNameRes(hex))
+            // 触摸区补足 48dp（M3 最小目标），视觉圆点仍是 36dp —— 两个尺寸解耦。
+            // 以前只有 36dp 的可点圆点，既容易点到相邻色块，又没有任何语义：
+            // TalkBack 读不出"这是一组可选颜色"，更读不出当前选的是哪个。
             Box(
                 modifier = Modifier
-                    .size(SWATCH_SIZE)
-                    .clip(CircleShape)
-                    .background(swatch)
-                    .border(
-                        width = if (selected) SELECTED_BORDER else 0.dp,
-                        color = MaterialTheme.colorScheme.primary,
-                        shape = CircleShape,
-                    )
-                    .clickable { onSelect(hex) },
-            )
+                    .size(SWATCH_TOUCH_SIZE)
+                    .semantics { contentDescription = colorName }
+                    .selectable(
+                        selected = selected,
+                        onClick = { onSelect(hex) },
+                        role = Role.RadioButton,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(SWATCH_SIZE)
+                        .clip(CircleShape)
+                        .background(swatch)
+                        .border(
+                            width = if (selected) SELECTED_BORDER else 0.dp,
+                            color = MaterialTheme.colorScheme.primary,
+                            shape = CircleShape,
+                        ),
+                )
+            }
         }
     }
 }
@@ -373,7 +392,7 @@ private fun frequencyLabelRes(frequency: HabitFrequency): Int = when (frequency)
     HabitFrequency.WEEKLY -> R.string.label_frequency_weekly
 }
 
-private val HABIT_COLOR_HEXES: List<String> = listOf(
+internal val HABIT_COLOR_HEXES: List<String> = listOf(
     "#2196F3",
     "#4CAF50",
     "#FF9800",
@@ -381,6 +400,23 @@ private val HABIT_COLOR_HEXES: List<String> = listOf(
     "#9C27B0",
     "#009688",
 )
+
+/**
+ * 色板 hex → 给 TalkBack 念的颜色名。
+ *
+ * 没有这个名字，无障碍用户听到的只是一串"未标注的单选按钮"——颜色本身就是这个控件的全部信息。
+ * `internal` + 有单测钉住"每个 hex 都有名字、不撞名"，是为了改色板时不会漏改这里
+ * （`when` 落到 `else` 会静默给个"主题色"，等于悄悄把缺陷放回去）。
+ */
+internal fun colorNameRes(hex: String): Int = when (hex) {
+    "#2196F3" -> R.string.habit_color_blue
+    "#4CAF50" -> R.string.habit_color_green
+    "#FF9800" -> R.string.habit_color_orange
+    "#E91E63" -> R.string.habit_color_pink
+    "#9C27B0" -> R.string.habit_color_purple
+    "#009688" -> R.string.habit_color_teal
+    else -> R.string.habit_color_generic
+}
 
 private val WEEKDAY_RES: List<Int> = listOf(
     R.string.weekday_short_mon,
@@ -394,4 +430,7 @@ private val WEEKDAY_RES: List<Int> = listOf(
 
 /** 色板圆点边长 / 选中描边宽度：组件固有尺寸，非布局间距。 */
 private val SWATCH_SIZE = 36.dp
+
+/** 色板的**触摸区**边长：M3 最小可点目标 48dp，比看得见的圆点大一圈。 */
+private val SWATCH_TOUCH_SIZE = 48.dp
 private val SELECTED_BORDER = 3.dp

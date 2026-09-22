@@ -20,6 +20,13 @@ data class DisciplineUiState(
     val habits: List<HabitItem> = emptyList(),
     val heatmap: List<HeatmapCell> = emptyList(),
     val monthCompletionRate: Float = 0f,
+    /**
+     * 有没有记过任何一次打卡。
+     *
+     * `monthCompletionRate == 0f` 单独看是歧义的（"本月 0 天"还是"这人还没开始用"），
+     * 而后者该显示「还没有数据」—— 见本仓库反复立的那条「不用 0 冒充 null」。
+     */
+    val hasAnyCheckIn: Boolean = false,
     val errorRes: Int? = null,
     val snackbarRes: Int? = null,
 )

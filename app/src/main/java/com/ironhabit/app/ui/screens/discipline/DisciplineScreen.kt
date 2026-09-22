@@ -139,7 +139,10 @@ fun DisciplineScreen(
                 SectionTitle(text = stringResource(R.string.title_heatmap))
                 HeatmapGrid(cells = uiState.heatmap)
 
-                MonthSummaryCard(completionRate = uiState.monthCompletionRate)
+                MonthSummaryCard(
+                    completionRate = uiState.monthCompletionRate,
+                    hasAnyCheckIn = uiState.hasAnyCheckIn,
+                )
             }
         }
     }
@@ -173,7 +176,7 @@ fun DisciplineScreen(
 }
 
 @Composable
-private fun MonthSummaryCard(completionRate: Float) {
+private fun MonthSummaryCard(completionRate: Float, hasAnyCheckIn: Boolean) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -191,11 +194,21 @@ private fun MonthSummaryCard(completionRate: Float) {
                 text = stringResource(R.string.title_discipline_summary),
                 style = MaterialTheme.typography.titleMedium,
             )
-            Text(
-                text = "${completionRate.roundToInt()}%",
-                style = MaterialTheme.typography.displaySmall,
-                color = MaterialTheme.colorScheme.primary,
-            )
+            if (!hasAnyCheckIn) {
+                // 「0%」和"还没开始记"是两件事。后者用一个大号 0% 说话会被读成一个判决，
+                // 而本仓库在 `WeeklyReview` 等处立过规矩：不用 0 冒充 null。
+                Text(
+                    text = stringResource(R.string.label_no_data),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                Text(
+                    text = "${completionRate.roundToInt()}%",
+                    style = MaterialTheme.typography.displaySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
         }
     }
 }

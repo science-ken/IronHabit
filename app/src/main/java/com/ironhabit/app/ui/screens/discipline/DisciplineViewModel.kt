@@ -86,10 +86,21 @@ class DisciplineViewModel @Inject constructor(
         checkInRepository.observeActiveDaysSince(TRIGGER_SINCE_EPOCH_DAY)
             .map { getHeatmap(HEATMAP_DAYS) }
 
-    /** 本月完成率（打卡后自动刷新）。 */
-    private val monthRateFlow: Flow<Float> =
+    /**
+     * 本月完成率，外加"这人到底记过没有打卡"。
+     *
+     * 必须分开带出去：`completionRate` 是 `Float`，`0f` 既可能是"本月一天都没练"，
+     * 也可能是"压根还没有数据"。本项目在 `WeeklyReview` / `ProfileLoadPolicy` 等多处立过规矩
+     * 「不用 0 冒充 null」，所以界面才不能说「0%」，而该说「还没有数据」。
+     */
+    private val monthRateFlow: Flow<MonthRate> =
         checkInRepository.observeActiveDaysSince(TRIGGER_SINCE_EPOCH_DAY)
-            .map { statsRepository.completionRate(monthStartEpochDay(), todayEpochDay()) }
+            .map { activeDays ->
+                MonthRate(
+                    rate = statsRepository.completionRate(monthStartEpochDay(), todayEpochDay()),
+                    hasAnyCheckIn = activeDays.isNotEmpty(),
+                )
+            }
 
     private val dataState: StateFlow<DisciplineUiState> = retryTrigger
         .flatMapLatest {
@@ -102,7 +113,8 @@ class DisciplineViewModel @Inject constructor(
                     isLoading = false,
                     habits = habits,
                     heatmap = heatmap,
-                    monthCompletionRate = monthRate,
+                    monthCompletionRate = monthRate.rate,
+                    hasAnyCheckIn = monthRate.hasAnyCheckIn,
                 )
             }
                 .catch {
@@ -187,3 +199,6 @@ class DisciplineViewModel @Inject constructor(
         const val STOP_TIMEOUT_MS = 5_000L
     }
 }
+
+/** 本月完成率 + 是否存在任何打卡。见 [DisciplineViewModel.monthRateFlow] 为什么要带第二个字段。 */
+private data class MonthRate(val rate: Float, val hasAnyCheckIn: Boolean)

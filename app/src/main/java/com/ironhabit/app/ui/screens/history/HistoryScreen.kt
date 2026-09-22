@@ -66,7 +66,12 @@ fun HistoryScreen(
             }
 
             else -> {
-                CompletionRateCard(rate = uiState.completionRate)
+                CompletionRateCard(
+                    rate = uiState.completionRate,
+                    // `days` 是全量历史分组，它为空 = 这人一条都没记过（比"窗口内为 0"更强，
+                    // 所以只在这种情形下改口说「还没有数据」，不会把真实的 0% 藏起来）。
+                    hasAnyCheckIn = uiState.days.isNotEmpty(),
+                )
 
                 SectionTitle(text = stringResource(R.string.title_heatmap))
                 HeatmapGrid(cells = uiState.heatmap)
@@ -87,7 +92,7 @@ fun HistoryScreen(
 
 /** 区间完成率卡片。 */
 @Composable
-private fun CompletionRateCard(rate: Float) {
+private fun CompletionRateCard(rate: Float, hasAnyCheckIn: Boolean) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -105,11 +110,20 @@ private fun CompletionRateCard(rate: Float) {
                 text = stringResource(R.string.label_completion_rate),
                 style = MaterialTheme.typography.titleMedium,
             )
-            Text(
-                text = "${rate.roundToInt()}%",
-                style = MaterialTheme.typography.displaySmall,
-                color = MaterialTheme.colorScheme.primary,
-            )
+            if (!hasAnyCheckIn) {
+                // 与「自律」页本月小结同一考量：一条记录都没有时，大号「0%」读起来像判决。
+                Text(
+                    text = stringResource(R.string.label_no_data),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                Text(
+                    text = "${rate.roundToInt()}%",
+                    style = MaterialTheme.typography.displaySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
         }
     }
 }

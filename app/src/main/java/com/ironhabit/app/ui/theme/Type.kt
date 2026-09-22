@@ -126,4 +126,15 @@ object IronHabitTypeStyles {
         fontSize = 11.sp,
         lineHeight = 16.sp,
     )
+
+    /**
+     * 「比 `labelMedium` 重一档」的强调标签（M3 的 `Typography` 没有这个槽位）。
+     *
+     * 放在这里而不是让界面就地 `.copy(fontWeight = ...)`，就是为了守住本文件立的那条规矩：
+     * 字重只在 `Type.kt` 里定。此前 `MealBlock` 就地写 `FontWeight.SemiBold`，
+     * 是全 ui/ 目录唯一一处违反（审查报告 P2-4）。
+     */
+    val labelMediumStrong: TextStyle = IronHabitTypography.labelMedium.copy(
+        fontWeight = FontWeight.SemiBold,
+    )
 }

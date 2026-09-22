@@ -18,6 +18,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -291,10 +294,13 @@ private fun BentoTile(
             content = content,
         )
         if (go) {
-            Text(
-                text = "›",
-                style = MaterialTheme.typography.titleMedium,
-                color = colorScheme.onSurfaceVariant,
+            // 装饰性指示符：以前是 `Text("›")`，在无障碍树里是一个真实文本节点，
+            // TalkBack 每划过一个磁贴都会念一个多余符号。`contentDescription = null` 即整节点不进树
+            // （与 `ProfileSummaryCard` 的箭头同一写法）。
+            Icon(
+                imageVector = Icons.Filled.ChevronRight,
+                contentDescription = null,
+                tint = colorScheme.onSurfaceVariant,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(IronHabitSpacing.md),

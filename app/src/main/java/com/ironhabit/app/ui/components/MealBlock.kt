@@ -22,13 +22,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.Meal
 import com.ironhabit.app.domain.model.MealItem
 import com.ironhabit.app.domain.model.MealType
 import com.ironhabit.app.ui.theme.IronHabitSpacing
+import com.ironhabit.app.ui.theme.IronHabitTypeStyles
 import kotlin.math.roundToInt
 
 /**
@@ -141,9 +141,8 @@ fun MealBlock(
                             loggedItems.sumOf { item -> item.nutrition.kcal },
                             loggedItems.sumOf { item -> item.nutrition.proteinG }.roundToInt(),
                         ),
-                        style = MaterialTheme.typography.labelMedium,
+                        style = IronHabitTypeStyles.labelMediumStrong,
                         color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.SemiBold,
                     )
 
                     meal.isCompleted -> Text(

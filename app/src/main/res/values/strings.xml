@@ -166,6 +166,14 @@
     <string name="hint_habit_name">习惯名称</string>
     <string name="hint_habit_emoji">图标（emoji）</string>
     <string name="hint_habit_color">主题色</string>
+    <!-- 色板的颜色名：只给 TalkBack 念。没有它们，无障碍用户面对的是一排"未标注的单选按钮" -->
+    <string name="habit_color_blue">蓝色</string>
+    <string name="habit_color_green">绿色</string>
+    <string name="habit_color_orange">橙色</string>
+    <string name="habit_color_pink">玫红色</string>
+    <string name="habit_color_purple">紫色</string>
+    <string name="habit_color_teal">青色</string>
+    <string name="habit_color_generic">主题色</string>
     <string name="hint_frequency">频率</string>
     <string name="hint_weekly_days">重复日</string>
     <string name="label_frequency_daily">每天</string>
@@ -191,6 +199,8 @@
     <string name="entry_backup">数据备份</string>
     <string name="entry_food_library">食物库</string>
     <string name="empty_charts">数据还不够，继续打卡就能看到趋势啦</string>
+    <!-- 一条记录都没有时用这句，而不是把一个像判决的「0%」摆在新用户面前 -->
+    <string name="label_no_data">还没有数据</string>
     <string name="empty_body_metrics">还没有身体数据，点「+」记录第一条</string>
     <string name="dialog_delete_body_metric_title">删除这条记录？</string>
     <string name="dialog_delete_body_metric_message">%1$s 的「%2$s」会被删掉，无法恢复</string>
@@ -221,6 +231,8 @@
     <string name="settings_reminder_hint">提醒为本地通知，飞行模式下同样生效</string>
     <string name="settings_exact_alarm_tip">未开启「精确闹钟」权限，提醒时间可能有偏差。点此去设置</string>
     <string name="settings_notification_permission_tip">通知权限未开启，无法收到提醒</string>
+    <!-- 引导条的按钮：以前直接复用页面标题 `title_settings`（「设置」），与本页标题撞词且看不出点了会怎样 -->
+    <string name="action_open_notification_settings">去开启</string>
     <string name="settings_version">版本 %1$s</string>
     <string name="settings_privacy">核心功能（打卡/计划/提醒/备份）完全离线运行；仅当你在「AI 设置」开启联网增强后，AI 相关请求才会联网，数据是否发送由该开关控制</string>
 

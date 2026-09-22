@@ -86,11 +86,15 @@ fun AiCoachScreen(
         viewModel.refreshKeyStatus()
     }
 
-    val snackbarRes = uiState.snackbarRes
-    if (snackbarRes != null) {
-        val message = stringResource(snackbarRes, *uiState.snackbarArgs.toTypedArray())
-        LaunchedEffect(snackbarRes, message) {
-            snackbarHostState.showSnackbar(message)
+    // `LaunchedEffect` 无条件创建：放在 `if` 里会让它随分支进出被启停，而 `showSnackbar` 是挂起的 ——
+    // 显示期间 `snackbarRes` 一变，协程就被取消，提示闪一下没了（连续触发两条时尤其明显）。
+    // 与 `BackupScreen` / `TodayScreen` / `SettingsScreen` 同一写法。
+    val snackbarMessage: String? = uiState.snackbarRes?.let { res ->
+        stringResource(res, *uiState.snackbarArgs.toTypedArray())
+    }
+    LaunchedEffect(snackbarMessage) {
+        if (snackbarMessage != null) {
+            snackbarHostState.showSnackbar(snackbarMessage)
             viewModel.onSnackbarShown()
         }
     }

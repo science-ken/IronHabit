@@ -250,7 +250,7 @@ fun SettingsScreen(
                     TipCard(
                         text = stringResource(R.string.settings_notification_permission_tip),
                         onClick = { permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) },
-                        actionText = stringResource(R.string.title_settings),
+                        actionText = stringResource(R.string.action_open_notification_settings),
                         onAction = { context.startActivity(notificationSettingsIntent(context)) },
                     )
                 }
