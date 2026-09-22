@@ -8,6 +8,7 @@ import com.ironhabit.app.domain.model.FoodSource
 import com.ironhabit.app.domain.repository.FoodRepository
 import com.ironhabit.app.test.MainDispatcherRule
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -16,6 +17,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -41,7 +43,7 @@ class FoodLibraryViewModelTest {
     private val clock = mockk<Clock>(relaxed = true)
 
     private fun viewModel(): FoodLibraryViewModel {
-        every { repository.observeActive() } returns flowOf(emptyList())
+        every { repository.observeAll() } returns flowOf(emptyList())
         coEvery { repository.upsert(capture(savedFood)) } returns 7L
         return FoodLibraryViewModel(repository, clock)
     }
@@ -174,7 +176,7 @@ class FoodLibraryViewModelTest {
             source = FoodSource.BUILT_IN,
         )
         val repo = mockk<FoodRepository>(relaxed = true)
-        every { repo.observeActive() } returns flowOf(listOf(milk))
+        every { repo.observeAll() } returns flowOf(listOf(milk))
         coEvery { repo.getFood(3L) } returns milk
         coEvery { repo.upsert(capture(savedFood)) } returns 3L
         val vm = FoodLibraryViewModel(repo, clock)
@@ -198,7 +200,7 @@ class FoodLibraryViewModelTest {
     @Test
     fun savingFlagResetsEvenWhenRepositoryThrows() = runTest(mainDispatcherRule.testDispatcher) {
         val repo = mockk<FoodRepository>(relaxed = true)
-        every { repo.observeActive() } returns flowOf(emptyList())
+        every { repo.observeAll() } returns flowOf(emptyList())
         coEvery { repo.upsert(any()) } throws RuntimeException("db busy")
         val vm = FoodLibraryViewModel(repo, clock)
 
@@ -208,4 +210,95 @@ class FoodLibraryViewModelTest {
         runCatching { vm.onSave() }
         assertEquals("失败后必须复位，否则保存按钮永久点不动", false, vm.formState.value.isSaving)
     }
+
+    /** 一条启用中的与一条已停用的，够铺出两栏。 */
+    private fun twoColumnRepo(): FoodRepository {
+        val repo = mockk<FoodRepository>(relaxed = true)
+        every { repo.observeAll() } returns flowOf(
+            listOf(
+                food(id = 1L, name = "牛奶", kcal = 54),
+                food(id = 2L, name = "酸奶", kcal = 72),
+                food(id = 3L, name = "白砂糖", kcal = 387).copy(isActive = false),
+            ),
+        )
+        return repo
+    }
+
+    private fun food(id: Long, name: String, kcal: Int) = Food(
+        id = id,
+        name = name,
+        kcalPer100g = kcal,
+        proteinPer100g = 0.0,
+        carbsPer100g = 0.0,
+        fatPer100g = 0.0,
+    )
+
+    /**
+     * #13 的回归：停用行必须**还在界面上**（另起一栏），且绝不混进启用栏。
+     *
+     * 反例是原来的形状 —— 仓库只吐 `is_active = 1`，点完「停用」这一行凭空消失，
+     * 而它其实好好躺在库里：用户没有任何地方能把它找回来。
+     */
+    @Test
+    fun disabledFoodsGetTheirOwnColumnAndNeverLeakIntoTheActiveOne() =
+        runTest(mainDispatcherRule.testDispatcher) {
+            val vm = FoodLibraryViewModel(twoColumnRepo(), clock)
+            mainDispatcherRule.testDispatcher.scheduler.advanceUntilIdle()
+
+            assertEquals(listOf("牛奶", "酸奶"), vm.uiState.value.visibleFoods.map { it.name })
+            assertEquals(listOf("白砂糖"), vm.uiState.value.inactiveFoods.map { it.name })
+            assertTrue("收起态下停用栏一条都不露", vm.uiState.value.visibleInactiveFoods.isEmpty())
+
+            vm.onToggleInactive()
+            assertEquals(listOf("白砂糖"), vm.uiState.value.visibleInactiveFoods.map { it.name })
+            assertEquals(
+                "展开也不能把停用行并进启用栏（挑选模式只读 visibleFoods）",
+                listOf("牛奶", "酸奶"),
+                vm.uiState.value.visibleFoods.map { it.name },
+            )
+        }
+
+    @Test
+    fun searchAppliesToBothColumnsAndTheDisabledHitCountsAsNotEmpty() =
+        runTest(mainDispatcherRule.testDispatcher) {
+            val vm = FoodLibraryViewModel(twoColumnRepo(), clock)
+            mainDispatcherRule.testDispatcher.scheduler.advanceUntilIdle()
+            vm.onToggleInactive()
+
+            vm.onQueryChange("奶")
+            assertEquals(listOf("牛奶", "酸奶"), vm.uiState.value.visibleFoods.map { it.name })
+            assertTrue(vm.uiState.value.visibleInactiveFoods.isEmpty())
+
+            vm.onQueryChange("糖")
+            assertTrue("启用栏没有命中", vm.uiState.value.visibleFoods.isEmpty())
+            assertEquals(listOf("白砂糖"), vm.uiState.value.visibleInactiveFoods.map { it.name })
+            assertTrue("停用栏有命中就不该显示「没有匹配的食物」", vm.uiState.value.nothingToShow.not())
+        }
+
+    @Test
+    fun activatingAndDeactivatingGoStraightToTheRepository() =
+        runTest(mainDispatcherRule.testDispatcher) {
+            val repo = twoColumnRepo()
+            val vm = FoodLibraryViewModel(repo, clock)
+
+            vm.onActivate(3L)
+            vm.onDeactivate(1L)
+            mainDispatcherRule.testDispatcher.scheduler.advanceUntilIdle()
+
+            coVerify(exactly = 1) { repo.activate(3L) }
+            coVerify(exactly = 1) { repo.deactivate(1L) }
+        }
+
+    /** 停用之后行要看得见，否则"它去哪了"这个问题只能靠用户自己滚。 */
+    @Test
+    fun deactivatingOpensTheDisabledColumnImmediately() =
+        runTest(mainDispatcherRule.testDispatcher) {
+            val repo = twoColumnRepo()
+            val vm = FoodLibraryViewModel(repo, clock)
+            mainDispatcherRule.testDispatcher.scheduler.advanceUntilIdle()
+            assertFalse(vm.uiState.value.showInactive)
+
+            vm.onDeactivate(1L)
+            assertTrue(vm.uiState.value.showInactive)
+        }
 }

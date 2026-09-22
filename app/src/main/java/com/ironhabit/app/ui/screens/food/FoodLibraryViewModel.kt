@@ -75,14 +75,27 @@ class FoodLibraryViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            foodRepository.observeActive().collect { foods ->
-                _uiState.update { it.copy(allFoods = sortByPinyin(foods)) }
+            foodRepository.observeAll().collect { foods ->
+                // 启用/停用分两栏而不是混排一栏：整库按拼音排好是用户找东西的依据，
+                // 把停用的混进去会让"牛奶"旁边突然多出一条他已经不要的牛奶。
+                val (active, inactive) = foods.partition { food -> food.isActive }
+                _uiState.update {
+                    it.copy(
+                        allFoods = sortByPinyin(active),
+                        inactiveFoods = sortByPinyin(inactive),
+                    )
+                }
             }
         }
     }
 
     fun onQueryChange(query: String) {
         _uiState.update { it.copy(query = query) }
+    }
+
+    /** 展开 / 收起「已停用」那一栏。 */
+    fun onToggleInactive() {
+        _uiState.update { it.copy(showInactive = !it.showInactive) }
     }
 
     fun onOpenCreate() {
@@ -202,9 +215,20 @@ class FoodLibraryViewModel @Inject constructor(
         }
     }
 
-    /** 停用一条食物（本库唯一的删除出口）。 */
+    /**
+     * 停用一条食物（软删：`is_active = 0`，行留在库里）。
+     *
+     * 顺手把「已停用」展开：否则点完"停用"这一行凭空消失，用户 next 的问题一定是
+     * "它去哪了 / 我点错了吗"。展开后它就在同一屏下方继续可见，找回的出口也当场暴露。
+     */
     fun onDeactivate(foodId: Long) {
+        _uiState.update { it.copy(showInactive = true) }
         viewModelScope.launch { foodRepository.deactivate(foodId) }
+    }
+
+    /** 启用回来（#13：停用必须是双向门）。 */
+    fun onActivate(foodId: Long) {
+        viewModelScope.launch { foodRepository.activate(foodId) }
     }
 
     private fun nowMillis(): Long = clock.now().toEpochMilliseconds()

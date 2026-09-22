@@ -100,6 +100,8 @@ class StringResourcePlaceholderContractTest {
         entry("label_food_per_100g_summary", ArgKind.NUMERIC) // FoodLibrarySheet（kcalPer100g: Int）
         entry("label_food_serving_summary", ArgKind.STRING, ArgKind.NUMERIC) // FoodLibrarySheet（unit: String, grams: Int）
         entry("label_food_library_count", ArgKind.NUMERIC) // FoodLibraryEntry（allFoods.size: Int）
+        entry("chip_food_inactive_count", ArgKind.NUMERIC) // FoodLibrarySheet（inactiveFoods.size: Int）
+        entry("label_food_inactive_summary", ArgKind.NUMERIC) // FoodLibrarySheet 停用行（kcalPer100g: Int）
         entry("label_meal_item_summary", ArgKind.STRING, ArgKind.STRING, ArgKind.NUMERIC) // MealBlock（名称 · 份量 · kcal）
         entry("label_meal_kcal_approx", ArgKind.NUMERIC, ArgKind.NUMERIC) // MealBlock 粗记态（kcal, 蛋白 g）
         entry("msg_meal_item_limit", ArgKind.STRING) // TodayViewModel（上限走 snackbarArgs: List<String> → 只能 %1$s）

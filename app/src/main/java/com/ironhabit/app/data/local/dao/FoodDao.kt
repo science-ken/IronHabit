@@ -27,15 +27,21 @@ data class FoodWithServings(
  * `INSERT OR REPLACE` = DELETE + INSERT，rowid 会变。第二刀的 `meal_items.food_id` 一旦建立，
  * REPLACE 就会把历史条目的引用甩断 —— 所以从第一刀起就只允许 `ABORT` + 显式 [upsert]。
  *
- * 搜索**不在 SQL 层**：与动作库一致，取回启用列表后在内存里按名称做包含匹配。
+ * 搜索**不在 SQL 层**：与动作库一致，取回全部行后在内存里按名称做包含匹配。
  * 内置库只有几十到几百条，走 `LIKE` 反而要操心转义和大小写，不划算。
  */
 @Dao
 interface FoodDao {
 
+    /**
+     * 观察**全部**食物行（含 `is_active = 0` 的停用行）。
+     *
+     * 不在 SQL 里过滤掉停用行：#13 的教训是"软删 + 界面上找不回来"等于永久删除。
+     * 谁在用它、要不要按启用分流，交给调用方决定（食物库分两段显示，备份导出要整表）。
+     */
     @Transaction
-    @Query("SELECT * FROM foods WHERE is_active = 1 ORDER BY sort_order, name")
-    fun observeActiveWithServings(): Flow<List<FoodWithServings>>
+    @Query("SELECT * FROM foods ORDER BY sort_order, name")
+    fun observeAllWithServings(): Flow<List<FoodWithServings>>
 
     /** 按 id 取单条（**含已停用** —— 历史记录要能点进来看当时吃的是什么）。 */
     @Transaction
@@ -140,4 +146,13 @@ interface FoodDao {
      */
     @Query("UPDATE foods SET is_active = 0 WHERE id = :id")
     suspend fun deactivate(id: Long)
+
+    /**
+     * 启用回来 —— 与 [deactivate] 成对。
+     *
+     * 少了这一条，[deactivate] 的软删在用户眼里就是永久删除：行还在库里，
+     * 但界面上没有任何地方能再点到自己（#13 的原始缺陷）。
+     */
+    @Query("UPDATE foods SET is_active = 1 WHERE id = :id")
+    suspend fun activate(id: Long)
 }

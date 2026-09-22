@@ -28,8 +28,8 @@ class FoodRepositoryImpl @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : FoodRepository {
 
-    override fun observeActive(): Flow<List<Food>> =
-        foodDao.observeActiveWithServings()
+    override fun observeAll(): Flow<List<Food>> =
+        foodDao.observeAllWithServings()
             .map { rows -> rows.map { row -> FoodMapper.toDomain(row) } }
             .flowOn(ioDispatcher)
 
@@ -66,6 +66,10 @@ class FoodRepositoryImpl @Inject constructor(
      */
     override suspend fun deactivate(foodId: Long) {
         foodDao.deactivate(foodId)
+    }
+
+    override suspend fun activate(foodId: Long) {
+        foodDao.activate(foodId)
     }
 
     override suspend fun seedBuiltIns(): Int = foodSeeder.seedIfNeeded()

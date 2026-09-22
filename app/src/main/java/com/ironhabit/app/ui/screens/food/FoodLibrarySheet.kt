@@ -12,6 +12,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -97,7 +98,7 @@ fun FoodLibraryEntry(
 }
 
 /**
- * 食物库弹层：浏览 / 搜索 / 新建 / 编辑 / 停用，**或**给某一餐挑食物。
+ * 食物库弹层：浏览 / 搜索 / 新建 / 编辑 / 停用（含停用后启用回来），**或**给某一餐挑食物。
  *
  * ## 两种模式
  * [onPick] 为 `null` 时是"管库"：点条目 = 打开编辑。
@@ -182,7 +183,19 @@ private fun FoodListSection(
         Text(text = stringResource(R.string.action_new_food))
     }
 
-    if (uiState.visibleFoods.isEmpty()) {
+    // 放在列表**上方**而不是末尾：启用中的食物有几十条，滚到底才看到"这里能找回停用的"
+    // 等于没有 —— 用户是在列表顶上发现东西不见了，不是在列表底下。
+    if (uiState.inactiveFoods.isNotEmpty() && !picking) {
+        FilterChip(
+            selected = uiState.showInactive,
+            onClick = { viewModel.onToggleInactive() },
+            label = {
+                Text(text = stringResource(R.string.chip_food_inactive_count, uiState.inactiveFoods.size))
+            },
+        )
+    }
+
+    if (uiState.nothingToShow) {
         Text(
             text = stringResource(
                 if (uiState.query.isBlank()) R.string.empty_food_library else R.string.empty_food_search_no_match
@@ -204,7 +217,53 @@ private fun FoodListSection(
         }
     }
 
+    // 停用行只给「启用」，不给「编辑」：`onSave` 保存时恒定写 `isActive = true`，
+    // 从停用行进表单会"只是改个热量，它却自己回来了"。要改就先启用，那是一次明确的意图。
+    if (!picking) {
+        uiState.visibleInactiveFoods.forEach { food ->
+            FoodInactiveRow(
+                food = food,
+                onActivate = { viewModel.onActivate(food.id) },
+            )
+        }
+    }
+
     Box(modifier = Modifier.padding(bottom = IronHabitSpacing.lg))
+}
+
+/**
+ * 已停用的一行：名字压暗、第二行标明「已停用」、右侧只留一个「启用」。
+ *
+ * 不列份量：这行要回答的只有"这条我还能要不回来吗"，摊开克数只会让它和启用中的长得一样。
+ */
+@Composable
+private fun FoodInactiveRow(
+    food: Food,
+    onActivate: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = IronHabitSpacing.xs),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = food.name,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = stringResource(R.string.label_food_inactive_summary, food.kcalPer100g),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        TextButton(onClick = onActivate) {
+            Text(text = stringResource(R.string.action_activate))
+        }
+    }
 }
 
 /**

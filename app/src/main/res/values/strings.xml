@@ -670,6 +670,9 @@
     <string name="hint_food_serving_grams">等于多少克</string>
     <string name="action_add_serving">再加一份</string>
     <string name="action_deactivate">停用</string>
+    <string name="action_activate">启用</string>
+    <string name="chip_food_inactive_count">已停用 %1$d 条</string>
+    <string name="label_food_inactive_summary">已停用 · 每 100g 约 %1$d kcal</string>
     <string name="action_remove">删除</string>
     <string name="msg_food_saved">已保存</string>
     <string name="label_food_library_count">共 %1$d 条 · 可搜索 / 新建 / 停用</string>

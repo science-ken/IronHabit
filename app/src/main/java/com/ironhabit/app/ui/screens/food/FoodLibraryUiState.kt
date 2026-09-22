@@ -11,15 +11,33 @@ import java.util.Locale
  * 同一取舍：这样它能被 JVM 单测直接喂列表断言，不必起 ViewModel、也不必 mock 仓库。
  */
 data class FoodLibraryUiState(
-    /** 仓库里全部启用食物（已按拼音序排好）。 */
+    /** 启用中的食物（已按拼音序排好）—— 就是"库里"那一栏。 */
     val allFoods: List<Food> = emptyList(),
+    /** 已停用的食物（同样按拼音序）。停用是软删，行还在库里，所以这里必须看得见。 */
+    val inactiveFoods: List<Food> = emptyList(),
     /** 搜索框原文。 */
     val query: String = "",
+    /** 「已停用」筛选是否展开。 */
+    val showInactive: Boolean = false,
     /** 正在新建/编辑的食物 id；`null` = 列表态。 */
     val editingFoodId: Long? = null,
 ) {
-    /** 当前显示给用户的条目。 */
+    /** 当前显示给用户的启用条目。挑选模式只用这一条（见 [visibleInactiveFoods]）。 */
     val visibleFoods: List<Food> get() = searchFoods(allFoods, query)
+
+    /**
+     * 展开「已停用」后该显示的停用行；收起态恒为空 —— 闸门放在状态里，
+     * 免得每个渲染处都要自己记得判 [showInactive]。
+     *
+     * 挑选模式**永远不渲染它**：`AddMealItemUseCase` 会挡掉停用食物，
+     * 摆一个点下去必定失败的按钮更糟。
+     */
+    val visibleInactiveFoods: List<Food>
+        get() = if (showInactive) searchFoods(inactiveFoods, query) else emptyList()
+
+    /** 两段都没有命中时才该显示空态提示。 */
+    val nothingToShow: Boolean
+        get() = visibleFoods.isEmpty() && visibleInactiveFoods.isEmpty()
 }
 
 /**
