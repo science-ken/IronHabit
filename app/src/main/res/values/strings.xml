@@ -173,6 +173,8 @@
     <string name="label_reminder_switch">提醒</string>
     <string name="label_reminder_time">提醒时间</string>
     <string name="empty_habit">还没有习惯，点右上角「+」添加第一个吧</string>
+    <string name="dialog_delete_habit_title">删除这个习惯？</string>
+    <string name="dialog_delete_habit_message">「%1$s」将从习惯列表移除，无法撤销；它的打卡记录仍留在历史里</string>
     <string name="empty_heatmap">暂无打卡数据</string>
     <string name="label_completion_rate">区间完成率</string>
 

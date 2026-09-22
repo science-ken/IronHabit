@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
@@ -25,12 +26,16 @@ import com.ironhabit.app.ui.theme.IronHabitSpacing
  * 习惯勾选行。
  *
  * 左侧显示 emoji 与习惯名（下方小字显示连续天数 `label_streak_days`），
- * 右侧为 [Checkbox]（勾选/取消 → [onToggle]）与编辑按钮（→ [onEdit]）、删除按钮（→ [onDelete]）。
+ * 右侧为编辑按钮（→ [onEdit]）、[Checkbox]（勾选/取消 → [onToggle]），
+ * 以及**只在调用方给了 [onDelete] 时**才出现的删除按钮（最右，离勾选最远）。
  *
  * **只读态**（[enabled] = `false`，用于「所选日 > 今天」）：禁用勾选（打卡）入口，
- * 但「编辑」（改习惯定义，与日期无关）仍可用。
+ * 但「编辑」与「删除」（改的是习惯定义本身，与日期无关）仍可用。
  *
  * @param enabled 勾选（打卡）是否可写（`false` = 未来日只读态）
+ * @param onDelete `null` = 这个位置不该有删除入口。刻意不给默认空实现：
+ *   画一个点了没反应的垃圾桶，比不画更糟 —— 之前正是 `onDelete = {}` 这个默认值让删除按钮
+ *   一直没被渲染，而今日页复用本组件时又确实不该删习惯（审查报告 P0-2）。
  */
 @Composable
 fun HabitRow(
@@ -38,7 +43,7 @@ fun HabitRow(
     onToggle: (Boolean) -> Unit,
     onEdit: () -> Unit,
     modifier: Modifier = Modifier,
-    onDelete: () -> Unit = {},
+    onDelete: (() -> Unit)? = null,
     enabled: Boolean = true,
 ) {
     val colorScheme = MaterialTheme.colorScheme
@@ -99,6 +104,16 @@ fun HabitRow(
                 onCheckedChange = onToggle,
                 enabled = enabled,
             )
+            // 放最右：与勾选框隔开一个控件的距离，误触概率最低。
+            // 确认框在调用方（DisciplineScreen）—— 本组件是今日页与自律页共用的哑组件。
+            if (onDelete != null) {
+                IconButton(onClick = onDelete) {
+                    Icon(
+                        imageVector = Icons.Filled.Delete,
+                        contentDescription = stringResource(R.string.action_delete),
+                    )
+                }
+            }
         }
     }
 }

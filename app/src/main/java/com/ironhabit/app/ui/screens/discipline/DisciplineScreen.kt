@@ -10,15 +10,20 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -26,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ironhabit.app.R
+import com.ironhabit.app.domain.model.HabitItem
 import com.ironhabit.app.ui.components.EmptyState
 import com.ironhabit.app.ui.components.HabitRow
 import com.ironhabit.app.ui.components.HeatmapGrid
@@ -49,6 +55,11 @@ fun DisciplineScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = LocalSnackbarHostState.current
+
+    // 删除走软删（`is_active = 0`，`habit_logs` 保留），但界面上没有任何地方能再看见它
+    // （所有消费方都过 `is_active = 1`）—— 所以按"不可逆"对待：点垃圾桶只把待删项挑出来，
+    // 真删要等确认框的「删除」。形状与「数据备份」页的导入确认框一致。
+    var habitToDelete: HabitItem? by remember { mutableStateOf(null) }
 
     val snackbarText: String? = uiState.snackbarRes?.let { res -> stringResource(res) }
     LaunchedEffect(snackbarText) {
@@ -120,7 +131,7 @@ fun DisciplineScreen(
                                 )
                             },
                             onEdit = { onEditHabit(item.habit.id) },
-                            onDelete = { viewModel.onDeleteHabit(item.habit.id) },
+                            onDelete = { habitToDelete = item },
                         )
                     }
                 }
@@ -131,6 +142,33 @@ fun DisciplineScreen(
                 MonthSummaryCard(completionRate = uiState.monthCompletionRate)
             }
         }
+    }
+
+    val pending: HabitItem? = habitToDelete
+    if (pending != null) {
+        AlertDialog(
+            onDismissRequest = { habitToDelete = null },
+            title = { Text(text = stringResource(R.string.dialog_delete_habit_title)) },
+            text = {
+                // 报出习惯名是这条确认框的全部价值：让用户看见"我按的是哪一行的删除"。
+                Text(text = stringResource(R.string.dialog_delete_habit_message, pending.habit.name))
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        habitToDelete = null
+                        viewModel.onDeleteHabit(pending.habit.id)
+                    },
+                ) {
+                    Text(text = stringResource(R.string.action_delete))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { habitToDelete = null }) {
+                    Text(text = stringResource(R.string.action_cancel))
+                }
+            },
+        )
     }
 }
 

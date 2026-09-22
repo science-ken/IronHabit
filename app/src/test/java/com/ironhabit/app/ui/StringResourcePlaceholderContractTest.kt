@@ -79,6 +79,7 @@ class StringResourcePlaceholderContractTest {
 
         // ---------------- 【直调】stringResource(R.string.x, ...) 字面量调用 ----------------
         entry("label_streak_days", ArgKind.NUMERIC) // HabitRow:70 / TodayBento（streak.current）
+        entry("dialog_delete_habit_message", ArgKind.STRING) // DisciplineScreen 删除确认框（habit.name）
         entry("label_streak_best", ArgKind.NUMERIC) // TodayBento（streak.best）
         entry("label_progress_ratio", ArgKind.NUMERIC, ArgKind.NUMERIC) // TodayBento（今日完成、习惯 n/m）
         entry("cd_set_index", ArgKind.NUMERIC) // SetCheckboxRow:76（index + 1）
