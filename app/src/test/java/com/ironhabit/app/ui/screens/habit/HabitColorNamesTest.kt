@@ -1,6 +1,7 @@
 package com.ironhabit.app.ui.screens.habit
 
 import com.ironhabit.app.R
+import com.ironhabit.app.ui.theme.HABIT_COLOR_HEXES
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Test

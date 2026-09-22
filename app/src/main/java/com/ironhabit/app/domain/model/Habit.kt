@@ -31,7 +31,7 @@ data class Habit(
     val id: Long = 0L,
     val name: String = "",
     val emoji: String = DEFAULT_EMOJI,
-    val colorHex: String = "#2196F3",
+    val colorHex: String = DEFAULT_COLOR_HEX,
     val frequency: HabitFrequency = HabitFrequency.DAILY,
     val weeklyDaysMask: Int = 0x7F,
     val reminderEnabled: Boolean = false,
@@ -72,6 +72,14 @@ data class Habit(
          * 用户自己选 ✅ 仍然允许 —— 那是他的选择，不是我们替他预设状态。
          */
         const val DEFAULT_EMOJI: String = "\uD83D\uDCAA"
+
+        /**
+         * 新建习惯的默认主题色。**全工程只有这一个 `#2196F3` 字面量**：
+         * 色板（`ui.theme.HABIT_COLOR_HEXES` 首项）、`habits.color_hex` 列默认值、
+         * 备份负载默认值都指到这里。色板本身在主题文件里（架构 §7.5），但它存的是**数据**，
+         * 会写库、会随备份往返，所以默认值归域层。
+         */
+        const val DEFAULT_COLOR_HEX: String = "#2196F3"
 
         /** 全周掩码：bit0..bit6 全为 1。 */
         const val WEEKLY_DAYS_ALL: Int = 0x7F

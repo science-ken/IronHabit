@@ -4,6 +4,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import com.ironhabit.app.domain.model.Habit
 
 /**
  * IronHabit M3 色板（浅色 / 深色两套）。
@@ -45,8 +46,8 @@ private val Neutral70 = Color(0xFFBDBDBD)
 private val Neutral80 = Color(0xFFDCDCDC)
 private val Neutral87 = Color(0xFFE8E8E8)
 private val Neutral90 = Color(0xFFE4E4E4)
-private val Neutral96 = Color(0xFFF5F5F5)
 private val Neutral95 = Color(0xFFF0F0F0)
+private val Neutral96 = Color(0xFFF5F5F5)
 private val Neutral98 = Color(0xFFFAFAFA)
 private val Neutral99 = Color(0xFFFFFFFF)
 private val Neutral100 = Color(0xFFFFFFFF)
@@ -84,6 +85,33 @@ private val ErrorDark = Color(0xFFFFB4AB)
 private val OnErrorDark = Color(0xFF690005)
 private val ErrorContainerDark = Color(0xFF93000A)
 private val OnErrorContainerDark = Color(0xFFFFDAD6)
+
+// =============================================================================
+// 五、习惯「主题色」预设板
+// =============================================================================
+/**
+ * 习惯色板的六个预设色，从 `AddEditHabitScreen` 挪进来（架构 §7.5：颜色只在本文件决定）。
+ *
+ * ⚠️ 它们是 `String` 而不是 `Color`，因为要原样写进 `habits.color_hex` 并随备份往返 ——
+ * **改一个已有条目等于改数据**，老库里那条习惯会指向一个不再存在的颜色。只能往末尾追加。
+ *
+ * ⚠️ 深色模式的真实短板和审查报告说的**相反**。报告称 `#009688`/`#2196F3` 压深底不足，
+ * 实测底色是页面背景（圆点外面没有卡片）：对浅底 `#FFFFFF` / 对深底 `#111111`，非文本要求 3:1 ——
+ * 蓝 3.12/6.04、绿 2.78/6.79、橙 2.16/8.76、粉 4.35/4.34、紫 6.30/2.99（深底这条不合格）、青 3.67/5.14。
+ * 即深底上六个里只有紫色差一点，而浅底上橙、绿反而都不够 —— 报告把方向搞反了。
+ * 治法是给圆点补一圈 `outline` 描边（见 `HabitColorPicker`），不是改 hex。
+ *
+ * 首项即新建习惯的默认色，直接取域层的 `Habit.DEFAULT_COLOR_HEX`（**唯一字面量**在那边，
+ * 这里再写一个就是走查 #9 那种"两边各写一份迟早漂"）。
+ */
+val HABIT_COLOR_HEXES: List<String> = listOf(
+    Habit.DEFAULT_COLOR_HEX,
+    "#4CAF50",
+    "#FF9800",
+    "#E91E63",
+    "#9C27B0",
+    "#009688",
+)
 
 /** 浅色主题配色。 */
 val IronHabitLightColorScheme = lightColorScheme(
@@ -125,7 +153,11 @@ val IronHabitLightColorScheme = lightColorScheme(
     surfaceContainerLow = Neutral98,
     surfaceContainer = Neutral96,
     surfaceContainerHigh = Neutral95,
-    surfaceContainerHighest = Neutral80,
+    // 以前是 Neutral80（#DCDCDC）：从 High 的 #F0F0F0 一跳掉 3 档，今日页那块 hero 磁贴
+    // 像被泼了块灰泥，压过了本该最醒目的 streak 数字。改成只深一档。
+    // ⚠️ 连带影响：`TodayBento` 的进度条轨道也用这个 token，于是轨道也跟着变浅
+    // （对磁贴底 1.20:1 → 1.12:1）。轨道本来就该安静、 filled 段是 primary，所以可接受。
+    surfaceContainerHighest = Neutral90,
     surfaceDim = Neutral87,
     surfaceBright = Neutral98,
 
@@ -189,9 +221,16 @@ val IronHabitDarkColorScheme = darkColorScheme(
  * ⚠️ **不要用线性插值代替这张表。** 之前 `cellColor` 是在 `surfaceVariant → primary`
  * 之间按 `level / 4` 插值，结果 1 档只比 0 档深一点点（实测对磁贴底只有 1.13:1 与 1.27:1），
  * 肉眼上"有打卡"和"没打卡"几乎一样 —— 热力图就白画了。
- * 这里把相邻档的间距手动拉开：0→1 是最关键的一跳。
+ * 这里把相邻档的间距手动拉开：0→1 是最关键的一跳，而它靠的是**色相**（中性灰 → 青），
+ * 不是明度 —— 明度比只有 1.37 与 1.56，谁按数字去"调对比度"都会把它调回一坨。
  *
- * 对磁贴底 `surfaceContainerHigh` 的对比度依次 1.20 / 1.37 / 1.90 / 3.01 / 5.43。
+ * 底色是**页面背景 `background`（浅底 `#FFFFFF`）**，不是磁贴 —— `HeatmapGrid` 直接铺在
+ * 自律页/历史页的 Column 上，外层没有任何 Card（以前这张表按 `surfaceContainerHigh` 算，
+ * 底选错了，数字全部偏低）。对背景的对比度依次 1.37 / 1.56 / 2.16 / 3.43 / 6.18。
+ *
+ * ⚠️ 审查报告 2.3 建议把 0 档再压深成 `#C9C9C9`（"空格几乎融进背景"）。**不采纳，因为它会倒序**：
+ * `#C9C9C9` 对白底是 1.66:1，比 1 档的 1.56:1 还显眼 —— 第一跳（0→1，整张表最关键的一跳）
+ * 直接反向，"没练"会比"练了一次"更抢眼。0 档要更响只能整表重排，不是改一格。
  */
 private val HeatmapLevelsLight: List<Color> = listOf(
     Color(0xFFDCDCDC), // 0 无数据：安静，但要能看出是一格
@@ -208,7 +247,7 @@ private val HeatmapLevelsLight: List<Color> = listOf(
  * 实测浅色的 0 档 `#DCDCDC` 对深底是 13.77:1（最扎眼），而 4 档 `#0B6E5B` 只有 3.05:1，
  * 空格子在喊、满格子在 whisper。
  *
- * 对磁贴底 `surfaceContainerHigh #1D1D1D` 的对比度依次 1.28 / 2.83 / 4.95 / 7.79 / 9.90，
+ * 对深底 `background #111111` 的对比度依次 1.43 / 3.17 / 5.54 / 8.72 / 11.09，
  * 明度单调递增；4 档取深色 `primary`。
  */
 private val HeatmapLevelsDark: List<Color> = listOf(

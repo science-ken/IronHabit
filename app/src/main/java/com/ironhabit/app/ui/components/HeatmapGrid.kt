@@ -28,7 +28,10 @@ import com.ironhabit.app.domain.util.DateUtils
  *
  * 布局：**列 = 周（时间递增），行 = 周一..周日**。
  * 采用 [DateUtils.weekdayMon1] 计算首格所在行，`epochDay` 递增填充；数据不足 7 个/周时补空格。
- * 颜色按 `level 0..4` 在 `colorScheme.surfaceVariant`（无打卡）与 `colorScheme.primary`（高密度）之间插值。
+ *
+ * 颜色**不是插值**：按 `level 0..4` 直接查 `heatmapLevels()` 那张手调表（深浅各一张）。
+ * 以前是在 `surfaceVariant → primary` 之间按 `level / 4` 线性插值，1 档只比 0 档深一点点，
+ * "有打卡"和"没打卡"肉眼分不出来 —— 表的存在理由和实测数字都写在那张表的注释里。
  *
  * @param cells 升序排列的热力图单元格（`StatsRepository.heatmap` 输出）
  */

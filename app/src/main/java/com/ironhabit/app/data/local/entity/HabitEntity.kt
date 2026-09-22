@@ -4,6 +4,7 @@ import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import com.ironhabit.app.domain.model.Habit
 import com.ironhabit.app.domain.model.HabitFrequency
 
 /**
@@ -29,7 +30,7 @@ data class HabitEntity(
     val emoji: String = "",
 
     @ColumnInfo(name = "color_hex")
-    val colorHex: String = "#2196F3",
+    val colorHex: String = Habit.DEFAULT_COLOR_HEX,
 
     @ColumnInfo(name = "frequency")
     val frequency: HabitFrequency = HabitFrequency.DAILY,

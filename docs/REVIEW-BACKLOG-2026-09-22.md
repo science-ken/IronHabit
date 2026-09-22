@@ -17,6 +17,7 @@
 | **P0-3** 加餐克数被食物第一个份量静默覆盖 | **代码属实，但当前不可达 → 降级** | 唯一调用方 `TodayViewModel.kt:343-352` 只在 `serving == null` 时传 100g；而挑选模式 `FoodLibrarySheet.kt:300` 只在 `food.hasServing == false` 时才传 `null` —— 此时 `food.servings.firstOrNull()` 也是 null，`grams` 照常生效。**"界面说按 100g 起记、实际记 200g"这件事现在发生不了** |
 | **P1-2** 饼图全历史 vs 趋势近 30 天 | **缺陷属实，但报告描述的场景不存在** | 报告写"用户把周期切到近 7 天" —— 现在**根本没有周期切换控件**（`GetStatsUseCase.kt:56` 默认 30 天写死）。成立的部分是：趋势卡标着「近 30 天」，饼图 `categoryShareRows()` 无区间参数且界面不注明，两图并排说两段时间 |
 | **P0-3 附带** `InputLimits.isValidServingCount` 定义了没人调用 | **函数名是编的**，缺陷本身成立 | 实际叫 `isValidServings`（`InputLimits.kt:177`，区间 0.1–20），全仓**零调用点**属实；`ChangeMealItemPortionUseCase.kt:41` 只卡克数不卡份数 |
+| **P1-5** 习惯色板"深色模式下 `#009688`/`#2196F3` 压深底对比不足" | **方向反了 → 按实测重排** | 圆点外面没有卡片，实测底色是页面背景。对深底 `#111111`：蓝 **6.04**、青 **5.14**（报告点名的这两条最安全），真正不合格的是紫 **2.99**；而对浅底 `#FFFFFF` 橙只有 **2.16**、绿 **2.78** —— 短板在报告没看的亮底一侧。hex 是要写库的数据，不能为对比度改色，治法见 A9 |
 | 报告未覆盖 | — | 它审的是 `10359bf`。今天已修的 4 刀（#13 食物库单向门 / 「已保留 N 条」口径 / D14 每周相同清标记 / D15 D16）与 D17 都不在报告里；报告里也没有 B 查出的一条：**MuMu 有可用 SAF 面板**，导入路径已完整验证过 |
 
 **报告"已核对排除"那节我复核后同意**（Room v9 schema、`weekStartMon1` 三处公式、`toggleSetBit` 同事务、三条硬编码规则的 0/0/1 处违反），没有虚报。
@@ -39,20 +40,21 @@
 | A6 | **`imePadding` 与 `verticalScroll` 顺序**：`FoodLibrarySheet.kt:132-133` 是 `verticalScroll().imePadding()`，`CheckInSheet.kt:87` 反过来且注释写着"其他弹层均已修，唯独这里漏了" —— 同项目两种写法，必有一处是错的。**这条我要先在真机量一次再改**：今天下午我在食物库表单里开着键盘滚到底，「保存」是点得到的，所以报告说的"按钮够不到"至少在这台 1080×1920 上没复现 | 报告 P1-3 | 20min + 真机 |
 | A7 | **`remember` 放在 `if` 分支里**：`TodayBento.kt:255-257`。Compose 要求 remember 调用点位置稳定，`onClick` 在 null/非 null 之间切换时槽位漂移 → 按压态偶发丢失或串格。改成无条件 remember、取值处再判 | 报告 P1-4 | 10min |
 | ~~A8~~ | ~~加餐的份数无校验 + 显式输入被隐式推断覆盖~~ **已修 `dc95e5f`**：`AddMealItemUseCase.kt:60` `serving ?: food.servings.firstOrNull()`（调用方明确传了 `grams` 时被丢掉，见勘误第 2 行 —— 当前不可达，但这是颗地雷）；`InputLimits.isValidServings` 零调用；加餐走份数时**不卡 2000g 上限**，改的时候却卡 → "能加不能改" | 报告 P0-3（降级后） | 30min |
-| A9 | **习惯色板绕过主题系统**：`AddEditHabitScreen.kt:376-383` 硬编码 6 个 `#RRGGBB` 字符串 + `:271` `parseColor`，违反 `Color.kt` 开头"唯一允许 `Color(0xFF...)` 的位置"这条自定规矩；深色模式下 `#009688`/`#2196F3` 压深底对比不足 | 报告 P1-5 | 1h（含深浅两套目测） |
+| ~~A9~~ | ~~习惯色板绕过主题系统~~ **已修（第 5 步）**：六个 hex 从 `AddEditHabitScreen.kt:376-383` 搬进 `Color.kt` 新增的「五、习惯主题色板」，默认色收敛成**全工程唯一字面量** `Habit.DEFAULT_COLOR_HEX`（色板首项 / `HabitEntity` 列默认 / `BackupPayload` / ViewModel 四处都指它，原来是四份各写一遍）。对比度那半条**报告说反了**：六个 hex 对浅底 `#FFFFFF` 是 3.12/2.78/2.16/4.35/6.30/3.67，对深底 `#111111` 是 6.04/6.79/8.76/4.34/2.99/5.14（顺序＝蓝/绿/橙/粉/紫/青）—— 深底上只有紫（2.99）差一点，浅底上橙（2.16）与绿（2.78）反而更差。hex 是**数据**（写库、随备份往返），不能为了对比度改色，所以治法是给圆点补一圈 `outline` 描边（深浅两套截图 `b5-swatches-light.png` / `b5-swatches-dark.png` 均已目测）。数字表在 `Color.kt`「五、习惯主题色板」 | 报告 P1-5 | 1h（含深浅两套目测） |
 | A10 | **习惯删除是单向门**（修 A1 时查出来的第二层，报告没有这条）：`deleteHabit` 其实是软删（`HabitRepositoryImpl.kt:79-82` → `is_active = 0`，`habit_logs` 原样保留），但**所有**消费方都过 `is_active = 1`，连 `AddEditHabitViewModel.kt:110` 也只读启用行 → 删掉的习惯在界面上再也看不见，没有恢复入口。比 #13 食物停用更糟一点：重建一条同名习惯会拿到**新 id**，与老日志的关联永久断掉（热力图与连续天数按 habitId 逐条算）。改法照抄今天食物库那套：「已删除 N 条」筛选 + 恢复按钮，或直接给带「撤销」的 snackbar（软删本来就支持撤销，这条比食物那条更做得干净） | B 组 D18 | 1h |
+| A11 | **习惯「主题色」没有任何渲染点**（修 A9 时查出来的，报告没有这条）：`colorHex` 全 app 只被选色器自己读一次（`AddEditHabitScreen.kt:177`），习惯行/磁贴/热力图都不用它 —— 用户挑完颜色哪儿都没变。A9 那半边（色板归位、圆点描边）已修，这条是它的后半段：**颜色要显示在哪儿是产品决定**，我没有替你选。详见 `.scratch/defects.md` D19 | 本轮自查 | 待定（先要一个决定） |
 
 ### B 组 · 无障碍与文案一致性（小、独立、可批量）
 
 | # | 事项 | 来源 | 代价 |
 |---|---|---|---|
-| B1 | 装饰性「›」是真实文本节点，TalkBack 会念 —— **今天 uiautomator dump 里它就是 `TextView "›"`**，属实。`TodayBento.kt:293-302`、`ProfileSummaryCard.kt:85` | 报告 P2-2 | 15min |
-| B2 | 习惯色板触摸目标 36dp（`SWATCH_SIZE = 36.dp`，`AddEditHabitScreen.kt:396`），且无 `contentDescription` / `role` → 无障碍用户不知道这里有一组可选颜色。视觉留 36dp、触摸区补到 48dp | 报告 P2-3 | 20min |
-| B3 | `MealBlock.kt:146` 就地 `fontWeight = FontWeight.SemiBold`，违反 `Type.kt:27` 的自定规矩，**全 ui/ 唯一一处**。补一个 `labelMediumStrong` 语义样式 | 报告 P2-4 | 15min |
-| B4 | 通知权限引导条的按钮文案取的是页面标题（`SettingsScreen.kt:253` `actionText = title_settings` → 按钮写「设置」，实际跳系统通知设置）。与本页标题撞词，语义不明 | 报告 P2-5 | 10min |
-| B5 | `AiCoachScreen.kt:90` 把 `LaunchedEffect` 放进 `if (snackbarRes != null)` 分支，与 `TodayScreen` / `SettingsScreen` 的无条件写法不一致 → 连续两条提示会互相打断 | 报告 P2-6 | 15min |
-| B6 | 「每周相同」的 `Switch`（`TodayScreen.kt:566`）没有 contentDescription，在 TalkBack 与 uiautomator 里都是隐形节点 —— 与已修的 #12 Checkbox 同一类缺陷（今天我就是靠截图才找到落点） | B 组 D14 附带 | 10min |
-| B7 | 完成率口径：新用户零记录时显示「0%」而不是「还没有数据」（`DisciplineScreen.kt:157`、`HistoryScreen` 同形）。**注意：这是口径问题，不是报告说的 NaN** | 报告 P2-1（改级后） | 20min |
+| ~~B1~~ | ~~装饰性「›」是真实文本节点，TalkBack 会念~~ **已修 `940927f`，但还剩一处**：`TodayBento.kt:293-302` 与 `FoodLibrarySheet` 的「›」已换成 `Icon(ChevronRight, contentDescription = null)`；`ProfileSummaryCard.kt:97` 本来就是 Icon。**漏网的是 `strings.xml:566 ai_review_nav_next` = 「下一周 ›」**，它整串是一个 `TextButton` 的标签（`WeeklyReviewBlock.kt:186`），箭头烧在文案里 → 拆成 Icon + 文字才算修完，10min，不在本轮颜色步骤里 | 报告 P2-2 | 15min + 10min 补漏 |
+| ~~B2~~ | ~~习惯色板触摸目标 36dp（`SWATCH_SIZE = 36.dp`），且无 `contentDescription` / `role` → 无障碍用户不知道这里有一组可选颜色~~ **已修 `940927f`**：视觉留 36dp、触摸区补到 48dp，加 `Role.RadioButton` 与颜色名描述 | 报告 P2-3 | 20min |
+| ~~B3~~ | ~~`MealBlock.kt:146` 就地 `fontWeight = FontWeight.SemiBold`，违反 `Type.kt:27` 的自定规矩，**全 ui/ 唯一一处**~~ **已修 `940927f`**：补 `labelMediumStrong` 语义样式 | 报告 P2-4 | 15min |
+| ~~B4~~ | ~~通知权限引导条的按钮文案取的是页面标题（`SettingsScreen.kt:253` `actionText = title_settings` → 按钮写「设置」，实际跳系统通知设置）~~ **已修 `940927f`**：与本页标题撞词的按钮改成自解释文案 | 报告 P2-5 | 10min |
+| ~~B5~~ | ~~`AiCoachScreen.kt:90` 把 `LaunchedEffect` 放进 `if (snackbarRes != null)` 分支，与 `TodayScreen` / `SettingsScreen` 的无条件写法不一致 → 连续两条提示会互相打断~~ **已修 `940927f`**：改成无条件 `LaunchedEffect`，内部判空 | 报告 P2-6 | 15min |
+| ~~B6~~ | ~~「每周相同」的 `Switch`（`TodayScreen.kt:566`）没有 contentDescription，在 TalkBack 与 uiautomator 里都是隐形节点~~ **已修 `940927f`**：与已修的 #12 Checkbox 同一类缺陷 | B 组 D14 附带 | 10min |
+| ~~B7~~ | ~~完成率口径：新用户零记录时显示「0%」而不是「还没有数据」（`DisciplineScreen.kt:157`、`HistoryScreen` 同形）~~ **已修 `940927f`**：`MonthRate` 带上 `hasAnyCheckIn`，无记录时整行换成「还没有数据」。**注意：这是口径问题，不是报告说的 NaN** | 报告 P2-1（改级后） | 20min |
 | ~~B8~~ | ~~饼图与趋势卡的时间口径~~ **已修 `dc95e5f`**：`StatsDao.kt:43 categoryShareRows()` 无区间参数，趋势卡标「近 30 天」而饼图是装机以来累计，界面无任何标注 | 报告 P1-2（改级后） | 30min |
 
 ### C 组 · 设计/观感改动，**必须先给你看图再动**
@@ -61,11 +63,11 @@
 
 | # | 事项 | 我的判断 |
 |---|---|---|
-| C1 | 连续天数磁贴容器色 `#DCDCDC` → `#E4E4E4`（现在从 `High` 直接跳 3 档到 `Highest`，那格像被泼了块灰泥，压过了本该最醒目的数字） | 同意，改一个色值 |
+| ~~C1~~ | ~~连续天数磁贴容器色 `#DCDCDC` → `#E4E4E4`~~ **已改（第 5 步）**：`surfaceContainerHighest` 浅色档 Neutral80 → Neutral90。截图 `shots/b5-today-light.png` vs 上一轮的 `b1-*.png`：hero 那块不再像被泼了灰泥。**连带一处**：`TodayBento.kt:419` 的进度条轨道用同一个 token，轨道跟着变浅（对磁贴底 1.20:1 → 1.12:1），轨道本来该安静、filled 段是 primary，可接受 | 同意，改一个色值 |
 | C2 | streak 数字 `titleLarge(22sp)` → `displaySmall(40sp)`（全 app 最重要的数字反而比历史页完成率小） | 同意，这条我看过截图，确实失衡 |
 | C3 | 状态提示从裸 `Text` 改成带容器提示条（`secondaryContainer` + 图标） | 中性，看效果图 |
-| C4 | 本周热力条 0 档 `#DCDCDC` → `#C9C9C9`（对磁贴底仅 1.20:1，空格几乎融进背景） | 同意，但**深浅两套都要目测** —— 热力图去年 9 月刚踩过深色反向的坑 |
-| C5 | 饼图第 4 类用 `error` 红当分类色 → 改 primary 明度阶梯 3 档 + tertiary 金 | 同意，红色确实会被读成"出错" |
+| ~~C4~~ | ~~本周热力条 0 档 `#DCDCDC` → `#C9C9C9`~~ **不采纳（第 5 步）**：报告说"对磁贴底仅 1.20:1"，但热力格**外面没有磁贴** —— `HeatmapGrid` 直接铺在页面背景上（`DisciplineScreen.kt:140`、`HistoryScreen.kt:77`，外层无 Card），浅底是 `#FFFFFF`。按真底重算：现状 1.37，提案 `#C9C9C9` = **1.66**，而 1 档 `#A7D9CC` 只有 **1.56** → 0 档会比"练了一次"还抢眼，整张表最关键的第一跳被倒过来。要动只能整表重排，不是改一格。顺手修了 `HeatmapGrid.kt:31` 那条还在说"按 level 插值"的过期注释（和 `CheckInSheet` 那条误导审查报告的是同一类） | **否**，理由与数字写进 `Color.kt` 表注释 |
+| ~~C5~~ | ~~饼图第 4 类用 `error` 红当分类色~~ **已改（第 5 步）**：`sliceColors` 第 4 位 `error` → `primaryContainer`。**但这条在这台机器上看不见**：库里只有自重/力量两类（截图 `b5-profile-light-3.png` 证实饼图只有 2 个扇区），第 4 色要 4 类动作才出现，所以只有代码与单测层面的保证，没有目测证据 | 同意，红色确实会被读成"出错" |
 | C6–C12 | 「我的」页 7 处重构：档案卡加完整度环、**新增关键指标四宫格**（这页现在一个数字都没有）、入口行加图标+副标题、入口分两组去掉手工 Divider、趋势图装卡片+周期切换、饼图修布局+中心总数+换色、骨架屏与真实结构同构 | 约 300 行。报告说"与其它四个 Tab 不同源竞争"这点我核过是对的（`ProfileScreen` 不喂 AI context）。但**这是本轮最大的一块**，建议单独排期，别和 bug 修混在一个 PR 里 |
 
 ### D 组 · 之前自己留的尾巴
@@ -100,9 +102,9 @@
 |---|---|---|
 | 1 | ~~**A1 + A2**~~ ✅ **已做完（`2fd114a` + `bb3c95f`）** | 报告标的两个真 P0。做 A1 时查出**第二层：A10 习惯删除是单向门**，已补进 A 组 |
 | 2 | ~~**A5 + A3 + A8 + B8**~~ ✅ 已做完（`dc95e5f`） | 四条同属"界面说的和库里做的不一致"，且都要动 `strings.xml` 与占位符契约测试，拆开会互相撕扯同一文件，合成一刀。B8 用差分证明：把 `check_ins` id=2 挪出 30 天窗口，饼图 8/4 → 8/3，挪回复原 |
-| 3 | **B 组整批**（B1–B8） | 每条 10–30 分钟、互不相干、可一次提交打包带走；B6/B7 是本轮实测顺手确认的 |
+| 3 | ~~**B 组整批**（B1–B8）~~ ✅ 已做完（`940927f`，B1 漏一处见该行） | 每条 10–30 分钟、互不相干、可一次提交打包带走；B6/B7 是本轮实测顺手确认的 |
 | 4 | **A7 + A8 + A4**（remember 槽位、份数校验、DST） | 正确性债，无当前可见故障，但都是"下一个改代码的人会踩"的形状 |
-| 5 | **A9 + C1–C5**（色板入主题、配色五处收敛） | 必须一起看：都是颜色，分开改会出现"改了一半"的中间态。改完浅色/深色各过一遍 |
+| 5 | ~~**A9 + C1–C5**（色板入主题、配色五处收敛）~~ ✅ 做完（A9/C1/C5 改，**C4 不采纳**），另查出 **A11 = D19** 挂着待你定 | 必须一起看：都是颜色，分开改会出现"改了一半"的中间态。改完浅色/深色各过一遍 —— 四张截图已拍（`b5-today-light/dark`、`b5-swatches-light/dark`），主题设置读回原值 `LIGHT`、DataStore 字节一致 |
 | 6 | **C6–C12**（「我的」页重构） | 单独一轮、单独一个 PR，约 300 行，别和上面混 |
 | 7 | **D1–D4 + E1–E3 + F1–F2** | 尾巴与外部条件 |
 

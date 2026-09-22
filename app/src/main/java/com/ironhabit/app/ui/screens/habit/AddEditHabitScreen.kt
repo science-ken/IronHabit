@@ -52,6 +52,7 @@ import com.ironhabit.app.domain.model.HabitFrequency
 import com.ironhabit.app.ui.components.EmptyState
 import com.ironhabit.app.ui.components.LoadingSkeleton
 import com.ironhabit.app.ui.components.LocalSnackbarHostState
+import com.ironhabit.app.ui.theme.HABIT_COLOR_HEXES
 import com.ironhabit.app.ui.theme.IronHabitSpacing
 
 /**
@@ -295,9 +296,16 @@ private fun HabitColorPicker(
                         .size(SWATCH_SIZE)
                         .clip(CircleShape)
                         .background(swatch)
+                        // 未选中也要描一圈边：橙点在浅底上只有 2.16:1、紫点在深底上只有 2.99:1
+                        // （hex 是数据、不能为了对比度改色，见 `HABIT_COLOR_HEXES`），
+                        // 没有这条边就看不见"这里有个圆点"。
                         .border(
-                            width = if (selected) SELECTED_BORDER else 0.dp,
-                            color = MaterialTheme.colorScheme.primary,
+                            width = if (selected) SELECTED_BORDER else RESTING_BORDER,
+                            color = if (selected) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.outline
+                            },
                             shape = CircleShape,
                         ),
                 )
@@ -392,15 +400,6 @@ private fun frequencyLabelRes(frequency: HabitFrequency): Int = when (frequency)
     HabitFrequency.WEEKLY -> R.string.label_frequency_weekly
 }
 
-internal val HABIT_COLOR_HEXES: List<String> = listOf(
-    "#2196F3",
-    "#4CAF50",
-    "#FF9800",
-    "#E91E63",
-    "#9C27B0",
-    "#009688",
-)
-
 /**
  * 色板 hex → 给 TalkBack 念的颜色名。
  *
@@ -434,3 +433,4 @@ private val SWATCH_SIZE = 36.dp
 /** 色板的**触摸区**边长：M3 最小可点目标 48dp，比看得见的圆点大一圈。 */
 private val SWATCH_TOUCH_SIZE = 48.dp
 private val SELECTED_BORDER = 3.dp
+private val RESTING_BORDER = 1.dp

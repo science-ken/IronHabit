@@ -128,12 +128,19 @@ private fun categoryLabel(category: ExerciseCategory): String = stringResource(
     },
 )
 
-/** 固定色序列（全部取自 M3 `colorScheme`，不硬编码色值）。 */
+/**
+ * 分类色。
+ *
+ * ⚠️ 第 4 类（`CUSTOM`）以前直接用 `colorScheme.error`（红）—— 那是"出错了"的语义色，
+ * 拿它当一种动作分类，用户第一反应是这里出了问题（审查报告 2.3）。
+ * 换成 `primaryContainer`：与 primary 同色系（同一个维度 = 训练量），深浅两套底上都成立，
+ * 且不占用任何语义色。
+ */
 private fun sliceColors(colorScheme: ColorScheme): List<Color> = listOf(
     colorScheme.primary,
     colorScheme.secondary,
     colorScheme.tertiary,
-    colorScheme.error,
+    colorScheme.primaryContainer,
 )
 
 private val PIE_SIZE = 140.dp

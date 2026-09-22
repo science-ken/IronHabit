@@ -162,7 +162,7 @@ data class HabitBackup(
     val id: Long = 0L,
     val name: String = "",
     val emoji: String = "",
-    val colorHex: String = "#2196F3",
+    val colorHex: String = Habit.DEFAULT_COLOR_HEX,
     val frequency: String = HabitFrequency.DAILY.name,
     val weeklyDaysMask: Int = Habit.WEEKLY_DAYS_ALL,
     val reminderEnabled: Boolean = false,
