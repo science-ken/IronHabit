@@ -79,6 +79,7 @@ class PlanRepositoryImpl @Inject constructor(
      * - **勾上**：把这一周的**启用行**复制成"每周相同"那份（`week_start_epoch_day = 0`）。
      *   逐个走 `upsertExplicit` —— 这样即使这个槽位上还躺着一条**早先取消时软删掉的行**，
      *   也会被"复活 + 更新"，而不是撞唯一索引（`REPLACE` 是红线，不能用）。
+     *   复制时两个标记**只增不清**，规则见 [RepeatWeeklyRules]。
      * - **取消**：把"每周相同"那份整体**软停用**（`is_active = 0`，不 DELETE），
      *   于是没有自己计划的周就变成空的（界面显示「创建训练计划」）。
      *
@@ -96,14 +97,17 @@ class PlanRepositoryImpl @Inject constructor(
                 if (weekRows.isEmpty()) {
                     0
                 } else {
+                    // 复制前先读一次模板现有行：命中同一槽位时要按 [RepeatWeeklyRules] 合并，
+                    // 不能整行盖掉用户在手改标记上留下的痕迹。
+                    val existingBySlot: Map<Pair<Int, Long>, WeekPlan> = weekPlanDao.getRepeatRows()
+                        .map(PlanMapper::toDomain)
+                        .associateBy { plan -> plan.dayOfWeek to plan.exerciseId }
                     for (plan in weekRows) {
                         weekPlanDao.upsertExplicit(
                             PlanMapper.toEntity(
-                                plan.copy(
-                                    id = 0L,
-                                    weekStartEpochDay = WeekPlan.TEMPLATE_WEEK_START,
-                                    isActive = true,
-                                    isUserEdited = false,
+                                RepeatWeeklyRules.copyIntoTemplate(
+                                    source = plan,
+                                    existing = existingBySlot[plan.dayOfWeek to plan.exerciseId],
                                 ),
                             ),
                         )
@@ -189,4 +193,27 @@ class PlanRepositoryImpl @Inject constructor(
         }
         removed
     }
+}
+
+/**
+ * 勾选「每周相同」时，一条本周行复制成模板行的字段合并规则（纯函数，与 `BackupRestoreRules` 同一取舍：
+ * `PlanRepositoryImpl` 本身要 `AppDatabase` + Hilt，JVM 里起不来）。
+ *
+ * ⚠️ 两个标记**只增不清**：
+ * - [WeekPlan.isUserEdited]：模板槽位上原本躺着一条用户手改行，复制之后它**仍然要受保护**。
+ *   清成 `false` 会让下一次「生成计划」把这些槽位当成没主 —— 覆盖甚至复活用户手改过的内容
+ *   （`GenerateTrainingPlanUseCase` 的 `blockedSlots` / `userOwnedDays` 全靠这个标记）。
+ *   2026-09-22 真机查出：勾一次开关，模板里 4 条 `is_user_edited=1` 全变 0。
+ * - [WeekPlan.createdAt]：旧行有真实时间就留着。源周行可能是历史数据（`created_at = 0`），
+ *   拿 0 去盖等于把"这条什么时候建的"抹掉。
+ */
+internal object RepeatWeeklyRules {
+
+    fun copyIntoTemplate(source: WeekPlan, existing: WeekPlan?): WeekPlan = source.copy(
+        id = 0L,
+        weekStartEpochDay = WeekPlan.TEMPLATE_WEEK_START,
+        isActive = true,
+        isUserEdited = existing?.isUserEdited == true || source.isUserEdited,
+        createdAt = existing?.createdAt?.takeIf { created -> created > 0L } ?: source.createdAt,
+    )
 }
