@@ -13,7 +13,11 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import kotlinx.coroutines.flow.first
 import kotlinx.datetime.Clock
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toInstant
 
 /**
  * [ReminderScheduler] 的 data 层实现：用 **AlarmManager 精确闹钟**做本地提醒。
@@ -146,13 +150,14 @@ class ReminderSchedulerImpl @Inject constructor(
             true
         }
 
-    /** 目标时刻 = `today + daysAhead` 当天 00:00 + hour:minute（本地时区）。 */
-    private fun triggerAt(hour: Int, minute: Int, daysAhead: Long): Long {
-        val day = DateUtils.todayEpochDay(clock, timeZone) + daysAhead
-        return DateUtils.startOfDayMillis(day, timeZone) +
-            hour * MILLIS_PER_HOUR +
-            minute * MILLIS_PER_MINUTE
-    }
+    /** 目标时刻 = `today + daysAhead` 那一天的本地钟面 `hour:minute`。 */
+    private fun triggerAt(hour: Int, minute: Int, daysAhead: Long): Long = triggerAtMillis(
+        todayEpochDay = DateUtils.todayEpochDay(clock, timeZone),
+        daysAhead = daysAhead,
+        hour = hour,
+        minute = minute,
+        timeZone = timeZone,
+    )
 
     private fun nowMillis(): Long = clock.now().toEpochMilliseconds()
 
@@ -168,9 +173,26 @@ class ReminderSchedulerImpl @Inject constructor(
             ReminderReceiver.reminderIntent(context, type, hour, minute, habitId),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-
-    private companion object {
-        const val MILLIS_PER_HOUR: Long = 3_600_000L
-        const val MILLIS_PER_MINUTE: Long = 60_000L
-    }
 }
+
+/**
+ * 目标时刻 = 第 `daysAhead` 天之后那一天的**本地钟面** `hour:minute`，换算成绝对毫秒。
+ *
+ * ⚠️ 不能写成「当天 00:00 的绝对毫秒 + `hour × 3_600_000`」—— 那隐含"一天恒等于 24 小时"：
+ * 夏令时切换日（春季少一小时）提醒会整体偏一小时，设成 02:30 这种正落在跳变缺口里的时刻
+ * 更会在 03:30 响。本类注释特意写了"不加 `@Singleton` 以免时区被冻结"，说明时区正确性
+ * 是被刻意关心的，但 DST 这层当时漏了（审查报告 P1-6）。
+ * 交给 [LocalDateTime.toInstant] 让时区自己换算偏移。
+ *
+ * 抽成顶层函数只为了能单测 —— `ReminderSchedulerImpl` 要 `Context` 与 `AlarmManager`。
+ */
+internal fun triggerAtMillis(
+    todayEpochDay: Long,
+    daysAhead: Long,
+    hour: Int,
+    minute: Int,
+    timeZone: TimeZone,
+): Long = LocalDateTime(
+    LocalDate.fromEpochDays((todayEpochDay + daysAhead).toInt()),
+    LocalTime(hour, minute),
+).toInstant(timeZone).toEpochMilliseconds()

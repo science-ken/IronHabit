@@ -82,8 +82,12 @@ fun CheckInSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                // B-4：小屏 + 键盘弹起时，5 个输入框会把「保存」顶出屏幕外点不到。
-                // `verticalScroll` 让内容可滚动，`imePadding` 给键盘让位（其他弹层均已修，唯独这里漏了）。
+                // B-4：小屏 + 键盘弹起时，5 个输入框会把「保存」顶出屏幕外点不到 → 必须可滚动 + 让位键盘。
+                // ⚠️ 顺序与 `MealEditSheet` / `FoodLibrarySheet`（`verticalScroll().imePadding()`）相反，
+                // 这是**刻意的两种等价写法**，不是谁漏修：本写法把键盘高度算进视口（视口变矮，按钮不用滚），
+                // 那种把键盘高度算进滚动内容末尾（视口不变，滚到底就露出按钮）。
+                // 2026-09-22 真机在 1080×1920 上量过 `verticalScroll().imePadding()` 那一侧：
+                // 开着键盘滚到底，「保存」照样点得到。所以别再"统一顺序"把另一侧改坏。
                 .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = IronHabitSpacing.xl, vertical = IronHabitSpacing.sm),

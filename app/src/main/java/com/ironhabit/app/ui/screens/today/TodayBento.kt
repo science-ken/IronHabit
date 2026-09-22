@@ -255,9 +255,12 @@ private fun BentoTile(
 
     // 按压反馈（spec §5：120ms 缩到 0.975）。只有能点的格子才有 ——
     // 不能点的格子给一个按压缩放，等于谎报"这格能按"。
-    val interactionSource: MutableInteractionSource? =
-        if (onClick != null) remember { MutableInteractionSource() } else null
-    val pressed: Boolean = interactionSource?.collectIsPressedAsState()?.value == true
+    // ⚠️ `remember` 必须**无条件**调用（Compose 要求调用点在组合树里位置稳定）：
+    // 以前写成 `if (onClick != null) remember {...} else null`，同一槽位的 onClick 在
+    // null / 非 null 之间切换时 remember 的位置会漂移，按压态丢失或串到别的格子。
+    // "只在能点时才响应"这件事挪到下面取值处判。
+    val interactionSource: MutableInteractionSource = remember { MutableInteractionSource() }
+    val pressed: Boolean = onClick != null && interactionSource.collectIsPressedAsState().value
     val scale: Float by animateFloatAsState(
         targetValue = if (pressed) TILE_PRESSED_SCALE else 1f,
         animationSpec = tween(PRESS_DURATION_MS),
@@ -274,7 +277,7 @@ private fun BentoTile(
             .clip(IronHabitShapes.card)
             .background(container)
             .then(
-                if (onClick != null && interactionSource != null) {
+                if (onClick != null) {
                     Modifier.clickable(
                         interactionSource = interactionSource,
                         indication = LocalIndication.current,
