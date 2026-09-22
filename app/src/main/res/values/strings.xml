@@ -46,6 +46,10 @@
     <string name="title_progress">今日完成</string>
     <string name="label_week_total_sets">总组数</string>
     <string name="label_streak_days">连续 %1$d 天</string>
+    <!-- 今日页 hero 磁贴专用：标签与数字分两行，数字才配得上 displaySmall。
+         不共用上面那条是因为 `HabitRow` 也要用「连续 N 天」，那里是一行小字。 -->
+    <string name="label_streak_tile_title">连续</string>
+    <string name="label_streak_days_value">%1$d 天</string>
     <string name="label_streak_best">历史最长 %1$d 天</string>
     <string name="label_progress_ratio">%1$d / %2$d</string>
     <string name="label_today_done">已完成 ✓</string>

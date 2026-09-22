@@ -82,6 +82,7 @@ class StringResourcePlaceholderContractTest {
         entry("dialog_delete_habit_message", ArgKind.STRING) // DisciplineScreen 删除确认框（habit.name）
         entry("dialog_delete_body_metric_message", ArgKind.STRING, ArgKind.STRING) // BodyMetricsScreen 删除确认框（日期 · 值+单位）
         entry("label_streak_best", ArgKind.NUMERIC) // TodayBento（streak.best）
+        entry("label_streak_days_value", ArgKind.NUMERIC) // TodayBento hero 磁贴（streak.current，displaySmall 那一行）
         entry("label_progress_ratio", ArgKind.NUMERIC, ArgKind.NUMERIC) // TodayBento（今日完成、习惯 n/m）
         entry("cd_set_index", ArgKind.NUMERIC) // SetCheckboxRow:76（index + 1）
         entry("label_weight_kg", ArgKind.STRING) // PlanGoalText:62 / SettingsScreen:478（toDisplayNumber(): String）

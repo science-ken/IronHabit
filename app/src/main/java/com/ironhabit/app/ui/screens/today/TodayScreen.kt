@@ -8,6 +8,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.SelfImprovement
 import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -45,6 +48,7 @@ import com.ironhabit.app.ui.components.MealBlock
 import com.ironhabit.app.ui.components.MealItemEditSheet
 import com.ironhabit.app.ui.components.PlanDateStrip
 import com.ironhabit.app.ui.components.SkeletonCard
+import com.ironhabit.app.ui.components.StatusNotice
 import com.ironhabit.app.ui.screens.checkin.CheckInSheet
 import com.ironhabit.app.ui.screens.food.FoodLibraryEntry
 import com.ironhabit.app.ui.screens.food.FoodLibrarySheet
@@ -171,18 +175,16 @@ fun TodayScreen(
                 else -> {
                     // ---- 所选日的状态提示：紧跟钉顶的日期栏，说的是"这一天" ----
                     if (isFutureDay) {
-                        Text(
+                        StatusNotice(
                             text = stringResource(R.string.msg_future_day_readonly),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.tertiary,
+                            icon = Icons.Filled.Lock,
                         )
                     }
 
                     if (uiState.isRestDay) {
-                        Text(
+                        StatusNotice(
                             text = stringResource(R.string.msg_rest_day),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            icon = Icons.Filled.SelfImprovement,
                         )
                     }
 

@@ -11,8 +11,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -80,11 +83,20 @@ fun TodayBento(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm)) {
+        // `IntrinsicSize.Min` + 磁贴里的 `fillMaxHeight()`：streak 换成 displaySmall 之后
+        // 这一行两块磁贴差了一百多像素，不拉平就不是一行网格，只是两块碰巧摆在一起。
+        Row(
+            modifier = Modifier.height(IntrinsicSize.Min),
+            horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
+        ) {
             BentoTile(modifier = Modifier.weight(1f), deep = true) {
+                TileTitle(stringResource(R.string.label_streak_tile_title))
+                // 全 app 最重要的数字（审查报告 三.2）：以前整句「连续 N 天」一起用 titleLarge，
+                // 比历史页那个完成率还小。displaySmall 在 `Type.kt` 里本来就是给这个位置准备的，
+                // 只是整句 40sp 会撑破半宽磁贴，所以把标签拆到上一行、这里只留「N 天」。
                 Text(
-                    text = stringResource(R.string.label_streak_days, state.trainingStreak.current),
-                    style = MaterialTheme.typography.titleLarge,
+                    text = stringResource(R.string.label_streak_days_value, state.trainingStreak.current),
+                    style = MaterialTheme.typography.displaySmall,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
@@ -100,6 +112,9 @@ fun TodayBento(
             ) {
                 TileTitle(stringResource(R.string.title_progress))
                 TileValue(stringResource(R.string.label_progress_ratio, state.completedCount, state.totalCount))
+                // 左边 streak 换成 displaySmall 之后这一格被拉高了（同行等高），
+                // 进度点不压到底部就只剩上面三行内容 + 一块空底。
+                Spacer(modifier = Modifier.weight(1f))
                 ProgressPips(done = state.completedCount, total = state.totalCount)
             }
         }
@@ -269,6 +284,8 @@ private fun BentoTile(
 
     Box(
         modifier = modifier
+            // 同行磁贴等高（外层 Row 用 IntrinsicSize.Min 量出来），见调用处注释。
+            .fillMaxHeight()
             // graphicsLayer 放在 clip/background 之前，整块磁贴（含底色）一起缩。
             .graphicsLayer {
                 scaleX = scale
@@ -292,6 +309,9 @@ private fun BentoTile(
             modifier = Modifier
                 // 同行两格内容行数可能不同，给一个共同下限把它们撑平（组件固有规格，非布局间距）。
                 .heightIn(min = 92.dp)
+                // 外层 Box 已经被拉成等高，Column 不跟着填满的话，格子里 `weight(1f)` 的
+                // Spacer 没有可分的余量，内容仍会挤在上半截。
+                .fillMaxHeight()
                 .padding(IronHabitSpacing.md),
             verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.xs),
             content = content,
