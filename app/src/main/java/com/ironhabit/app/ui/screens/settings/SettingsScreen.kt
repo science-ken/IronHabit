@@ -67,7 +67,6 @@ import com.ironhabit.app.domain.model.Goal
 import com.ironhabit.app.domain.model.InjuryArea
 import com.ironhabit.app.domain.model.ProfileLimits
 import com.ironhabit.app.domain.model.ThemeMode
-import com.ironhabit.app.domain.model.UnitSystem
 import com.ironhabit.app.ui.components.EmptyState
 import com.ironhabit.app.ui.components.LoadingSkeleton
 import com.ironhabit.app.ui.components.LocalSnackbarHostState
@@ -165,21 +164,11 @@ fun SettingsScreen(
                     }
                 }
 
-                // ---- 单位制 ----
-                SectionLabel(text = stringResource(R.string.settings_unit))
-                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                    UnitSystem.entries.forEachIndexed { index, system ->
-                        SegmentedButton(
-                            selected = uiState.unitSystem == system,
-                            onClick = { viewModel.onUnitChange(system) },
-                            shape = SegmentedButtonDefaults.itemShape(
-                                index = index,
-                                count = UnitSystem.entries.size,
-                            ),
-                            label = { Text(text = stringResource(unitLabelRes(system))) },
-                        )
-                    }
-                }
+                // 「单位制」这一段已摘掉（真机走查 #11）：`unitSystem` 全仓没有任何消费者，
+                // 选了「英制（lb/mi）」之后重量、容量、距离一个数都不会变 ——
+                // 会记住选择却什么都不改的开关，比没有这个开关更糟。
+                // 底层管道（DataStore / 备份字段 / SettingsViewModel.onUnitChange）刻意留着，
+                // 真做换算时把这段 UI 放回来即可；标签函数 `unitLabelRes` 一并删了，在 git 里。
 
                 // ---- 我的档案 ----
                 HorizontalDivider()
@@ -855,13 +844,6 @@ private fun themeLabelRes(mode: ThemeMode): Int = when (mode) {
     ThemeMode.LIGHT -> R.string.settings_theme_light
     ThemeMode.DARK -> R.string.settings_theme_dark
     ThemeMode.SYSTEM -> R.string.settings_theme_system
-}
-
-/** 单位制 → 文案资源。 */
-@StringRes
-private fun unitLabelRes(system: UnitSystem): Int = when (system) {
-    UnitSystem.METRIC -> R.string.settings_unit_metric
-    UnitSystem.IMPERIAL -> R.string.settings_unit_imperial
 }
 
 /** 弹出系统时间选择器。 */

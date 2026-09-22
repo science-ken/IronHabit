@@ -1,5 +1,6 @@
 package com.ironhabit.app.ui.components
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -13,6 +14,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.MAX_SETS
@@ -52,14 +55,23 @@ fun SetCheckboxRow(
     ) {
         for (index in 0 until count) {
             val done = (mask shr index) and 1 == 1
+            val label: String = setCheckboxContentDescription(index)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(end = IronHabitSpacing.xxs),
+                modifier = Modifier
+                    .padding(end = IronHabitSpacing.xxs)
+                    // 数字也算热区。只有方框可点时，点在旁边的数字上会穿到卡片的
+                    // "整条一键打卡" —— 想勾第 1 组结果记满 3 组（真机走查 #12）。
+                    .clickable(enabled = enabled) { onToggle(index) }
+                    .padding(horizontal = IronHabitSpacing.xxs),
             ) {
                 Checkbox(
                     checked = done,
                     onCheckedChange = { onToggle(index) },
                     enabled = enabled,
+                    // 没有 contentDescription 的 Checkbox 在无障碍与 uiautomator 里都是隐形的
+                    // （走查时就是靠截图才找到落点）。
+                    modifier = Modifier.semantics { contentDescription = label },
                 )
                 Text(
                     text = (index + 1).toString(),
