@@ -9,10 +9,11 @@ import org.junit.Test
 /**
  * [UserProfile] / [ProfileLimits] / 解析与枚举编解码的**纯 JVM 单测**。
  *
- * 覆盖三块（对应 M2.5 测试要求）：
+ * 覆盖四块（对应 M2.5 测试要求）：
  * 1. **coerceIn 边界**（越界上下限、`Int.MIN/MAX`、临界值、非数字/空值解析）；
  * 2. **派生属性**（`isBodyProfileComplete` / `isTrainingProfileComplete` / `hasConstraints`）；
- * 3. **枚举集合读写往返**（`encodeEnumSet` ⇄ `decodeEnumSet`，即 DataStore 存取所用的同一对函数）。
+ * 3. **枚举集合读写往返**（`encodeEnumSet` ⇄ `decodeEnumSet`，即 DataStore 存取所用的同一对函数）；
+ * 4. **档案完整度六项**（`missingProfileFields` 的分母、顺序与「无器械算不算填」口径）。
  */
 class UserProfileTest {
 
@@ -45,6 +46,90 @@ class UserProfileTest {
         assertFalse(UserProfile().hasConstraints)
         assertTrue(UserProfile(injuryAreas = setOf(InjuryArea.KNEE)).hasConstraints)
         assertTrue(UserProfile(dietaryAvoid = setOf(DietRestriction.PEANUT)).hasConstraints)
+    }
+
+    // ---------------- 档案完整度六项（「我的」页顶部那个环的分母） ----------------
+
+    @Test
+    fun profileField_denominatorIsSixAndOrderIsDisplayOrder() {
+        // 「我的」页的环显示 `n/6`，分母由这里数出来而不是界面写死 —— 加一项就会让所有老用户的
+        // 环整体跳一格，所以项数与展示顺序都要钉住。
+        assertEquals(6, ProfileField.entries.size)
+        assertEquals(
+            listOf(
+                ProfileField.GENDER,
+                ProfileField.AGE,
+                ProfileField.HEIGHT_CM,
+                ProfileField.BODY_FAT_PCT,
+                ProfileField.GOAL_WEIGHT_KG,
+                ProfileField.EQUIPMENT,
+            ),
+            ProfileField.entries.toList(),
+        )
+    }
+
+    @Test
+    fun missingProfileFields_emptyProfileMissingAllSix() {
+        assertEquals(
+            "什么都没填 = 六项全缺（环是空圈，缺口行该把六项都念出来）",
+            ProfileField.entries.toList(),
+            UserProfile().missingProfileFields,
+        )
+    }
+
+    @Test
+    fun missingProfileFields_fullProfileMissingNothing() {
+        val full = UserProfile(
+            gender = Gender.MALE,
+            age = 28,
+            heightCm = 178,
+            bodyFatPct = 15f,
+            goalWeightKg = 71f,
+            equipment = setOf(Equipment.DUMBBELL),
+        )
+        assertTrue("填满即无缺口：界面不得再提示「还差 N 项」", full.missingProfileFields.isEmpty())
+    }
+
+    @Test
+    fun missingProfileFields_vitalSignsFilledLeavesFatGoalWeightEquipment() {
+        // 这一条正是这台测试机的真实状态：体征三件套填了、器械勾了，缺体脂与目标体重。
+        assertEquals(
+            listOf(ProfileField.BODY_FAT_PCT, ProfileField.GOAL_WEIGHT_KG),
+            UserProfile(
+                gender = Gender.MALE,
+                age = 18,
+                heightCm = 180,
+                equipment = setOf(Equipment.DUMBBELL),
+            ).missingProfileFields,
+        )
+    }
+
+    @Test
+    fun missingProfileFields_equipmentNoneCountsAsFilled() {
+        // 「无器械」是一次表态，不是没填 —— 与 isTrainingProfileComplete 同一口径，
+        // 否则环说还差器械、排课却说档案可用，两处就打起来了。
+        assertEquals(
+            "勾了「无器械」不该再出现在缺口里",
+            emptyList<ProfileField>(),
+            UserProfile(
+                gender = Gender.FEMALE,
+                age = 30,
+                heightCm = 165,
+                bodyFatPct = 22f,
+                goalWeightKg = 60f,
+                equipment = setOf(Equipment.NONE),
+            ).missingProfileFields,
+        )
+    }
+
+    @Test
+    fun missingProfileFields_zeroValuedNumbersCountAsFilled() {
+        // 年龄 / 身高 / 体脂 / 目标体重都是非空即算填：`0` 不是"没填"的哨兵值
+        // （写入侧有 coerceIn 钳制，能存进 0 就说明用户真写了 0）。
+        assertEquals(
+            listOf(ProfileField.GENDER, ProfileField.EQUIPMENT),
+            UserProfile(age = 0, heightCm = 0, bodyFatPct = 0f, goalWeightKg = 0f).missingProfileFields,
+        )
     }
 
     // ---------------- 写入钳制：coerceIn 边界 ----------------

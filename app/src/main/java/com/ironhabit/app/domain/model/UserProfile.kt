@@ -109,6 +109,36 @@ enum class InjuryArea {
 }
 
 /**
+ * 档案完整度的**六项判据**（声明顺序 = 界面「还差哪几项」的展示顺序）。
+ *
+ * 为什么要摊平成一个枚举：[UserProfile.isBodyProfileComplete] 与
+ * [UserProfile.isTrainingProfileComplete] 是**两个布尔**，能回答"能不能算 BMR / 能不能排课"，
+ * 回答不了"还差几格"。而「我的」页顶部那个环要的是一个**分数**，
+ * 分母必须由这里数出来，不能在界面写死一个 `5`（写死了就一定会和判据漂）。
+ *
+ * ⚠️ 增删一项 = 改分母，环上的 `n/6` 整圈跟着变；`UserProfileTest` 里钉死了项数与顺序。
+ */
+enum class ProfileField {
+    /** 性别 */
+    GENDER,
+
+    /** 年龄 */
+    AGE,
+
+    /** 身高 */
+    HEIGHT_CM,
+
+    /** 体脂率 */
+    BODY_FAT_PCT,
+
+    /** 目标体重 */
+    GOAL_WEIGHT_KG,
+
+    /** 可用器械（勾了「无器械」也算表态，见 [UserProfile.isTrainingProfileComplete]） */
+    EQUIPMENT,
+}
+
+/**
  * 饮食忌口（对齐预览 `AVOID` 的 6 项）。
  */
 enum class DietRestriction {
@@ -185,6 +215,25 @@ data class UserProfile(
     /** 是否存在需要规则避让的约束（伤病 / 忌口）。 */
     val hasConstraints: Boolean
         get() = injuryAreas.isNotEmpty() || dietaryAvoid.isNotEmpty()
+
+    /**
+     * [ProfileField] 六项里**还没填**的那几项（按枚举声明顺序）。
+     *
+     * 空表 = 档案填满：环是满圈，界面不该再提缺口。
+     * 与上面两个 `isXxxComplete` 并存不冲突 —— 那两个答"够不够用"（规则引擎读），
+     * 这一个答"还差哪几格"（只有界面读）。
+     */
+    val missingProfileFields: List<ProfileField>
+        get() = ProfileField.entries.filter { field ->
+            when (field) {
+                ProfileField.GENDER -> gender == null
+                ProfileField.AGE -> age == null
+                ProfileField.HEIGHT_CM -> heightCm == null
+                ProfileField.BODY_FAT_PCT -> bodyFatPct == null
+                ProfileField.GOAL_WEIGHT_KG -> goalWeightKg == null
+                ProfileField.EQUIPMENT -> equipment.isEmpty()
+            }
+        }
 }
 
 /**

@@ -71,6 +71,9 @@ class StatsRepositoryImpl @Inject constructor(
         return activeDays.toFloat() / totalDays.toFloat() * PERCENT_SCALE
     }
 
+    override suspend fun checkInCount(startEpochDay: Long, endEpochDay: Long): Int =
+        statsDao.checkInCount(startEpochDay, endEpochDay)
+
     /** 返回「近 days 天」的闭区间 `[start, today]`（days < 1 时退化为仅今天）。 */
     private fun dayRange(days: Int): Pair<Long, Long> {
         val today = todayEpochDay()

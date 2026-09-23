@@ -35,4 +35,12 @@ interface StatsRepository {
      * 定义：区间内有 ≥1 条打卡的天数 / 区间总天数 × 100。
      */
     suspend fun completionRate(startEpochDay: Long, endEpochDay: Long): Float
+
+    /**
+     * 区间内打卡**条数**（一次练 5 个动作 = 5 条，与 [completionRate] 分子那个"天数"不是一回事）。
+     *
+     * 与 `StatsDao.checkInCount` 同一句 SQL，可在 `dev.sh sql` 里原样复现：
+     * `SELECT COUNT(*) FROM check_ins WHERE date_epoch_day BETWEEN :start AND :end`
+     */
+    suspend fun checkInCount(startEpochDay: Long, endEpochDay: Long): Int
 }
