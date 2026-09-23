@@ -5,12 +5,13 @@ import androidx.lifecycle.viewModelScope
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.BodyMetric
 import com.ironhabit.app.domain.model.BodyMetricType
+import com.ironhabit.app.domain.model.ProfileLedger
 import com.ironhabit.app.domain.model.TodayOverview
 import com.ironhabit.app.domain.model.UserProfile
 import com.ironhabit.app.domain.repository.BodyMetricRepository
 import com.ironhabit.app.domain.repository.CheckInRepository
 import com.ironhabit.app.domain.repository.SettingsRepository
-import com.ironhabit.app.domain.repository.StatsRepository
+import com.ironhabit.app.domain.usecase.GetProfileLedgerUseCase
 import com.ironhabit.app.domain.usecase.GetTodayOverviewUseCase
 import com.ironhabit.app.domain.util.DateUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -37,7 +38,9 @@ import kotlinx.datetime.TimeZone
  * 四个数字的来源（**都不重算**，见 [ProfileUiState] 的口径说明）：
  * 连续与本周分母取自 [GetTodayOverviewUseCase]（今日页同一个流、同一套应做日规则）；
  * 本周分子是「本周有打卡的天数」，直接从下面那份活跃日列表数；
- * 累计走 [StatsRepository.checkInCount]，体重走 [BodyMetricRepository.observeByType] 的首条。
+ * 体重走 [BodyMetricRepository.observeByType] 的首条；
+ * 台账三行的计数走 [GetProfileLedgerUseCase]（把 `activeDays` 那份现成的列表一并传进去，
+ * 不在这里为同一个数再读一遍库）。
  *
  * 两张统计图不在这里 —— 它们跟着「训练统计」页走（`TrainingStatsViewModel`）。
  *
@@ -52,9 +55,9 @@ import kotlinx.datetime.TimeZone
 class ProfileViewModel @Inject constructor(
     private val checkInRepository: CheckInRepository,
     private val settingsRepository: SettingsRepository,
-    private val statsRepository: StatsRepository,
     private val bodyMetricRepository: BodyMetricRepository,
     private val getTodayOverview: GetTodayOverviewUseCase,
+    private val getProfileLedger: GetProfileLedgerUseCase,
     private val clock: Clock,
     private val timeZone: TimeZone,
 ) : ViewModel() {
@@ -76,14 +79,16 @@ class ProfileViewModel @Inject constructor(
                 bodyMetricRepository.observeByType(BodyMetricType.WEIGHT),
                 getTodayOverview(today),
             ) { activeDays: List<Long>, profile: UserProfile, weights: List<BodyMetric>, overview: TodayOverview ->
+                val ledger: ProfileLedger = getProfileLedger(today, activeDays)
                 ProfileUiState(
                     isLoading = false,
                     profile = profile,
                     trainingStreak = overview.trainingStreak.current,
                     weekCompletedDays = activeDays.count { day -> day in weekStart..today },
                     weekPlannedDays = overview.plannedWeekdays.size,
-                    totalCheckIns = statsRepository.checkInCount(ALL_TIME_START_EPOCH_DAY, today),
+                    totalCheckIns = ledger.training.rowCount,
                     latestWeight = weights.firstOrNull(),
+                    ledger = ledger,
                 )
             }
                 // 每次（重）订阅都先发一帧「加载中」：否则重试再次失败时，
@@ -113,9 +118,6 @@ class ProfileViewModel @Inject constructor(
 
     private companion object {
         const val TRIGGER_SINCE_EPOCH_DAY: Long = 0L
-
-        /** 1970-01-01：早于任何可能的打卡日，与上同值但语义是「全历史起点」。 */
-        const val ALL_TIME_START_EPOCH_DAY: Long = 0L
         const val STOP_TIMEOUT_MS = 5_000L
     }
 }

@@ -1,7 +1,9 @@
 package com.ironhabit.app.data.repository
 
 import com.ironhabit.app.data.local.dao.StatsDao
+import com.ironhabit.app.data.local.dto.CheckInTallyRaw
 import com.ironhabit.app.domain.model.CategoryShare
+import com.ironhabit.app.domain.model.CheckInTally
 import com.ironhabit.app.domain.model.ExerciseCategory
 import com.ironhabit.app.domain.model.HeatmapCell
 import com.ironhabit.app.domain.model.TrendPoint
@@ -71,8 +73,15 @@ class StatsRepositoryImpl @Inject constructor(
         return activeDays.toFloat() / totalDays.toFloat() * PERCENT_SCALE
     }
 
-    override suspend fun checkInCount(startEpochDay: Long, endEpochDay: Long): Int =
-        statsDao.checkInCount(startEpochDay, endEpochDay)
+    override suspend fun checkInTally(startEpochDay: Long, endEpochDay: Long): CheckInTally {
+        val raw: CheckInTallyRaw = statsDao.checkInTally(startEpochDay, endEpochDay)
+        return CheckInTally(
+            rowCount = raw.rowCount,
+            setCount = raw.setCount,
+            repCount = raw.repCount,
+            rpeRowCount = raw.rpeRowCount,
+        )
+    }
 
     /** 返回「近 days 天」的闭区间 `[start, today]`（days < 1 时退化为仅今天）。 */
     private fun dayRange(days: Int): Pair<Long, Long> {

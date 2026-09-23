@@ -1,6 +1,7 @@
 package com.ironhabit.app.ui.screens.profile
 
 import com.ironhabit.app.domain.model.BodyMetric
+import com.ironhabit.app.domain.model.ProfileLedger
 import com.ironhabit.app.domain.model.UserProfile
 
 /**
@@ -19,8 +20,9 @@ import com.ironhabit.app.domain.model.UserProfile
  * @property trainingStreak 当前连续打卡天数（应做日感知：休息日不断档）
  * @property weekCompletedDays 本周**有打卡**的天数
  * @property weekPlannedDays 本周**排了课**的天数；`0` = 这周没排课，界面不该显示「0/0」
- * @property totalCheckIns 装机以来的打卡条数（不是天数）
+ * @property totalCheckIns 装机以来的打卡条数（不是天数）；与 [ledger] 里训练那一行同源
  * @property latestWeight 最新一条体重记录；`null` = 从没记过体重
+ * @property ledger 记录台账四行（训练 / 身体数据 / 饮食 / 习惯）要的计数
  * @property errorRes 页面级错误资源 id
  */
 data class ProfileUiState(
@@ -31,5 +33,6 @@ data class ProfileUiState(
     val weekPlannedDays: Int = 0,
     val totalCheckIns: Int = 0,
     val latestWeight: BodyMetric? = null,
+    val ledger: ProfileLedger = ProfileLedger(),
     val errorRes: Int? = null,
 )

@@ -2,6 +2,7 @@ package com.ironhabit.app.domain.repository
 
 import com.ironhabit.app.domain.model.Habit
 import com.ironhabit.app.domain.model.HabitLog
+import com.ironhabit.app.domain.model.HabitTally
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -33,6 +34,13 @@ interface HabitRepository {
 
     /** 观察日期区间内的习惯日志。 */
     fun observeLogsBetween(startEpochDay: Long, endEpochDay: Long): Flow<List<HabitLog>>
+
+    /**
+     * 习惯台账（在跑几条 / 完成过几次 / 最近一次），供「我的」页那一行用。
+     *
+     * 完成次数**含已删除习惯的历史** —— 删掉一个习惯不该抹掉当时坚持过的证据。
+     */
+    suspend fun tally(): HabitTally
 
     /** 查询某习惯某天的日志，不存在返回 `null`。 */
     suspend fun getLogOnDate(habitId: Long, epochDay: Long): HabitLog?

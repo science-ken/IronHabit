@@ -16,26 +16,35 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.MonitorWeight
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Restaurant
+import androidx.compose.material.icons.filled.SelfImprovement
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.ironhabit.app.R
+import com.ironhabit.app.data.local.AppDatabase
 import com.ironhabit.app.domain.model.BodyMetric
 import com.ironhabit.app.domain.model.ProfileField
+import com.ironhabit.app.domain.model.ProfileLedger
 import com.ironhabit.app.domain.model.UserProfile
 import com.ironhabit.app.ui.components.SUMMARY_SEPARATOR
 import com.ironhabit.app.ui.components.ProfileCompletenessRing
+import com.ironhabit.app.ui.components.formatMonthDay
 import com.ironhabit.app.ui.components.joinLabels
 import com.ironhabit.app.ui.components.profileFieldLabelRes
 import com.ironhabit.app.ui.components.profileSummaryText
@@ -281,11 +290,292 @@ private fun StripSeparator() {
     )
 }
 
+/**
+ * 记录台账：四类记录各一行，右侧那个大数是**条数**，缺口显出来。
+ *
+ * 改版前这四个入口是光板的（写着「食物库」+ 一个箭头），点进去才知道有没有东西。
+ * 入口自己带信息之后，"哪一类还没坚持"不用点就能看见。
+ */
+@Composable
+internal fun ProfileLedgerCard(
+    ledger: ProfileLedger,
+    onOpenTrainingStats: () -> Unit,
+    onOpenBodyMetrics: () -> Unit,
+    onOpenDiet: () -> Unit,
+    onOpenHabits: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colorScheme = MaterialTheme.colorScheme
+    val training = ledger.training
+    val body = ledger.body
+    val diet = ledger.diet
+    val habits = ledger.habits
+    // 缺口超过一半才用金色那句：它是真话，但不该每天劈头盖脸（2026-09-23 拍板）。
+    val dietGapIsBig: Boolean = diet.shortfallRatio > DIET_GAP_ALERT_RATIO
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(IronHabitShapes.card)
+            .background(colorScheme.surfaceContainerHigh),
+    ) {
+        Text(
+            text = stringResource(R.string.label_profile_ledger_section),
+            style = MaterialTheme.typography.labelSmall,
+            color = colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(
+                start = IronHabitSpacing.md,
+                end = IronHabitSpacing.md,
+                top = IronHabitSpacing.sm,
+            ),
+        )
+
+        LedgerRow(
+            icon = Icons.Filled.BarChart,
+            name = stringResource(R.string.entry_training_stats),
+            detail = stringResource(
+                R.string.label_ledger_training_detail,
+                training.setCount,
+                training.repCount,
+                training.rpeRowCount,
+                training.activeDayCount,
+            ),
+            detailIsGap = false,
+            count = stringResource(R.string.value_profile_records_count, training.rowCount),
+            lastDate = training.lastEpochDay?.let { day ->
+                stringResource(R.string.label_last_date_short, formatMonthDay(day))
+            },
+            onClick = onOpenTrainingStats,
+        )
+        LedgerDivider()
+
+        LedgerRow(
+            icon = Icons.Filled.MonitorWeight,
+            name = stringResource(R.string.entry_body_metrics),
+            detail = stringResource(R.string.label_ledger_body_detail),
+            detailIsGap = false,
+            count = stringResource(R.string.value_profile_records_count, body.rowCount),
+            lastDate = body.lastEpochDay?.let { day ->
+                stringResource(R.string.label_last_date_short, formatMonthDay(day))
+            },
+            onClick = onOpenBodyMetrics,
+        )
+        LedgerDivider()
+
+        LedgerRow(
+            icon = Icons.Filled.Restaurant,
+            name = stringResource(R.string.entry_diet),
+            detail = if (dietGapIsBig) {
+                stringResource(R.string.label_ledger_diet_gap, diet.mealRowCount, diet.itemCount, diet.kcal)
+            } else {
+                stringResource(R.string.label_ledger_diet_detail, diet.filledMealCount, diet.itemCount, diet.kcal)
+            },
+            detailIsGap = dietGapIsBig,
+            count = stringResource(R.string.value_profile_fraction, diet.filledMealCount, diet.mealRowCount),
+            lastDate = diet.lastFilledEpochDay?.let { day ->
+                stringResource(R.string.label_last_date_short, formatMonthDay(day))
+            },
+            onClick = onOpenDiet,
+        )
+        LedgerDivider()
+
+        LedgerRow(
+            icon = Icons.Filled.SelfImprovement,
+            name = stringResource(R.string.title_habits),
+            detail = stringResource(R.string.label_ledger_habit_detail, habits.activeHabits, habits.completedLogs),
+            detailIsGap = false,
+            count = stringResource(R.string.value_profile_logs_count, habits.completedLogs),
+            lastDate = habits.lastEpochDay?.let { day ->
+                stringResource(R.string.label_last_date_short, formatMonthDay(day))
+            },
+            onClick = onOpenHabits,
+        )
+    }
+}
+
+/**
+ * 「存在哪儿」+ 三个应用内入口。
+ *
+ * 那句"没有云同步；卸载即清零"是单人离线应用最该被一眼看到的Fact，
+ * 此前只写在备份页里 —— 而大多数人根本不会点进备份页。
+ *
+ * 库文件多大（字节数）没放进来：它要在 ViewModel 里注入 Context 读文件系统，
+ * 而这一屏要的是"数据只在这台机器上"这件事，不是那个数。
+ * schema 版本用 `AppDatabase.VERSION` 而不是写死，否则下一次迁移之后这里就开始说谎。
+ */
+@Composable
+internal fun ProfileStorageCard(
+    onOpenBackup: () -> Unit,
+    onOpenFoodLibrary: () -> Unit,
+    onOpenSettings: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colorScheme = MaterialTheme.colorScheme
+    // 两句各自落成一行：占位符契约测试是按行数实参的，嵌套调用 + 跨行会被它读成零参格式化。
+    val schemaVersion: String = stringResource(R.string.label_schema_version, AppDatabase.VERSION)
+    val storageTitle: String = stringResource(R.string.label_profile_storage_title, schemaVersion)
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(IronHabitShapes.card)
+            .background(colorScheme.surfaceContainerHigh),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(IronHabitSpacing.md),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = storageTitle,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = colorScheme.onSurface,
+                )
+                Text(
+                    text = stringResource(R.string.label_profile_storage_note),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colorScheme.onSurfaceVariant,
+                )
+            }
+            TextButton(onClick = onOpenBackup) {
+                Text(text = stringResource(R.string.entry_backup))
+            }
+        }
+        LedgerDivider()
+        CompactEntryRow(text = stringResource(R.string.entry_food_library), onClick = onOpenFoodLibrary)
+        LedgerDivider()
+        CompactEntryRow(
+            text = stringResource(R.string.label_profile_settings_row),
+            onClick = onOpenSettings,
+        )
+    }
+}
+
+/** 台账里的一行：图标 + 名称 + 副标题 + 右侧条数（可带最近日）+ `›`。 */
+@Composable
+private fun LedgerRow(
+    icon: ImageVector,
+    name: String,
+    detail: String,
+    detailIsGap: Boolean,
+    count: String,
+    lastDate: String?,
+    onClick: () -> Unit,
+) {
+    val colorScheme = MaterialTheme.colorScheme
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = IronHabitSpacing.md, vertical = IronHabitSpacing.sm),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(LEDGER_ICON_BOX)
+                .clip(IronHabitShapes.small)
+                .background(colorScheme.primaryContainer),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = colorScheme.onPrimaryContainer,
+                modifier = Modifier.size(LEDGER_ICON),
+            )
+        }
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = name,
+                style = MaterialTheme.typography.titleSmall,
+                color = colorScheme.onSurface,
+            )
+            Text(
+                text = detail,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (detailIsGap) colorScheme.tertiary else colorScheme.onSurfaceVariant,
+                maxLines = MAX_LINES_DETAIL,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                text = count,
+                style = MaterialTheme.typography.titleMedium,
+                color = colorScheme.onSurface,
+                maxLines = 1,
+            )
+            if (lastDate != null) {
+                Text(
+                    text = lastDate,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        Icon(
+            imageVector = Icons.Filled.ChevronRight,
+            contentDescription = null,
+            tint = colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** 卡片内行与行之间的分隔线：左右缩进，不顶到卡片圆角。 */
+@Composable
+private fun LedgerDivider() {
+    HorizontalDivider(
+        modifier = Modifier.padding(horizontal = IronHabitSpacing.md),
+        color = MaterialTheme.colorScheme.outlineVariant,
+    )
+}
+
+/** 底部那两行紧凑入口（食物库 / 设置）：只要名称和箭头，不需要条数。 */
+@Composable
+private fun CompactEntryRow(
+    text: String,
+    onClick: () -> Unit,
+) {
+    val colorScheme = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = IronHabitSpacing.md, vertical = IronHabitSpacing.sm),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = colorScheme.onSurface,
+        )
+        Icon(
+            imageVector = Icons.Filled.ChevronRight,
+            contentDescription = null,
+            tint = colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
 // ---- 以下为组件固有尺寸（非布局间距），按 `Spacing.kt` 的例外约定就地定义 ----
 
 private val AVATAR_SIZE = 40.dp
 private val AVATAR_ICON_SIZE = 22.dp
 private val GAP_DOT_SIZE = 6.dp
 private val SEPARATOR_WIDTH = 1.dp
+private val LEDGER_ICON_BOX = 32.dp
+private val LEDGER_ICON = 18.dp
 private const val MAX_LINES_SUMMARY = 2
-private const val MAX_LINES_DETAIL = 1
+private const val MAX_LINES_DETAIL = 2
+
+/** 饮食缺口超过这个比例才用金色那句，否则只报普通摘要。 */
+private const val DIET_GAP_ALERT_RATIO = 0.5f

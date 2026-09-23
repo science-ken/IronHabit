@@ -142,6 +142,16 @@ class StringResourcePlaceholderContractTest {
         entry("label_profile_body_fat_short", ArgKind.STRING) // 档案第二行：Float 在 Kotlin 里取好再塞 %s
         entry("label_profile_equipment_count", ArgKind.NUMERIC) // 档案第二行：equipment.size: Int
 
+        // 「我的」页记录台账 + 存哪儿
+        entry("value_profile_logs_count", ArgKind.NUMERIC) // 习惯行右侧：completedLogs
+        entry("label_last_date_short", ArgKind.STRING) // 「最近 9/19」：epochDay 已格式化成 M/D
+        entry("label_ledger_training_detail", ArgKind.NUMERIC, ArgKind.NUMERIC, ArgKind.NUMERIC, ArgKind.NUMERIC) // 组/次/带RPE/覆盖天
+        entry("label_ledger_diet_gap", ArgKind.NUMERIC, ArgKind.NUMERIC, ArgKind.NUMERIC) // 餐次/食物条/热量
+        entry("label_ledger_diet_detail", ArgKind.NUMERIC, ArgKind.NUMERIC, ArgKind.NUMERIC) // 同上，缺口不超半数时的普通版
+        entry("label_ledger_habit_detail", ArgKind.NUMERIC, ArgKind.NUMERIC) // 在跑条数 / 完成次数
+        entry("label_schema_version", ArgKind.NUMERIC) // AppDatabase.VERSION
+        entry("label_profile_storage_title", ArgKind.STRING) // 存哪儿标题：%1$s = 「Room v9」
+
         // 「训练统计」页
         entry("label_range_days", ArgKind.NUMERIC) // 区间 chip（7 / 30 / 90）
         entry("label_active_days", ArgKind.NUMERIC, ArgKind.NUMERIC) // 有打卡的天数 / 区间天数
@@ -165,8 +175,6 @@ class StringResourcePlaceholderContractTest {
         entry("label_rpe_short", ArgKind.NUMERIC)
         entry("ai_explain_injury_swap", ArgKind.STRING)
         entry("ai_explain_equipment", ArgKind.STRING)
-        // 「我的」页第 3 步的「存哪儿」块才会引用（%1$s = Room 版本 + 库文件大小的合成文本）
-        entry("label_profile_storage_title", ArgKind.STRING)
     }
 
     /** 通道 A：实参为 `String` 的动态 Snackbar 通道 → 只能 `%s`。 */

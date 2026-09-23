@@ -202,7 +202,9 @@
     <string name="title_about">关于</string>
     <string name="entry_body_metrics">身体数据</string>
     <string name="entry_training_stats">训练统计</string>
-    <string name="entry_settings">设置</string>
+    <string name="entry_diet">饮食</string>
+    <!-- 「设置」入口没了：台账下面那行改叫「设置 · 提醒 · 单位」（label_profile_settings_row），
+         顶栏标题用的是 title_settings。 -->
     <string name="entry_backup">数据备份</string>
     <string name="entry_food_library">食物库</string>
 
@@ -225,6 +227,19 @@
     <string name="label_profile_storage_title">只存这台手机 · %1$s</string>
     <string name="label_profile_storage_note">没有云同步；卸载即清零。导入会覆盖全部数据</string>
     <string name="label_profile_settings_row">设置 · 提醒 · 单位</string>
+    <string name="label_schema_version">Room v%1$d</string>
+
+    <!-- 记录台账：入口自己带条数，缺口显出来 -->
+    <string name="label_profile_ledger_section">记录台账 · 点一行直达</string>
+    <string name="value_profile_logs_count">%1$d 次</string>
+    <string name="label_last_date_short">最近 %1$s</string>
+    <string name="label_ledger_training_detail">%1$d 组 · %2$d 次 · %3$d 条带 RPE · 覆盖 %4$d 天</string>
+    <string name="label_ledger_body_detail">体重 · 体脂 · 围度</string>
+    <!-- 缺口超过一半才用金色这句（见 ProfileBlocks 里那行判断）：
+         它是真话，但不该每天劈头盖脸。 -->
+    <string name="label_ledger_diet_gap">缺口：%1$d 个餐次只填了 %2$d 条食物（%3$d kcal）</string>
+    <string name="label_ledger_diet_detail">已填 %1$d 餐 · %2$d 条食物 · %3$d kcal</string>
+    <string name="label_ledger_habit_detail">%1$d 条在跑 · 共打过 %2$d 次卡</string>
 
     <!-- ===== 训练统计页（从「我的」页首屏外迁的三块低频回顾） ===== -->
     <string name="title_training_stats">训练统计</string>

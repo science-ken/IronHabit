@@ -1,6 +1,7 @@
 package com.ironhabit.app.domain.repository
 
 import com.ironhabit.app.domain.model.CategoryShare
+import com.ironhabit.app.domain.model.CheckInTally
 import com.ironhabit.app.domain.model.HeatmapCell
 import com.ironhabit.app.domain.model.TrendPoint
 
@@ -37,10 +38,9 @@ interface StatsRepository {
     suspend fun completionRate(startEpochDay: Long, endEpochDay: Long): Float
 
     /**
-     * 区间内打卡**条数**（一次练 5 个动作 = 5 条，与 [completionRate] 分子那个"天数"不是一回事）。
+     * 区间内打卡台账（条数 / 组数 / 次数 / 带 RPE 条数），供「我的」页那一行用。
      *
-     * 与 `StatsDao.checkInCount` 同一句 SQL，可在 `dev.sh sql` 里原样复现：
-     * `SELECT COUNT(*) FROM check_ins WHERE date_epoch_day BETWEEN :start AND :end`
+     * 与 `StatsDao.checkInTally` 同一句 SQL，注释里附了可在 `dev.sh sql` 原样跑的形态。
      */
-    suspend fun checkInCount(startEpochDay: Long, endEpochDay: Long): Int
+    suspend fun checkInTally(startEpochDay: Long, endEpochDay: Long): CheckInTally
 }

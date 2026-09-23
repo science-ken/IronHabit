@@ -1,10 +1,12 @@
 package com.ironhabit.app.data.repository
 
 import com.ironhabit.app.data.local.dao.BodyMetricDao
+import com.ironhabit.app.data.local.dto.BodyTallyRaw
 import com.ironhabit.app.data.mapper.BodyMetricMapper
 import com.ironhabit.app.di.IoDispatcher
 import com.ironhabit.app.domain.model.BodyMetric
 import com.ironhabit.app.domain.model.BodyMetricType
+import com.ironhabit.app.domain.model.BodyTally
 import com.ironhabit.app.domain.repository.BodyMetricRepository
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -29,6 +31,11 @@ class BodyMetricRepositoryImpl @Inject constructor(
 
     override suspend fun latest(type: BodyMetricType): BodyMetric? =
         bodyMetricDao.latest(type)?.let(BodyMetricMapper::toDomain)
+
+    override suspend fun tally(): BodyTally {
+        val raw: BodyTallyRaw = bodyMetricDao.bodyTally()
+        return BodyTally(rowCount = raw.rowCount, lastEpochDay = raw.lastEpochDay)
+    }
 
     override suspend fun upsert(metric: BodyMetric): Long =
         bodyMetricDao.upsert(BodyMetricMapper.toEntity(metric))

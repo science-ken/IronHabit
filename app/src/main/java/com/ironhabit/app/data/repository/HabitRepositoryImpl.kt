@@ -4,10 +4,12 @@ import androidx.room.withTransaction
 import com.ironhabit.app.data.local.AppDatabase
 import com.ironhabit.app.data.local.dao.HabitDao
 import com.ironhabit.app.data.local.dao.HabitLogDao
+import com.ironhabit.app.data.local.dto.HabitTallyRaw
 import com.ironhabit.app.data.mapper.HabitMapper
 import com.ironhabit.app.di.IoDispatcher
 import com.ironhabit.app.domain.model.Habit
 import com.ironhabit.app.domain.model.HabitLog
+import com.ironhabit.app.domain.model.HabitTally
 import com.ironhabit.app.domain.repository.HabitRepository
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -53,6 +55,15 @@ class HabitRepositoryImpl @Inject constructor(
         habitLogDao.observeBetween(startEpochDay, endEpochDay)
             .map { entities -> entities.map { entity -> HabitMapper.toDomain(entity) } }
             .flowOn(ioDispatcher)
+
+    override suspend fun tally(): HabitTally {
+        val raw: HabitTallyRaw = habitDao.habitTally()
+        return HabitTally(
+            activeHabits = raw.activeHabits,
+            completedLogs = raw.completedLogs,
+            lastEpochDay = raw.lastEpochDay,
+        )
+    }
 
     override suspend fun getLogOnDate(habitId: Long, epochDay: Long): HabitLog? =
         habitLogDao.getOn(habitId, epochDay)?.let(HabitMapper::toDomain)

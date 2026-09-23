@@ -1,5 +1,6 @@
 package com.ironhabit.app.domain.repository
 
+import com.ironhabit.app.domain.model.DietTally
 import com.ironhabit.app.domain.model.Meal
 import com.ironhabit.app.domain.model.MealTotals
 import kotlinx.coroutines.flow.Flow
@@ -19,6 +20,13 @@ interface MealRepository {
 
     /** 观察某日合计（已摄入 / 计划）。空集时 `COALESCE` 兜底为 0。 */
     fun observeTotals(epochDay: Long): Flow<MealTotals>
+
+    /**
+     * 截至 [todayEpochDay]（含）的饮食台账，供「我的」页那一行用。
+     *
+     * 分母只数已过去的餐次 —— 饮食计划会提前排到未来几天。
+     */
+    suspend fun dietTally(todayEpochDay: Long): DietTally
 
     /**
      * 取某日**全部**餐（**含 `isActive == false` 的软删行**），一次性读取。

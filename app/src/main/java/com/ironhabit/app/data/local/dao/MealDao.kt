@@ -6,6 +6,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
+import com.ironhabit.app.data.local.dto.DietTallyRaw
 import com.ironhabit.app.data.local.dto.MealTotalsRaw
 import com.ironhabit.app.data.local.entity.MealEntity
 import kotlinx.coroutines.flow.Flow
@@ -27,6 +28,43 @@ interface MealDao {
     /** 观察某日启用餐列表（`is_active = 1`），按 `sort_order` 升序。 */
     @Query("SELECT * FROM meals WHERE date_epoch_day = :epochDay AND is_active = 1 ORDER BY sort_order")
     fun observeByDate(epochDay: Long): Flow<List<MealEntity>>
+
+    /**
+     * 「我的」页饮食台账那一行要的四个数，一次读回。
+     *
+     * 与 `dev.sh q` 里跑的是同一句，界面上每个数都能这样复现：
+     * ```
+     * SELECT (SELECT COUNT(*) FROM meals WHERE is_active=1 AND date_epoch_day<=<today>),        -- 32
+     *        (SELECT COUNT(DISTINCT i.meal_id) FROM meal_items i JOIN meals m ON i.meal_id=m.id
+     *            WHERE m.is_active=1 AND m.date_epoch_day<=<today>),                            -- 2  填了几餐
+     *        (SELECT COUNT(*) FROM meal_items i JOIN meals m ... 同上),                          -- 2  几条食物
+     *        (SELECT COALESCE(SUM(i.kcal),0) FROM ... 同上),                                     -- 194
+     *        (SELECT MAX(m.date_epoch_day) FROM meals m WHERE ... AND EXISTS(
+     *            SELECT 1 FROM meal_items x WHERE x.meal_id=m.id))                              -- 20716
+     * ```
+     * ⚠️ 分母只数 **`date_epoch_day <= 今天`** 的餐次：饮食计划会提前排到未来几天，
+     * 把没到的餐次算进"缺口"，首屏那行金字就变成冤枉人。
+     */
+    @Query(
+        """
+        SELECT
+            (SELECT COUNT(*) FROM meals
+                WHERE is_active = 1 AND date_epoch_day <= :todayEpochDay) AS mealRowCount,
+            (SELECT COUNT(DISTINCT i.meal_id) FROM meal_items i
+                INNER JOIN meals m ON i.meal_id = m.id
+                WHERE m.is_active = 1 AND m.date_epoch_day <= :todayEpochDay) AS filledMealCount,
+            (SELECT COUNT(*) FROM meal_items i
+                INNER JOIN meals m ON i.meal_id = m.id
+                WHERE m.is_active = 1 AND m.date_epoch_day <= :todayEpochDay) AS itemCount,
+            (SELECT COALESCE(SUM(i.kcal), 0) FROM meal_items i
+                INNER JOIN meals m ON i.meal_id = m.id
+                WHERE m.is_active = 1 AND m.date_epoch_day <= :todayEpochDay) AS itemKcal,
+            (SELECT MAX(m.date_epoch_day) FROM meals m
+                WHERE m.is_active = 1 AND m.date_epoch_day <= :todayEpochDay
+                  AND EXISTS (SELECT 1 FROM meal_items x WHERE x.meal_id = m.id)) AS lastFilledEpochDay
+        """
+    )
+    suspend fun dietTally(todayEpochDay: Long): DietTallyRaw
 
     /**
      * 当日合计。

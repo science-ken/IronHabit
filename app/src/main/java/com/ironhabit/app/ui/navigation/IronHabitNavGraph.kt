@@ -106,6 +106,10 @@ fun IronHabitNavGraph(
                 onOpenSettings = { navController.navigate(Destinations.SETTINGS) },
                 onOpenBackup = { navController.navigate(Destinations.BACKUP) },
                 onOpenTrainingStats = { navController.navigate(Destinations.TRAINING_STATS) },
+                // 台账那两行跨 Tab：饮食记在「今日」的餐次块里，习惯在「自律」里。
+                // 为它们各开一个只读页就是把今日页的清单再画一遍。
+                onOpenDiet = { navController.navigateToTab(Destinations.TODAY) },
+                onOpenHabits = { navController.navigateToTab(Destinations.DISCIPLINE) },
             )
         }
 

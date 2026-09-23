@@ -6,6 +6,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
+import com.ironhabit.app.data.local.dto.BodyTallyRaw
 import com.ironhabit.app.data.local.entity.BodyMetricEntity
 import com.ironhabit.app.domain.model.BodyMetricType
 import kotlinx.coroutines.flow.Flow
@@ -27,6 +28,15 @@ interface BodyMetricDao {
 
     @Query("SELECT * FROM body_metrics ORDER BY date_epoch_day DESC")
     suspend fun getAll(): List<BodyMetricEntity>
+
+    /**
+     * 「我的」页身体数据台账那一行：条数 + 最近一条的日期（**跨全部 7 种指标**）。
+     *
+     * 与 `dev.sh q` 里跑的是同一句：
+     * `SELECT COUNT(*), MAX(date_epoch_day) FROM body_metrics` —— 真机 2026-09-23：`1 | 20712`
+     */
+    @Query("SELECT COUNT(*) AS rowCount, MAX(date_epoch_day) AS lastEpochDay FROM body_metrics")
+    suspend fun bodyTally(): BodyTallyRaw
 
     @Query("SELECT * FROM body_metrics WHERE id = :id")
     suspend fun getById(id: Long): BodyMetricEntity?

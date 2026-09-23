@@ -22,7 +22,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.ironhabit.app.R
 import com.ironhabit.app.ui.theme.IronHabitSpacing
-import kotlinx.datetime.LocalDate
 
 /**
  * 计划日期栏：`‹ 日期区间 ›` + 星期 chip 行。
@@ -120,11 +119,8 @@ fun PlanDateStrip(
 /** 一周 7 天。 */
 private const val DAYS_PER_WEEK: Long = 7L
 
-/** `epochDay` → 「M/D」（纯数字，无硬编码中文）。 */
-private fun formatMonthDay(epochDay: Long): String {
-    val date = LocalDate.fromEpochDays(epochDay.toInt())
-    return "${date.monthNumber}/${date.dayOfMonth}"
-}
+// `epochDay` → 「M/D」 用的是本包 `TrendChart.kt` 里那份 `formatMonthDay`
+// （以前这里有一份逐字相同的私有副本，同包两份会在其中一份改 internal 时直接撞车）。
 
 /**
  * 周一 epochDay → 「9/21–9/27」这样的周区间文本。

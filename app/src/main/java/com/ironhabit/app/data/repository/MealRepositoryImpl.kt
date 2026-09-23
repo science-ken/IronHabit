@@ -3,8 +3,10 @@ package com.ironhabit.app.data.repository
 import androidx.room.withTransaction
 import com.ironhabit.app.data.local.AppDatabase
 import com.ironhabit.app.data.local.dao.MealDao
+import com.ironhabit.app.data.local.dto.DietTallyRaw
 import com.ironhabit.app.data.mapper.MealMapper
 import com.ironhabit.app.di.IoDispatcher
+import com.ironhabit.app.domain.model.DietTally
 import com.ironhabit.app.domain.model.Meal
 import com.ironhabit.app.domain.model.MealTotals
 import com.ironhabit.app.domain.repository.MealRepository
@@ -33,6 +35,17 @@ class MealRepositoryImpl @Inject constructor(
         mealDao.observeByDate(epochDay)
             .map { entities -> entities.map(MealMapper::toDomain) }
             .flowOn(ioDispatcher)
+
+    override suspend fun dietTally(todayEpochDay: Long): DietTally {
+        val raw: DietTallyRaw = mealDao.dietTally(todayEpochDay)
+        return DietTally(
+            mealRowCount = raw.mealRowCount,
+            filledMealCount = raw.filledMealCount,
+            itemCount = raw.itemCount,
+            kcal = raw.itemKcal,
+            lastFilledEpochDay = raw.lastFilledEpochDay,
+        )
+    }
 
     override fun observeTotals(epochDay: Long): Flow<MealTotals> =
         mealDao.observeTotals(epochDay)

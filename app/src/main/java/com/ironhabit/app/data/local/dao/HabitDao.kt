@@ -6,6 +6,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
+import com.ironhabit.app.data.local.dto.HabitTallyRaw
 import com.ironhabit.app.data.local.entity.HabitEntity
 import kotlinx.coroutines.flow.Flow
 
@@ -35,6 +36,28 @@ interface HabitDao {
 
     @Query("SELECT * FROM habits WHERE is_active = 1 ORDER BY sort_order, id")
     suspend fun getActive(): List<HabitEntity>
+
+    /**
+     * 「我的」页习惯台账那一行要的数，一次读回。
+     *
+     * 与 `dev.sh q` 里跑的是同一句：
+     * ```
+     * SELECT (SELECT COUNT(*) FROM habits WHERE is_active=1),                 -- 2
+     *        (SELECT COUNT(*) FROM habit_logs WHERE is_completed=1),          -- 1
+     *        (SELECT MAX(date_epoch_day) FROM habit_logs WHERE is_completed=1) -- 20714
+     * ```
+     * ⚠️ 后两个数**不 JOIN `habits` 过滤 `is_active`**：习惯是软删的，删掉之后
+     * 打过的那些卡仍然是"你坚持过的证据"。跟着过滤就会把历史一起抹掉。
+     */
+    @Query(
+        """
+        SELECT
+            (SELECT COUNT(*) FROM habits WHERE is_active = 1) AS activeHabits,
+            (SELECT COUNT(*) FROM habit_logs WHERE is_completed = 1) AS completedLogs,
+            (SELECT MAX(date_epoch_day) FROM habit_logs WHERE is_completed = 1) AS lastEpochDay
+        """
+    )
+    suspend fun habitTally(): HabitTallyRaw
 
     @Query("SELECT * FROM habits WHERE id = :id")
     suspend fun getById(id: Long): HabitEntity?

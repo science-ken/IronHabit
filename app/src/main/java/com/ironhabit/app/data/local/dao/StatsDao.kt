@@ -3,6 +3,7 @@ package com.ironhabit.app.data.local.dao
 import androidx.room.Dao
 import androidx.room.Query
 import com.ironhabit.app.data.local.dto.CategoryRaw
+import com.ironhabit.app.data.local.dto.CheckInTallyRaw
 import com.ironhabit.app.data.local.dto.DayCountRaw
 import com.ironhabit.app.data.local.dto.TrendRaw
 
@@ -51,6 +52,29 @@ interface StatsDao {
     /** 区间内打卡总次数。 */
     @Query("SELECT COUNT(*) FROM check_ins WHERE date_epoch_day BETWEEN :startEpochDay AND :endEpochDay")
     suspend fun checkInCount(startEpochDay: Long, endEpochDay: Long): Int
+
+    /**
+     * 「我的」页台账那一行要的四个数，一次读回。
+     *
+     * 与 `dev.sh q` 里跑的是同一句，界面上每个数都能这样复现：
+     * ```
+     * SELECT COUNT(*), COALESCE(SUM(completed_sets),0), COALESCE(SUM(completed_reps),0),
+     *        COALESCE(SUM(CASE WHEN rpe IS NOT NULL THEN 1 ELSE 0 END),0)
+     * FROM check_ins WHERE date_epoch_day BETWEEN 0 AND <today>
+     * -- 2026-09-23 真机：12 | 25 | 52 | 6
+     * ```
+     * `COALESCE` 不是装饰：一条都没打过时 `SUM` 返回 `NULL`，非空列会直接抛。
+     */
+    @Query(
+        """
+        SELECT COUNT(*) AS rowCount,
+               COALESCE(SUM(completed_sets), 0) AS setCount,
+               COALESCE(SUM(completed_reps), 0) AS repCount,
+               COALESCE(SUM(CASE WHEN rpe IS NOT NULL THEN 1 ELSE 0 END), 0) AS rpeRowCount
+        FROM check_ins WHERE date_epoch_day BETWEEN :startEpochDay AND :endEpochDay
+        """
+    )
+    suspend fun checkInTally(startEpochDay: Long, endEpochDay: Long): CheckInTallyRaw
 
     /** 区间内有打卡的天数（去重）。 */
     @Query("SELECT COUNT(DISTINCT date_epoch_day) FROM check_ins WHERE date_epoch_day BETWEEN :startEpochDay AND :endEpochDay")
