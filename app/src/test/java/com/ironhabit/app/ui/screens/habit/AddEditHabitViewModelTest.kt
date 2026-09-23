@@ -20,6 +20,7 @@ import kotlinx.datetime.Clock
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -305,5 +306,70 @@ class AddEditHabitViewModelTest {
 
         coVerify { scheduler.scheduleHabit(99L, 6, 45) }
         coVerify(exactly = 0) { scheduler.scheduleHabit(0L, any(), any()) }
+    }
+
+    // ---------------- 台账 A13：「每周指定日」全不选 ----------------
+
+    /** 只排周三的习惯，用来把掩码拨来拨去。 */
+    private val weeklyHabit = Habit(
+        id = 42L,
+        name = "游泳",
+        emoji = "\uD83C\uDFCA",
+        frequency = HabitFrequency.WEEKLY,
+        weeklyDaysMask = Habit.WEEKLY_DAYS_ALL,
+        reminderEnabled = false,
+        targetValue = null,
+        targetUnit = null,
+        isActive = true,
+        createdAt = 3_000L,
+    )
+
+    /**
+     * 全不选时保存**什么都不写**。
+     *
+     * 这条测的是 VM 而不是按钮：界面禁用保存只是第一道，直接调 `onSave()` 绕过它也得挡住。
+     */
+    @Test
+    fun weeklyWithEveryDayClearedSavesNothing() = runTest(mainDispatcherRule.testDispatcher) {
+        val repo = repositoryWith(listOf(weeklyHabit))
+        val vm = viewModel(repo, habitId = 42L)
+        advanceUntilIdle()
+
+        (0..6).forEach { index -> vm.onToggleWeekday(index) }
+
+        assertTrue(
+            "判据必须是 frequency + 掩码派生的，不能是一个会漂的字段",
+            vm.uiState.value.needsWeeklyDays,
+        )
+        vm.onSave()
+        advanceUntilIdle()
+
+        coVerify(exactly = 0) { repo.upsertHabit(any()) }
+    }
+
+    /**
+     * 留一天时存的**就是那一天**：钉的是位序与"取消真的会清位"。
+     *
+     * ⚠️ 说清它**杀不掉什么**：把 A13 那个 `?: WEEKLY_DAYS_ALL` 兜底加回去，这条照样绿 ——
+     * 掩码非 0 时兜底根本不触发。那条变异是上面那条测试抓的（实测过：加回兜底只有它红）。
+     * 这条能抓的是另一类：bit 序错位（周三存成 `1 shl 3`），或 `xor` 被改成只置位不清位。
+     */
+    @Test
+    fun weeklySavesExactlyTheDaysLeftSelected_notTheWholeWeek() = runTest(mainDispatcherRule.testDispatcher) {
+        val repo = repositoryWith(listOf(weeklyHabit))
+        val vm = viewModel(repo, habitId = 42L)
+        advanceUntilIdle()
+
+        (0..6).filter { it != 2 }.forEach { index -> vm.onToggleWeekday(index) }
+        assertFalse(vm.uiState.value.needsWeeklyDays)
+
+        vm.onSave()
+        advanceUntilIdle()
+
+        assertEquals(
+            "存下的掩码只能是用户留下的周三",
+            1 shl 2,
+            savedHabit.captured.weeklyDaysMask,
+        )
     }
 }

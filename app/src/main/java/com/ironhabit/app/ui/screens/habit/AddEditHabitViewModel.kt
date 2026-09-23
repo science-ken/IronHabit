@@ -61,7 +61,15 @@ data class AddEditHabitUiState(
     @StringRes val snackbarRes: Int? = null,
     val isSaving: Boolean = false,
     val saved: Boolean = false,
-)
+) {
+    /**
+     * 「每周指定日」却一个日子都没选。
+     *
+     * **派生，不存字段**：它完全由 [frequency] + [weeklyDaysMask] 决定，存起来就会和这两个字段漂 ——
+     * 用户再点一下 chip，那条红字还挂着（本项目"过期字段该派生不该存"的同一课）。
+     */
+    val needsWeeklyDays: Boolean get() = frequency == HabitFrequency.WEEKLY && weeklyDaysMask == 0
+}
 
 /** 与 [Habit] 的默认图标同一处定义：两边各写一个字面量迟早漂（走查 #9 就是这么来的）。 */
 private const val DEFAULT_EMOJI: String = Habit.DEFAULT_EMOJI
@@ -191,10 +199,15 @@ class AddEditHabitViewModel @Inject constructor(
             return
         }
 
-        val mask = if (state.frequency == HabitFrequency.WEEKLY) {
-            state.weeklyDaysMask.takeIf { it != 0 } ?: Habit.WEEKLY_DAYS_ALL
-        } else {
-            Habit.WEEKLY_DAYS_ALL
+        // 全不选**不再静默兜成全周**（台账 A13）：以前存进去的是 127，用户只会觉得"我明明全取消了"。
+        // 界面据此禁用保存并念一句「至少选一天」；这里是同一判据的第二道 —— 走到 VM 就说明
+        // 有别的调用方绕过了界面，让它写 0（= 这个习惯永远不会被排到任何一天）比写 127 更坏。
+        val mask: Int = when (state.frequency) {
+            HabitFrequency.WEEKLY -> {
+                if (state.needsWeeklyDays) return
+                state.weeklyDaysMask
+            }
+            HabitFrequency.DAILY -> Habit.WEEKLY_DAYS_ALL
         }
 
         val targetInput = state.targetValue.trim()

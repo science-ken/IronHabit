@@ -213,6 +213,15 @@ fun AddEditHabitScreen(
                         mask = uiState.weeklyDaysMask,
                         onToggle = viewModel::onToggleWeekday,
                     )
+                    // 全不选时**当场说**，不等点保存：按钮同时禁用，
+                    // 否则用户会以为"全取消 = 不重复"，而旧版存进去的是全周（台账 A13）。
+                    if (uiState.needsWeeklyDays) {
+                        Text(
+                            text = stringResource(R.string.error_weekly_days_required),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
                 }
 
                 Row(
@@ -253,7 +262,8 @@ fun AddEditHabitScreen(
                     Button(
                         onClick = viewModel::onSave,
                         // P0-4：写入中禁用，避免连点产生重复数据（VM 侧另有 in-flight 守卫兜底）。
-                        enabled = !uiState.isSaving,
+                        // 重复日全不选时也禁用 —— 判据是派生的，勾回任意一天就自己活了。
+                        enabled = !uiState.isSaving && !uiState.needsWeeklyDays,
                         modifier = Modifier.padding(start = IronHabitSpacing.sm),
                     ) {
                         Text(text = stringResource(R.string.action_save))

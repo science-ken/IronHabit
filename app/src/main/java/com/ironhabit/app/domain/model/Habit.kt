@@ -52,7 +52,8 @@ data class Habit(
      * 供 [com.ironhabit.app.domain.util.StreakCalculator] 的应做日感知计数使用：
      * - [HabitFrequency.DAILY] → `null`（每天都算，旧口径）；
      * - [HabitFrequency.WEEKLY] → 由 [weeklyDaysMask] 展开（bit0 = 周一）；
-     *   掩码为空（理论不可达，UI 会把空掩码兜成全周）时同样返回 `null`。
+     *   掩码为空时同样返回 `null` —— 理论不可达：表单在"每周指定日 + 一个都没选"时禁用保存
+     *   并提示「至少选一天」（旧版是悄悄兜成全周，台账 A13 已改）。
      */
     val expectedWeekdays: Set<Int>?
         get() {
