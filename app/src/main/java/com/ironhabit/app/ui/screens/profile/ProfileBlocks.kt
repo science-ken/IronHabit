@@ -220,7 +220,7 @@ internal fun ProfileStatStrip(
         StripSeparator()
         StripCell(
             label = stringResource(R.string.label_profile_total_records),
-            value = stringResource(R.string.value_profile_records_count, totalRecords),
+            value = stringResource(R.string.value_record_count, totalRecords),
         )
         StripSeparator()
         StripCell(
@@ -341,7 +341,7 @@ internal fun ProfileLedgerCard(
                 training.activeDayCount,
             ),
             detailIsGap = false,
-            count = stringResource(R.string.value_profile_records_count, training.rowCount),
+            count = stringResource(R.string.value_record_count, training.rowCount),
             lastDate = training.lastEpochDay?.let { day ->
                 stringResource(R.string.label_last_date_short, formatMonthDay(day))
             },
@@ -354,7 +354,7 @@ internal fun ProfileLedgerCard(
             name = stringResource(R.string.entry_body_metrics),
             detail = stringResource(R.string.label_ledger_body_detail),
             detailIsGap = false,
-            count = stringResource(R.string.value_profile_records_count, body.rowCount),
+            count = stringResource(R.string.value_record_count, body.rowCount),
             lastDate = body.lastEpochDay?.let { day ->
                 stringResource(R.string.label_last_date_short, formatMonthDay(day))
             },

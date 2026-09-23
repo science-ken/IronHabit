@@ -1,6 +1,8 @@
 package com.ironhabit.app.ui.screens.bodymetrics
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,10 +21,12 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -34,6 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.res.stringResource
@@ -48,12 +53,19 @@ import com.ironhabit.app.ui.components.EmptyState
 import com.ironhabit.app.ui.components.LoadingSkeleton
 import com.ironhabit.app.ui.components.LocalSnackbarHostState
 import com.ironhabit.app.ui.components.formatMonthDay
+import com.ironhabit.app.ui.theme.IronHabitShapes
 import com.ironhabit.app.ui.theme.IronHabitSpacing
 
 /**
- * 「身体数据」页（P1）：类型选择 + 当前值 + 趋势线（Canvas 手绘，零第三方依赖）+ 录入 + 列表。
+ * 「身体数据」页：类型选择 + 当前值（含条数）+ 趋势线 + 「记一笔」+ 历史记录。
  *
- * 复用 `AppRoot` 的 `Scaffold`；趋势线由本文件内 [BodyMetricTrendChart] 绘制（不改动 T04 的 `TrendChart`）。
+ * 页内**没有**大标题 —— 顶栏标题由路由给（`AppRoot.titleResFor`），以前这里同一屏
+ * 上下各写了一遍「身体数据」。
+ * 录入表单收在 [AddBodyMetricSheet] 底部弹层里：这一页的主体是"读自己量过什么"，
+ * 填数是一次性动作，不该占掉趋势图的位置。
+ *
+ * 趋势线由本文件内 [BodyMetricTrendChart] 绘制（Compose 原生 `Canvas`，零第三方依赖，
+ * 不改动 T04 的 `TrendChart`）。
  */
 @Composable
 fun BodyMetricsScreen(
@@ -68,11 +80,16 @@ fun BodyMetricsScreen(
     // 补一道确认，形状与「数据备份」导入、「删除习惯」一致（三处同类动作不该长三种样子）。
     var recordToDelete: BodyMetric? by remember { mutableStateOf(null) }
 
+    /** 录入表单收在底部弹层里：这一页的主体是"读"，"记"是一次性的动作。 */
+    var showAddSheet by remember { mutableStateOf(false) }
+
     val snackbarText: String? = uiState.snackbarRes?.let { res -> stringResource(res) }
     LaunchedEffect(snackbarText) {
         if (snackbarText != null) {
             snackbarHostState.showSnackbar(snackbarText)
             viewModel.onConsumeSnackbar()
+            // 写成功了（或表单被判非法）才关弹层：非法时留着，让用户看见错误并改。
+            if (uiState.numberErrorRes == null) showAddSheet = false
         }
     }
 
@@ -83,22 +100,20 @@ fun BodyMetricsScreen(
             .padding(IronHabitSpacing.lg),
         verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.lg),
     ) {
-        Text(
-            text = stringResource(R.string.title_body_metrics),
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-
-        // 普通本地 val：委托属性不支持智能转换，需先取出再在分支内使用。
+        // 页内**不**再写一遍「身体数据」大标题：顶栏标题由路由给（`AppRoot.titleResFor`），
+        // 以前同一屏上下出现两次同名标题。
         val errorRes: Int? = uiState.errorRes
         when {
             uiState.isLoading -> {
                 LoadingSkeleton()
                 LoadingSkeleton()
+                // 录入入口在加载/错误时也在：这一页不能变成走不通的死路。
+                AddRecordRow(onClick = { showAddSheet = true })
             }
 
             errorRes != null -> {
                 EmptyState(text = stringResource(errorRes))
+                AddRecordRow(onClick = { showAddSheet = true })
             }
 
             else -> {
@@ -112,51 +127,21 @@ fun BodyMetricsScreen(
                     onSelect = viewModel::onSelectType,
                 )
 
-                LatestValueCard(latest = uiState.latest, fallbackType = uiState.selectedType)
+                LatestValueCard(
+                    latest = uiState.latest,
+                    recordCount = uiState.records.size,
+                    fallbackType = uiState.selectedType,
+                )
 
                 BodyMetricTrendChart(records = uiState.records)
 
-                Text(
-                    text = stringResource(R.string.title_add_body_metric),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
-                ) {
-                    OutlinedTextField(
-                        value = uiState.valueText,
-                        onValueChange = viewModel::onValueChange,
-                        label = { Text(text = stringResource(R.string.hint_metric_value)) },
-                        isError = uiState.numberErrorRes != null,
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        modifier = Modifier.weight(1f),
-                    )
-                    OutlinedTextField(
-                        value = uiState.unitText,
-                        onValueChange = viewModel::onUnitChange,
-                        label = { Text(text = stringResource(R.string.hint_metric_unit)) },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-                uiState.numberErrorRes?.let { res ->
-                    Text(
-                        text = stringResource(res),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-                Button(
-                    onClick = viewModel::onAddRecord,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(text = stringResource(R.string.action_add))
-                }
+                AddRecordRow(onClick = { showAddSheet = true })
 
+                Text(
+                    text = stringResource(R.string.title_body_metric_history),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 if (uiState.records.isEmpty()) {
                     EmptyState(text = stringResource(R.string.empty_body_metrics))
                 } else {
@@ -169,6 +154,19 @@ fun BodyMetricsScreen(
                 }
             }
         }
+    }
+
+    if (showAddSheet) {
+        AddBodyMetricSheet(
+            valueText = uiState.valueText,
+            unitText = uiState.unitText,
+            numberErrorRes = uiState.numberErrorRes,
+            typeLabel = stringResource(metricLabelRes(uiState.selectedType)),
+            onValueChange = viewModel::onValueChange,
+            onUnitChange = viewModel::onUnitChange,
+            onSubmit = viewModel::onAddRecord,
+            onDismiss = { showAddSheet = false },
+        )
     }
 
     val pending: BodyMetric? = recordToDelete
@@ -227,10 +225,122 @@ private fun MetricTypePicker(
     }
 }
 
-/** 当前值卡片：显示最新一条；无数据时显示占位文案。 */
+/**
+ * 「记一笔」入口行：录入表单搬进底部弹层之后，页面上只留这一行。
+ *
+ * 右侧那句列出常用指标名，是为了让"点下去要填什么"在点之前就知道 ——
+ * 一个光板的「+」号承担不了这个信息量。
+ */
+@Composable
+private fun AddRecordRow(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colorScheme = MaterialTheme.colorScheme
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(IronHabitShapes.card)
+            .background(colorScheme.surfaceContainerHigh)
+            .clickable(onClick = onClick)
+            .padding(IronHabitSpacing.md),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text = stringResource(R.string.action_add_body_metric),
+            style = MaterialTheme.typography.titleSmall,
+            color = colorScheme.onSurface,
+        )
+        Text(
+            text = stringResource(R.string.hint_add_body_metric_types),
+            style = MaterialTheme.typography.labelMedium,
+            color = colorScheme.primary,
+        )
+    }
+}
+
+/**
+ * 录入弹层：数值 + 单位两格，默认单位跟着上面选中的指标走。
+ *
+ * 表单状态与校验全在 `BodyMetricsViewModel`（`valueText` / `unitText` / `numberErrorRes`），
+ * 这里只负责渲染 —— 与改版前的内联表单同一套逻辑，只是换了个位置。
+ * 非法时弹层不关（见调用处对 `numberErrorRes` 的判断），否则用户连改的机会都没有。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddBodyMetricSheet(
+    valueText: String,
+    unitText: String,
+    numberErrorRes: Int?,
+    typeLabel: String,
+    onValueChange: (String) -> Unit,
+    onUnitChange: (String) -> Unit,
+    onSubmit: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = IronHabitSpacing.xl)
+                .padding(bottom = IronHabitSpacing.xl),
+            verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.md),
+        ) {
+            Text(
+                text = "$typeLabel · " + stringResource(R.string.title_add_body_metric),
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
+            ) {
+                OutlinedTextField(
+                    value = valueText,
+                    onValueChange = onValueChange,
+                    label = { Text(text = stringResource(R.string.hint_metric_value)) },
+                    isError = numberErrorRes != null,
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.weight(1f),
+                )
+                OutlinedTextField(
+                    value = unitText,
+                    onValueChange = onUnitChange,
+                    label = { Text(text = stringResource(R.string.hint_metric_unit)) },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            numberErrorRes?.let { res ->
+                Text(
+                    text = stringResource(res),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+            Button(
+                onClick = onSubmit,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(text = stringResource(R.string.action_add))
+            }
+        }
+    }
+}
+
+/**
+ * 当前值卡片：这一类指标的最新一条 + 一共记了几条；无数据时显示占位文案。
+ *
+ * 「共 N 条」放在这里而不是别处：它是"这项我坚持量了多久"的直接答案，
+ * 也是下面那张趋势图为什么画得出来（或画不出来）的解释。
+ */
 @Composable
 private fun LatestValueCard(
     latest: BodyMetric?,
+    recordCount: Int,
     fallbackType: BodyMetricType,
 ) {
     Card(
@@ -261,8 +371,12 @@ private fun LatestValueCard(
                     style = MaterialTheme.typography.displaySmall,
                     color = MaterialTheme.colorScheme.primary,
                 )
+                val dateText = stringResource(
+                    R.string.label_body_metric_records,
+                    recordCount,
+                ) + " · " + formatMonthDay(latest.dateEpochDay)
                 Text(
-                    text = formatMonthDay(latest.dateEpochDay),
+                    text = dateText,
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
@@ -290,8 +404,10 @@ private fun BodyMetricTrendChart(
             .height(CHART_HEIGHT),
     ) {
         if (ascending.size < 2) {
+            // 不用 `empty_charts`：那句写的是"继续打卡"，而这一页记的是体重/体脂，
+            // 跟打卡无关；而且一个点的问题不是"数据少"，是"两个点才连得成线"。
             Text(
-                text = stringResource(R.string.empty_charts),
+                text = stringResource(R.string.empty_body_metric_chart),
                 style = MaterialTheme.typography.bodyMedium,
                 color = colorScheme.onSurfaceVariant,
                 modifier = Modifier.align(Alignment.Center),

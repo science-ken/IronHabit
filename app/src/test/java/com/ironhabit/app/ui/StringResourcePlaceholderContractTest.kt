@@ -137,7 +137,8 @@ class StringResourcePlaceholderContractTest {
 
         // 「我的」页 J 版首屏（档案卡 / 四联）
         entry("value_profile_fraction", ArgKind.NUMERIC, ArgKind.NUMERIC) // ProfileCompletenessRing 环中央「4/6」
-        entry("value_profile_records_count", ArgKind.NUMERIC) // ProfileBlocks 四联「累计记录」格（totalCheckIns: Int）
+        entry("value_record_count", ArgKind.NUMERIC) // 「我的」页四联与台账、「身体数据」页共用的「N 条」
+        entry("label_body_metric_records", ArgKind.NUMERIC) // 身体数据当前值卡：records.size: Int
         entry("label_profile_gap_line", ArgKind.NUMERIC, ArgKind.STRING) // 档案卡缺口行（项数 + joinLabels 出来的中文）
         entry("label_profile_body_fat_short", ArgKind.STRING) // 档案第二行：Float 在 Kotlin 里取好再塞 %s
         entry("label_profile_equipment_count", ArgKind.NUMERIC) // 档案第二行：equipment.size: Int

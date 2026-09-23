@@ -215,7 +215,7 @@
          所以这里要一条无空格的；四联那一格用的是 `label_progress_ratio`，与今日页同格式。 -->
     <string name="value_profile_fraction">%1$d/%2$d</string>
     <string name="value_profile_fraction_unplanned">未排课</string>
-    <string name="value_profile_records_count">%1$d 条</string>
+    <string name="value_record_count">%1$d 条</string>
     <!-- 档案第二行：各片段缺哪个就整段不出现（所以不合成一条长串）；
          「每周 N 练」复用 AI 教练页那条 `ai_profile_weekly_days`，不另起同名文案。 -->
     <string name="label_profile_body_fat_short">体脂 %1$s</string>
@@ -253,9 +253,19 @@
     <string name="empty_charts">数据还不够，继续打卡就能看到趋势啦</string>
     <!-- 一条记录都没有时用这句，而不是把一个像判决的「0%」摆在新用户面前 -->
     <string name="label_no_data">还没有数据</string>
-    <string name="empty_body_metrics">还没有身体数据，点「+」记录第一条</string>
+    <string name="empty_body_metrics">还没有身体数据，点「记一笔」添加第一条</string>
+    <!-- 身体数据页的趋势图**不能**复用 `empty_charts`：那句写的是"继续打卡"，
+         而这一页记的是体重/体脂，跟打卡没关系；且一个点的问题不是"数据不够多"，
+         是"两个点才连得成线"。 -->
+    <string name="empty_body_metric_chart">一个点连不成线，再记一条就能看到趋势</string>
     <string name="dialog_delete_body_metric_title">删除这条记录？</string>
     <string name="dialog_delete_body_metric_message">%1$s 的「%2$s」会被删掉，无法恢复</string>
+
+    <!-- 身体数据页（J3 重排）：录入收进底部弹层，页面主体只留读数与历史 -->
+    <string name="action_add_body_metric">记一笔</string>
+    <string name="hint_add_body_metric_types">体重 · 体脂 · 围度等 7 项</string>
+    <string name="label_body_metric_records">共 %1$d 条</string>
+    <string name="title_body_metric_history">历史记录</string>
 
     <!-- 身体数据 -->
     <string name="title_add_body_metric">记录身体数据</string>
