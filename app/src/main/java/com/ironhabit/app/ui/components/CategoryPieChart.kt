@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -16,7 +17,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.ironhabit.app.R
@@ -26,10 +30,12 @@ import com.ironhabit.app.ui.theme.IronHabitSpacing
 import kotlin.math.roundToInt
 
 /**
- * 训练类型占比饼图（**Compose 原生 `Canvas` 的 `drawArc(useCenter = true)` 手绘，零第三方依赖**）。
+ * 训练类型占比**环形图**（**Compose 原生 `Canvas` 的 `drawArc(useCenter = false)` + `Stroke` 手绘，
+ * 零第三方依赖**）。
  *
  * 左侧按 [CategoryShare.ratio] 顺时针切分圆周，颜色取自固定的 `colorScheme` 派生色序列；
  * 右侧图例列出 `category_*` 文案 + 「次数 (百分比%)」，同时用到 [CategoryShare.count] 与 [CategoryShare.ratio]。
+ * 环心放**总次数** —— 以前这是一块实心饼，读者想知道"一共多少"只能把图例里四个数加一遍。
  * 空数据时显示 `empty_charts`。
  */
 @Composable
@@ -50,25 +56,51 @@ fun CategoryPieChart(
     }
 
     val sliceColors: List<Color> = sliceColors(MaterialTheme.colorScheme)
+    val total: Int = nonEmpty.sumOf { share -> share.count }
 
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.lg),
     ) {
-        Canvas(modifier = Modifier.size(PIE_SIZE)) {
-            var startAngle = START_ANGLE
-            nonEmpty.forEachIndexed { index, share ->
-                val sweep: Float = share.ratio.coerceIn(0f, 1f) * FULL_SWEEP
-                if (sweep > 0f) {
-                    drawArc(
-                        color = sliceColors[index % sliceColors.size],
-                        startAngle = startAngle,
-                        sweepAngle = sweep,
-                        useCenter = true,
-                    )
+        Box(modifier = Modifier.size(PIE_SIZE)) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val stroke: Float = RING_THICKNESS.toPx()
+                val arcTopLeft = Offset(stroke / 2f, stroke / 2f)
+                val arcSize = Size(size.width - stroke, size.height - stroke)
+                var startAngle = START_ANGLE
+                nonEmpty.forEachIndexed { index, share ->
+                    val sweep: Float = share.ratio.coerceIn(0f, 1f) * FULL_SWEEP
+                    if (sweep > 0f) {
+                        drawArc(
+                            color = sliceColors[index % sliceColors.size],
+                            startAngle = startAngle,
+                            sweepAngle = sweep,
+                            useCenter = false,
+                            topLeft = arcTopLeft,
+                            size = arcSize,
+                            style = Stroke(width = stroke),
+                        )
+                    }
+                    startAngle += sweep
                 }
-                startAngle += sweep
+            }
+            // 环心两行：总数 + 一句"这是什么数"。放在 Box 里居中，而不是画进 Canvas，
+            // 这样它跟着字体缩放走，不用手算字号。
+            Column(
+                modifier = Modifier.align(Alignment.Center),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    text = total.toString(),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = stringResource(R.string.label_pie_center_unit),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
 
@@ -143,7 +175,10 @@ private fun sliceColors(colorScheme: ColorScheme): List<Color> = listOf(
     colorScheme.primaryContainer,
 )
 
-private val PIE_SIZE = 140.dp
+private val PIE_SIZE = 120.dp
+
+/** 环的描边宽度：组件固有尺寸（决定环心留多大地方放总数），非布局间距，故就地定义。 */
+private val RING_THICKNESS = 26.dp
 private val LEGEND_DOT = 12.dp
 private const val START_ANGLE = -90f
 private const val FULL_SWEEP = 360f

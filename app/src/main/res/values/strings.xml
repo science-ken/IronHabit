@@ -192,13 +192,16 @@
 
     <!-- ===== 我的页 ===== -->
     <string name="title_profile">我的</string>
-    <string name="title_trend_chart">近 30 天趋势</string>
-    <string name="title_category_chart">训练类型占比 · 近 30 天</string>
+    <!-- 两张图的标题不再自带「近 30 天」：区间现在是「训练统计」页顶部那排 chip 的事，
+         写死在标题里就会在用户切到 7 天之后开始说谎。 -->
+    <string name="title_trend_chart">打卡趋势</string>
+    <string name="title_category_chart">训练类型占比</string>
     <string name="title_body_metrics">身体数据</string>
     <string name="title_settings">设置</string>
     <string name="title_backup">数据备份</string>
     <string name="title_about">关于</string>
     <string name="entry_body_metrics">身体数据</string>
+    <string name="entry_training_stats">训练统计</string>
     <string name="entry_settings">设置</string>
     <string name="entry_backup">数据备份</string>
     <string name="entry_food_library">食物库</string>
@@ -222,6 +225,16 @@
     <string name="label_profile_storage_title">只存这台手机 · %1$s</string>
     <string name="label_profile_storage_note">没有云同步；卸载即清零。导入会覆盖全部数据</string>
     <string name="label_profile_settings_row">设置 · 提醒 · 单位</string>
+
+    <!-- ===== 训练统计页（从「我的」页首屏外迁的三块低频回顾） ===== -->
+    <string name="title_training_stats">训练统计</string>
+    <string name="label_range_days">%1$d 天</string>
+    <string name="label_active_days">活跃 %1$d / %2$d 天</string>
+    <string name="label_peak_count">峰值 %1$d 次</string>
+    <string name="title_heatmap_chart">打卡热力图</string>
+    <string name="label_pie_center_unit">次打卡</string>
+    <string name="label_heatmap_less">少</string>
+    <string name="label_heatmap_more">多</string>
     <string name="empty_charts">数据还不够，继续打卡就能看到趋势啦</string>
     <!-- 一条记录都没有时用这句，而不是把一个像判决的「0%」摆在新用户面前 -->
     <string name="label_no_data">还没有数据</string>

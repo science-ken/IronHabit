@@ -62,6 +62,14 @@ object Destinations {
     // ---------------- 其它二级页 ----------------
     const val HISTORY = "history"
     const val BODY_METRICS = "body_metrics"
+
+    /**
+     * 「训练统计」：柱状 / 占比 / 热力图三块低频回顾。
+     *
+     * 从「我的」页首屏搬下来 —— 那三块加起来约 330dp，留在首屏这一屏就必然滚。
+     * 数据仍走 `GetStatsUseCase` / `GetHeatmapUseCase`，只是换了个页面渲染。
+     */
+    const val TRAINING_STATS = "training_stats"
     const val SETTINGS = "settings"
     const val BACKUP = "backup"
 

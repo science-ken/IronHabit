@@ -26,35 +26,35 @@ import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ironhabit.app.R
-import com.ironhabit.app.ui.components.CategoryPieChart
 import com.ironhabit.app.ui.components.EmptyState
 import com.ironhabit.app.ui.components.LoadingSkeleton
-import com.ironhabit.app.ui.components.TrendChart
 import com.ironhabit.app.ui.screens.food.FoodLibrarySheet
 import com.ironhabit.app.ui.theme.IronHabitSpacing
 
 /**
  * Tab4「我的」页面。
  *
- * 首屏结构（方案 J）：档案卡（含完整度环）→ 关键数字四联 → 二级入口 → 近 30 天趋势 + 类型占比。
+ * 首屏结构（方案 J）：档案卡（含完整度环）→ 关键数字四联 → 二级入口。
  * 四联那四个数字是这一页存在的理由 —— 改版前这一屏**一个数字都没有**，
  * 只有四行「身体数据 / 设置 / 数据备份 / 食物库」，两张图被挤到屏幕外。
+ *
+ * 两张统计图已经搬去「训练统计」二级页：它们属于"按月回顾才看"的低频数据，
+ * 留在这里就把首屏撑成三屏。
  *
  * 食物库这一行**开弹层而不是跳路由**：管理界面与「今日 → 饮食 → 食物库」是同一个
  * [FoodLibrarySheet]，新开路由就要把列表/搜索/新建/停用再写一遍。
  *
- * 趋势图与饼图暂时还留在本页底部，等「训练统计」二级页建好再搬走（同一刀里
- * 既删又建会让中间那个 commit 打不开任何图）。
- *
  * @param onOpenBodyMetrics 身体数据入口回调
  * @param onOpenSettings 设置（含「我的档案」区块）入口回调
  * @param onOpenBackup 数据备份入口回调
+ * @param onOpenTrainingStats 训练统计（柱状 / 占比 / 热力图）入口回调
  */
 @Composable
 fun ProfileScreen(
     onOpenBodyMetrics: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenBackup: () -> Unit,
+    onOpenTrainingStats: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: ProfileViewModel = hiltViewModel(),
 ) {
@@ -76,7 +76,13 @@ fun ProfileScreen(
                 // 加载完成后不会发生整屏跳动。
                 LoadingSkeleton()
                 LoadingSkeleton()
-                EntryRows(onOpenBodyMetrics, onOpenSettings, onOpenBackup) { showFoodLibrary = true }
+                EntryRows(
+                    onOpenBodyMetrics = onOpenBodyMetrics,
+                    onOpenSettings = onOpenSettings,
+                    onOpenBackup = onOpenBackup,
+                    onOpenTrainingStats = onOpenTrainingStats,
+                    onOpenFoodLibrary = { showFoodLibrary = true },
+                )
             }
 
             errorRes != null -> {
@@ -86,7 +92,13 @@ fun ProfileScreen(
                     onAction = viewModel::onRetry,
                 )
                 // 读不到数据时也要能走开：入口行是静态的，不依赖这次的聚合。
-                EntryRows(onOpenBodyMetrics, onOpenSettings, onOpenBackup) { showFoodLibrary = true }
+                EntryRows(
+                    onOpenBodyMetrics = onOpenBodyMetrics,
+                    onOpenSettings = onOpenSettings,
+                    onOpenBackup = onOpenBackup,
+                    onOpenTrainingStats = onOpenTrainingStats,
+                    onOpenFoodLibrary = { showFoodLibrary = true },
+                )
             }
 
             else -> {
@@ -103,13 +115,13 @@ fun ProfileScreen(
                     latestWeight = uiState.latestWeight,
                 )
 
-                EntryRows(onOpenBodyMetrics, onOpenSettings, onOpenBackup) { showFoodLibrary = true }
-
-                SectionTitle(text = stringResource(R.string.title_trend_chart))
-                TrendChart(points = uiState.trend)
-
-                SectionTitle(text = stringResource(R.string.title_category_chart))
-                CategoryPieChart(shares = uiState.categoryShare)
+                EntryRows(
+                    onOpenBodyMetrics = onOpenBodyMetrics,
+                    onOpenSettings = onOpenSettings,
+                    onOpenBackup = onOpenBackup,
+                    onOpenTrainingStats = onOpenTrainingStats,
+                    onOpenFoodLibrary = { showFoodLibrary = true },
+                )
             }
         }
     }
@@ -120,7 +132,7 @@ fun ProfileScreen(
 }
 
 /**
- * 四个二级入口。
+ * 五个二级入口。
  *
  * 加载 / 错误 / 内容三个分支都要出现，所以单独成一个函数而不是抄三遍。
  * 第 3 步会把它们换成带摘要的「记录台账」行 —— 那一版里每行右侧要挂真条数。
@@ -130,11 +142,17 @@ private fun EntryRows(
     onOpenBodyMetrics: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenBackup: () -> Unit,
+    onOpenTrainingStats: () -> Unit,
     onOpenFoodLibrary: () -> Unit,
 ) {
     EntryRow(
         text = stringResource(R.string.entry_body_metrics),
         onClick = onOpenBodyMetrics,
+    )
+    HorizontalDivider()
+    EntryRow(
+        text = stringResource(R.string.entry_training_stats),
+        onClick = onOpenTrainingStats,
     )
     HorizontalDivider()
     EntryRow(
@@ -178,14 +196,4 @@ private fun EntryRow(
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
-}
-
-@Composable
-private fun SectionTitle(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.titleMedium,
-        color = MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier.fillMaxWidth(),
-    )
 }

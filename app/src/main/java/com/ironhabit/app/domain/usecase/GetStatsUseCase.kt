@@ -7,7 +7,7 @@ import com.ironhabit.app.domain.repository.StatsRepository
 import javax.inject.Inject
 
 /**
- * 统计聚合结果（供「我的」页 2 张图 + 周期对比使用）。
+ * 统计聚合结果（供「训练统计」页的两张图 + 周期对比使用）。
  *
  * @property trend 近 N 天趋势（含无打卡日期补 0）
  * @property categoryShare 各分类打卡占比
@@ -56,8 +56,9 @@ class GetStatsUseCase @Inject constructor(
         /**
          * 默认展示近 30 天。
          *
-         * ⚠️ 「近 30 天」这四个字写死在 `title_trend_chart` 与 `title_category_chart` 两条串里
-         * （饼图与趋势卡现在同走这个区间）。改这个常量必须同时改那两条串，否则标题就开始说谎。
+         * 以前「近 30 天」四个字写死在 `title_trend_chart` / `title_category_chart` 两条串里，
+         * 改这个常量就得回去改文案。现在标题不带区间了（区间是「训练统计」页顶部那排 chip 的事，
+         * 用户能自己切 7 / 30 / 90），所以这里改默认值不再牵动文案。
          */
         const val DEFAULT_DAYS: Int = 30
         private const val PERCENT_SCALE: Float = 100f

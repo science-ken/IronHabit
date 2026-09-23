@@ -126,6 +126,7 @@ private fun titleResFor(entry: NavBackStackEntry?): Int {
             }
         Destinations.HISTORY -> R.string.section_history
         Destinations.BODY_METRICS -> R.string.title_body_metrics
+        Destinations.TRAINING_STATS -> R.string.title_training_stats
         Destinations.SETTINGS -> R.string.title_settings
         Destinations.BACKUP -> R.string.title_backup
         // 漏了这一条时它会掉进下面的 else → 预览页顶栏写着「今日」。

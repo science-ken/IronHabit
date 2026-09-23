@@ -21,6 +21,7 @@ import com.ironhabit.app.ui.screens.planpreview.PlanPreviewScreen
 import com.ironhabit.app.ui.screens.profile.ProfileScreen
 import com.ironhabit.app.ui.screens.settings.BackupScreen
 import com.ironhabit.app.ui.screens.settings.SettingsScreen
+import com.ironhabit.app.ui.screens.stats.TrainingStatsScreen
 import com.ironhabit.app.ui.screens.today.TodayScreen
 import com.ironhabit.app.ui.screens.train.TrainScreen
 
@@ -104,6 +105,7 @@ fun IronHabitNavGraph(
                 onOpenBodyMetrics = { navController.navigate(Destinations.BODY_METRICS) },
                 onOpenSettings = { navController.navigate(Destinations.SETTINGS) },
                 onOpenBackup = { navController.navigate(Destinations.BACKUP) },
+                onOpenTrainingStats = { navController.navigate(Destinations.TRAINING_STATS) },
             )
         }
 
@@ -114,7 +116,8 @@ fun IronHabitNavGraph(
 /**
  * 二级页路由注册（T05 实现）。
  *
- * 8 条路由：动作新增编辑 / 动作详情 / 计划新增编辑 / 习惯新增编辑 / 打卡历史 / 身体数据 / 设置 / 数据备份。
+ * 9 条路由：动作新增编辑 / 动作详情 / 计划新增编辑 / 习惯新增编辑 / 打卡历史 / 身体数据 /
+ * 训练统计 / 设置 / 数据备份。
  * query 参数路由用 `navArgument(type=..., defaultValue=...)`；path 参数路由（动作详情）用必填 [NavType.LongType]。
  */
 fun NavGraphBuilder.registerSecondaryRoutes(navController: NavHostController) {
@@ -196,6 +199,11 @@ fun NavGraphBuilder.registerSecondaryRoutes(navController: NavHostController) {
     // 6) 身体数据
     composable(Destinations.BODY_METRICS) {
         BodyMetricsScreen()
+    }
+
+    // 6b) 训练统计（从「我的」页首屏外迁的三块低频回顾）
+    composable(Destinations.TRAINING_STATS) {
+        TrainingStatsScreen()
     }
 
     // 7) 设置

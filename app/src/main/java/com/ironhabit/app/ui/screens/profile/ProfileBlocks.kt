@@ -226,18 +226,15 @@ internal fun ProfileStatStrip(
 @Composable
 private fun profileDetailText(profile: UserProfile): String? {
     val fatText: String? = profile.bodyFatPct?.let { fat ->
-        stringResource(
-            R.string.label_profile_body_fat_short,
-            // 数字用设置页那一格的同一格式（`15` 而不是 `15.0`）：同一个档案字段不该在两页
-            // 长成两个样子。四联里的「体重」不走这个格式，那是身体数据记录，与身体数据页同形。
-            fat.toDisplayNumber() + stringResource(R.string.suffix_profile_body_fat),
-        )
+        // 数字用设置页那一格的同一格式（`15` 而不是 `15.0`）：同一个档案字段不该在两页
+        // 长成两个样子。四联里的「体重」不走这个格式，那是身体数据记录，与身体数据页同形。
+        // ⚠️ 实参先落成局部变量、整句写在一行内：占位符契约测试是**按行**扫调用点的，
+        // 跨行会把带参调用读成零参格式化而误报（注释里也别写资源全名，会被当调用点）。
+        val fatDisplay: String = fat.toDisplayNumber() + stringResource(R.string.suffix_profile_body_fat)
+        stringResource(R.string.label_profile_body_fat_short, fatDisplay)
     }
-    val daysText: String = stringResource(
-        // 「每周 N 练」这条串 AI 教练页已经在用，不再另起一条同名文案。
-        R.string.ai_profile_weekly_days,
-        profile.trainingDaysPerWeek,
-    )
+    // 「每周 N 练」这条串 AI 教练页已经在用，不再另起一条同名文案。
+    val daysText: String = stringResource(R.string.ai_profile_weekly_days, profile.trainingDaysPerWeek)
     // 「无器械」是一次表态，件数照样算 1 件；一件都没勾时这行不出现（缺口那一行会说）。
     val equipmentText: String? = profile.equipment.size.takeIf { it > 0 }?.let { count ->
         stringResource(R.string.label_profile_equipment_count, count)

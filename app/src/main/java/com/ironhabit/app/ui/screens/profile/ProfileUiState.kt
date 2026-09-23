@@ -1,8 +1,6 @@
 package com.ironhabit.app.ui.screens.profile
 
 import com.ironhabit.app.domain.model.BodyMetric
-import com.ironhabit.app.domain.model.CategoryShare
-import com.ironhabit.app.domain.model.TrendPoint
 import com.ironhabit.app.domain.model.UserProfile
 
 /**
@@ -14,10 +12,10 @@ import com.ironhabit.app.domain.model.UserProfile
  * 不在这里重算一遍，是为了不让「我的」页和今日页对同一周说出两个数
  * （AI 复盘页的分母与今日页**刻意不同**，那是另一件事，见 `BuildWeeklyReviewUseCase`）。
  *
+ * 两张统计图不在这里 —— 它们在「训练统计」页自己的状态里。
+ *
  * @property isLoading 加载中
- * @property trend 近 30 天打卡趋势
- * @property categoryShare 训练类型占比
- * @property profile 用户档案（供「身体档案」概要卡展示）
+ * @property profile 用户档案（供档案卡与完整度环展示）
  * @property trainingStreak 当前连续打卡天数（应做日感知：休息日不断档）
  * @property weekCompletedDays 本周**有打卡**的天数
  * @property weekPlannedDays 本周**排了课**的天数；`0` = 这周没排课，界面不该显示「0/0」
@@ -27,8 +25,6 @@ import com.ironhabit.app.domain.model.UserProfile
  */
 data class ProfileUiState(
     val isLoading: Boolean = true,
-    val trend: List<TrendPoint> = emptyList(),
-    val categoryShare: List<CategoryShare> = emptyList(),
     val profile: UserProfile = UserProfile(),
     val trainingStreak: Int = 0,
     val weekCompletedDays: Int = 0,

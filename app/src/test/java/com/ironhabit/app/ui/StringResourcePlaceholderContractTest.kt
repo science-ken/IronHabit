@@ -142,6 +142,11 @@ class StringResourcePlaceholderContractTest {
         entry("label_profile_body_fat_short", ArgKind.STRING) // 档案第二行：Float 在 Kotlin 里取好再塞 %s
         entry("label_profile_equipment_count", ArgKind.NUMERIC) // 档案第二行：equipment.size: Int
 
+        // 「训练统计」页
+        entry("label_range_days", ArgKind.NUMERIC) // 区间 chip（7 / 30 / 90）
+        entry("label_active_days", ArgKind.NUMERIC, ArgKind.NUMERIC) // 有打卡的天数 / 区间天数
+        entry("label_peak_count", ArgKind.NUMERIC) // 柱状卡右上角：区间内单日最高次数
+
         // ---------------- 【未使用】strings.xml 有占位符、代码暂无引用 ----------------
         entry("label_week_of", ArgKind.STRING)
         entry("title_week_plan_by_day", ArgKind.STRING)

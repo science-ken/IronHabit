@@ -11,9 +11,7 @@ import com.ironhabit.app.domain.repository.BodyMetricRepository
 import com.ironhabit.app.domain.repository.CheckInRepository
 import com.ironhabit.app.domain.repository.SettingsRepository
 import com.ironhabit.app.domain.repository.StatsRepository
-import com.ironhabit.app.domain.usecase.GetStatsUseCase
 import com.ironhabit.app.domain.usecase.GetTodayOverviewUseCase
-import com.ironhabit.app.domain.usecase.StatsBundle
 import com.ironhabit.app.domain.util.DateUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -34,15 +32,17 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 
 /**
- * 「我的」页 ViewModel：首屏四个数字 + 近 30 天趋势 / 类型占比两图 + 「身体档案」概要（只读）。
+ * 「我的」页 ViewModel：首屏四个数字 + 「身体档案」概要（只读）。
  *
  * 四个数字的来源（**都不重算**，见 [ProfileUiState] 的口径说明）：
  * 连续与本周分母取自 [GetTodayOverviewUseCase]（今日页同一个流、同一套应做日规则）；
  * 本周分子是「本周有打卡的天数」，直接从下面那份活跃日列表数；
  * 累计走 [StatsRepository.checkInCount]，体重走 [BodyMetricRepository.observeByType] 的首条。
  *
+ * 两张统计图不在这里 —— 它们跟着「训练统计」页走（`TrainingStatsViewModel`）。
+ *
  * [CheckInRepository.observeActiveDaysSince]（`0L`）同时充当**变更触发器**：
- * 它一变就代表打过卡，`map { getStats(30) }` 因此能在打卡后刷新图表
+ * 它一变就代表打过卡，四个数字因此能在打卡后自动刷新
  * （`StatsDao` 无 Flow，故用触发器驱动的做法）。
  *
  * `retryTrigger` 让加载失败后可以由页面上的「重试」**重新订阅**整条数据流（[onRetry]）。
@@ -50,7 +50,6 @@ import kotlinx.datetime.TimeZone
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class ProfileViewModel @Inject constructor(
-    private val getStats: GetStatsUseCase,
     private val checkInRepository: CheckInRepository,
     private val settingsRepository: SettingsRepository,
     private val statsRepository: StatsRepository,
@@ -77,11 +76,8 @@ class ProfileViewModel @Inject constructor(
                 bodyMetricRepository.observeByType(BodyMetricType.WEIGHT),
                 getTodayOverview(today),
             ) { activeDays: List<Long>, profile: UserProfile, weights: List<BodyMetric>, overview: TodayOverview ->
-                val bundle: StatsBundle = getStats(TREND_DAYS)
                 ProfileUiState(
                     isLoading = false,
-                    trend = bundle.trend,
-                    categoryShare = bundle.categoryShare,
                     profile = profile,
                     trainingStreak = overview.trainingStreak.current,
                     weekCompletedDays = activeDays.count { day -> day in weekStart..today },
@@ -120,7 +116,6 @@ class ProfileViewModel @Inject constructor(
 
         /** 1970-01-01：早于任何可能的打卡日，与上同值但语义是「全历史起点」。 */
         const val ALL_TIME_START_EPOCH_DAY: Long = 0L
-        const val TREND_DAYS = 30
         const val STOP_TIMEOUT_MS = 5_000L
     }
 }
