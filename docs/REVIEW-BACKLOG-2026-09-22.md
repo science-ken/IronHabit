@@ -115,7 +115,8 @@
 
 | # | 事项 | 备注 |
 |---|---|---|
-| F1 | 2.0.9 这条线**从没打过 tag** → 没有签名安装包 | 打 tag 触发 CI 用 4 个本机没有的 secret 签名。且一旦在模拟器上换 release 包，签名不同只能卸载重装，**会清掉库** —— 必须先导出备份（导入路径今天已验通，这条退路是真的） |
+| F1 | ~~2.0.9 这条线**从没打过 tag**~~ **已打**：`v2.0.9` → `8529d3f`，CI 全绿（run 35842899732，13 步全 success，含 `Verify APK is signed`）。⚠️ 换 release 包签名不同只能卸载重装，**会清库** —— 打 tag 前已把整库（含 WAL）留了本地副本 `.scratch/backup-20260923-pre-release/`（`.scratch/` 不进 git） | 你说了才打 —— 已打 |
+| F3 | **`v2.0.9` 这个 Release 上 0 个资产**，而 v2.0.6/2.0.7/2.0.8 都挂着 `app-release.apk`。不是构建失败：APK 确实产出并验过签名，作为 **run artifact** 存在（`ironhabit-release-apk`，2,020,328 字节，09:31:11 生成），`Create GitHub Release` 那一步也在它之后 success。查不出原因（无凭据的 shell 读不到 job 日志，`/logs` 返回 403）<br>**要你做**（需要登录态，我这边没有 `gh`）：打开 <https://github.com/science-ken/IronHabit/actions/runs/35842899732> 下载 `ironhabit-release-apk`，把里面的 `app-release.apk` 拖到 <https://github.com/science-ken/IronHabit/releases/edit/v2.0.9>；或者直接 Re-run job | 5min，你的账号 |
 | ~~F2~~ | ~~8 个本地 commit 未推~~ **已推**：`d46dd97..82c983b` 8 个 + `27e9c42` 一条文档修正，`origin/main` 与本地 `0 0` 齐平（快进、无 force）。推之前 fetch 复核过区间里没有夹带并行会话的 commit | 你说了才推 —— 已说 |
 
 ---
