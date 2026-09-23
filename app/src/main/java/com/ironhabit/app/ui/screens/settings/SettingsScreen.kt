@@ -757,8 +757,13 @@ private fun InjuryNoteField(
     )
 }
 
-/** 浮点展示：整数去小数点尾巴（`20.0f → "20"`），小数原样（`22.5f → "22.5"`）。 */
-private fun Float.toDisplayNumber(): String =
+/**
+ * 浮点展示：整数去小数点尾巴（`20.0f → "20"`），小数原样（`22.5f → "22.5"`）。
+ *
+ * `internal` 而不是 `private`：「我的」页档案卡那一行「体脂 15%」念的是**同一个档案字段**，
+ * 用户在设置页看到 15、到首页看到 15.0 就是两处各写一份的漂移。
+ */
+internal fun Float.toDisplayNumber(): String =
     if (this % 1f == 0f) this.toLong().toString() else this.toString()
 
 /** 性别 → 文案资源。 */

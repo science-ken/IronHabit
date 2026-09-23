@@ -202,6 +202,26 @@
     <string name="entry_settings">设置</string>
     <string name="entry_backup">数据备份</string>
     <string name="entry_food_library">食物库</string>
+
+    <!-- 「我的」页 J 版首屏：档案卡（含完整度环）/ 关键数字四联 / 存哪儿 -->
+    <string name="label_profile_week_attendance">本周出勤</string>
+    <string name="label_profile_total_records">累计记录</string>
+    <!-- 环中央那一格只有 40dp，装不下 `label_progress_ratio` 的空格版「4 / 6」，
+         所以这里要一条无空格的；四联那一格用的是 `label_progress_ratio`，与今日页同格式。 -->
+    <string name="value_profile_fraction">%1$d/%2$d</string>
+    <string name="value_profile_fraction_unplanned">未排课</string>
+    <string name="value_profile_records_count">%1$d 条</string>
+    <!-- 档案第二行：各片段缺哪个就整段不出现（所以不合成一条长串）；
+         「每周 N 练」复用 AI 教练页那条 `ai_profile_weekly_days`，不另起同名文案。 -->
+    <string name="label_profile_body_fat_short">体脂 %1$s</string>
+    <string name="label_profile_equipment_count">器械 %1$d 件</string>
+    <!-- 完整度缺口：环只说"差几格"，这一行说"差的是哪几格"，两处必须出自同一份判据 -->
+    <string name="label_profile_gap_line">还差 %1$d 项：%2$s</string>
+    <string name="field_profile_equipment">器械</string>
+    <!-- 存哪儿：单人离线应用最该被一眼看到的事实，此前只在备份页里写着 -->
+    <string name="label_profile_storage_title">只存这台手机 · %1$s</string>
+    <string name="label_profile_storage_note">没有云同步；卸载即清零。导入会覆盖全部数据</string>
+    <string name="label_profile_settings_row">设置 · 提醒 · 单位</string>
     <string name="empty_charts">数据还不够，继续打卡就能看到趋势啦</string>
     <!-- 一条记录都没有时用这句，而不是把一个像判决的「0%」摆在新用户面前 -->
     <string name="label_no_data">还没有数据</string>

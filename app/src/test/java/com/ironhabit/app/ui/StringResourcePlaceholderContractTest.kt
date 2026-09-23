@@ -135,6 +135,13 @@ class StringResourcePlaceholderContractTest {
         entry("ai_chip_no_rpe", ArgKind.NUMERIC) // 复盘屏 chip：没记 RPE 的组数（下界）
         entry("ai_chip_no_rpe_q", ArgKind.NUMERIC) // 同上的完整提问
 
+        // 「我的」页 J 版首屏（档案卡 / 四联）
+        entry("value_profile_fraction", ArgKind.NUMERIC, ArgKind.NUMERIC) // ProfileCompletenessRing 环中央「4/6」
+        entry("value_profile_records_count", ArgKind.NUMERIC) // ProfileBlocks 四联「累计记录」格（totalCheckIns: Int）
+        entry("label_profile_gap_line", ArgKind.NUMERIC, ArgKind.STRING) // 档案卡缺口行（项数 + joinLabels 出来的中文）
+        entry("label_profile_body_fat_short", ArgKind.STRING) // 档案第二行：Float 在 Kotlin 里取好再塞 %s
+        entry("label_profile_equipment_count", ArgKind.NUMERIC) // 档案第二行：equipment.size: Int
+
         // ---------------- 【未使用】strings.xml 有占位符、代码暂无引用 ----------------
         entry("label_week_of", ArgKind.STRING)
         entry("title_week_plan_by_day", ArgKind.STRING)
@@ -153,6 +160,8 @@ class StringResourcePlaceholderContractTest {
         entry("label_rpe_short", ArgKind.NUMERIC)
         entry("ai_explain_injury_swap", ArgKind.STRING)
         entry("ai_explain_equipment", ArgKind.STRING)
+        // 「我的」页第 3 步的「存哪儿」块才会引用（%1$s = Room 版本 + 库文件大小的合成文本）
+        entry("label_profile_storage_title", ArgKind.STRING)
     }
 
     /** 通道 A：实参为 `String` 的动态 Snackbar 通道 → 只能 `%s`。 */

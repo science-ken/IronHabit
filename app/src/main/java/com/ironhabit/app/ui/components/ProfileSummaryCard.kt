@@ -24,20 +24,21 @@ import com.ironhabit.app.domain.model.Equipment
 import com.ironhabit.app.domain.model.Gender
 import com.ironhabit.app.domain.model.Goal
 import com.ironhabit.app.domain.model.InjuryArea
+import com.ironhabit.app.domain.model.ProfileField
 import com.ironhabit.app.domain.model.UserProfile
 import com.ironhabit.app.ui.theme.IronHabitSpacing
 
 /**
  * 身体档案概要卡（**只读**、**纯展示**）：标题 + `性别 · 年龄 · 身高 · 目标 · 伤病` 概要 + `›`。
  *
- * 供「我的」页与「AI 教练」页**共用同一份实现**（避免两处各写一遍导致显示口径漂移，
- * 上一轮「计划目标重量」就出过这种 bug）。
+ * 供「AI 教练」页使用。「我的」页的档案卡长得不一样（头像 + 完整度环），
+ * 但**概要那一行与它共用 [profileSummaryText]** —— 同一份档案在两页念出同一句话。
  *
  * 设计约束（**后续修改请遵守**）：
  * - **纯展示**：只读 [UserProfile] 派生文案 + 一个点击回调；
  * - **不得**内含任何页面专属逻辑（不得硬编码跳转目标、不得含 AI 页专属文案）——
  *   跳哪里由调用方通过 [onClick] 决定；
- * - 若某个页面需要额外信息（如器械 / 每周天数），一律**在卡片外面**另加区块，
+ * - 若某个页面需要额外信息（如器械 / 每周天数 / 完整度环），一律**在卡片外面**另加区块，
  *   **不许**往本组件塞参数分支。
  *
  * [equipmentLabelRes] / [injuryLabelRes] 也住在这个文件：档案词汇的中文说法只留一份，
@@ -54,17 +55,7 @@ fun ProfileSummaryCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val genderText = profile.gender?.let { stringResource(genderLabelRes(it)) }
-    val ageText = profile.age?.let { "${it}${stringResource(R.string.suffix_profile_age)}" }
-    val heightText = profile.heightCm?.let { "${it}${stringResource(R.string.suffix_profile_height)}" }
-    val goalText = stringResource(goalLabelRes(profile.goal))
-    // 伤病排在最后：它是「注意」而不是「我是谁」，且勾得越多这行越长，不该把目标挤到行尾
-    val injuryText: String? = joinLabels(
-        resIds = profile.injuryAreas.sortedBy { it.ordinal }.map { injuryLabelRes(it) },
-        separator = INJURY_SEPARATOR,
-    ).takeIf { it.isNotEmpty() }
-    val summary = listOfNotNull(genderText, ageText, heightText, goalText, injuryText)
-        .joinToString(SUMMARY_SEPARATOR)
+    val summary = profileSummaryText(profile)
 
     Card(
         modifier = modifier
@@ -101,6 +92,29 @@ fun ProfileSummaryCard(
             )
         }
     }
+}
+
+/**
+ * 档案概要一行：`性别 · 年龄 · 身高 · 目标 · 伤病`，没填的自动省略。
+ *
+ * 从 [ProfileSummaryCard] 里抽出来单独成一个函数，是因为「我的」页的档案卡要在它前面加头像、
+ * 后面加完整度环 —— 那是**页面专属的装饰**，按本文件立的规矩不许塞进卡片组件的参数分支。
+ * 但「同一份档案念出同一句话」这条不能破，所以两处共用这个函数
+ * （上一轮「计划目标重量」就是两份派生各写一遍漂出来的）。
+ */
+@Composable
+internal fun profileSummaryText(profile: UserProfile): String {
+    val genderText = profile.gender?.let { stringResource(genderLabelRes(it)) }
+    val ageText = profile.age?.let { "${it}${stringResource(R.string.suffix_profile_age)}" }
+    val heightText = profile.heightCm?.let { "${it}${stringResource(R.string.suffix_profile_height)}" }
+    val goalText = stringResource(goalLabelRes(profile.goal))
+    // 伤病排在最后：它是「注意」而不是「我是谁」，且勾得越多这行越长，不该把目标挤到行尾
+    val injuryText: String? = joinLabels(
+        resIds = profile.injuryAreas.sortedBy { it.ordinal }.map { injuryLabelRes(it) },
+        separator = INJURY_SEPARATOR,
+    ).takeIf { it.isNotEmpty() }
+    return listOfNotNull(genderText, ageText, heightText, goalText, injuryText)
+        .joinToString(SUMMARY_SEPARATOR)
 }
 
 /** 性别 → 文案资源。 */
@@ -148,8 +162,25 @@ internal fun equipmentLabelRes(equipment: Equipment): Int = when (equipment) {
     Equipment.TREADMILL -> R.string.equipment_treadmill
 }
 
+/**
+ * 完整度判据 → 中文（出现在「我的」页「还差哪几项」那一行）。
+ *
+ * 与 [equipmentLabelRes] / [injuryLabelRes] 同住：档案词汇的说法只留一份。
+ * 这里刻意用**短词**（「器械」而不是设置页那句「可用器械（可多选）」）——
+ * 缺口那一行要把最多六项挤进一行，括号里的说明是表单的事。
+ */
+@StringRes
+internal fun profileFieldLabelRes(field: ProfileField): Int = when (field) {
+    ProfileField.GENDER -> R.string.label_profile_gender
+    ProfileField.AGE -> R.string.label_profile_age
+    ProfileField.HEIGHT_CM -> R.string.label_profile_height
+    ProfileField.BODY_FAT_PCT -> R.string.label_profile_body_fat
+    ProfileField.GOAL_WEIGHT_KG -> R.string.label_profile_goal_weight
+    ProfileField.EQUIPMENT -> R.string.field_profile_equipment
+}
+
 /** 概要分隔符（纯符号，非中文文案）。 */
-private const val SUMMARY_SEPARATOR = " · "
+internal const val SUMMARY_SEPARATOR = " · "
 
 /**
  * 一串文案资源 id → 中文，用 [separator] 连接。
