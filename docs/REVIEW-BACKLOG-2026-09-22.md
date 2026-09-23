@@ -37,7 +37,7 @@
 | ~~A3~~ | ~~身体数据删除无确认~~ **已修 `dc95e5f`**：补确认框，正文念出「9/16 的「58.0 kg」会被删掉，无法恢复」。刻意不改软删——身体数据没有被引用问题，缺的只是那一次确认：`BodyMetricDao.kt:73` 物理 `DELETE`，按钮直接 `onClick = onDelete(id)`。与全应用"用户数据一律软删、覆盖前必确认"（食物停用 / 计划行停用 / meals softDelete / 导入前确认框）自相矛盾。真机实测：点一下记录就永久消失 | B 组 D17 | 40min |
 | ~~A4~~ | ~~**提醒时刻按"00:00 + 固定毫秒"算**~~ **已修（第 4 步 `2efb42e`）**：`ReminderSchedulerImpl.triggerAtMillis()` 改成 `LocalDateTime(日期, LocalTime(h, m)).toInstant(timeZone).toEpochMilliseconds()` —— 让时区自己换算偏移，不再隐含"一天恒等于 24 小时"。约束与原因写在该函数 KDoc（`ReminderSchedulerImpl.kt:181`）。抽成顶层函数是为了能单测。**你手机在 Asia/Shanghai（无夏令时），这条对你本来零影响**，属于正确性债 | 报告 P1-6 | ✅ |
 | ~~A5~~ | ~~备份导入的失败语义~~ **已修 `dc95e5f`**：`BackupRepositoryImpl.kt:178-183` 在 Room 事务**已提交之后**才写 DataStore 与重排闹钟，两步都在最外层 `runCatching` 里 → 它们抛异常时 UI 报「导入失败」，而 10 张表**已经被清空重写**，用户会再点一次 = 二次全量清表。今天我把导入路径完整跑通了，正好可以按报告建议改成"表替换成功即算成功，设置/闹钟降级为尽力而为并如实回报" | 报告 P1-1 | 40min（含真机往返验收，路径已通） |
-| A6 | **`imePadding` 与 `verticalScroll` 顺序**：`FoodLibrarySheet.kt:132-133` 是 `verticalScroll().imePadding()`，`CheckInSheet.kt:87` 反过来且注释写着"其他弹层均已修，唯独这里漏了" —— 同项目两种写法，必有一处是错的。**这条我要先在真机量一次再改**：今天下午我在食物库表单里开着键盘滚到底，「保存」是点得到的，所以报告说的"按钮够不到"至少在这台 1080×1920 上没复现 | 报告 P1-3 | 20min + 真机 |
+| ~~A6~~ | ~~**`imePadding` 与 `verticalScroll` 顺序**：同项目两种写法，必有一处是错的~~ **不改，两种写法是刻意等价的**（2026-09-22 真机量过，理由已写进代码注释，本行只是当时没划）。<br>⚠️ 本行原文有两处过期：① 它说 `CheckInSheet` 的注释写着"其他弹层均已修，唯独这里漏了" —— 现在那段注释写的是**反的**（"别再统一顺序把另一侧改坏"）；② 文件路径已迁过，现在是 `ui/screens/food/FoodLibrarySheet.kt:138-139` 与 `ui/screens/checkin/CheckInSheet.kt:91-92`，另外 `ui/screens/meals/MealEditSheet.kt:92-93` 是第三种同型写法。<br>口径：`imePadding().verticalScroll()` 把键盘高度算进**视口**（视口变矮，按钮不用滚）；`verticalScroll().imePadding()` 算进**滚动内容末尾**（视口不变，滚到底露出按钮）。两种都点得到「保存」。 | 报告 P1-3 | ✅ 已真机量，无需再动 |
 | ~~A7~~ | ~~**`remember` 放在 `if` 分支里**~~ **已修（第 4 步 `2efb42e`）**：`TodayBento.kt` 的 `BentoTile` 改成无条件 `remember { MutableInteractionSource() }`，"只在能点时响应"挪到取值处判；坑的形状写在注释里（`onClick` 在 null / 非 null 之间切换时，`remember` 槽位漂移会让按压态丢失或串格） | 报告 P1-4 | ✅ |
 | ~~A8~~ | ~~加餐的份数无校验 + 显式输入被隐式推断覆盖~~ **已修 `dc95e5f`**：`AddMealItemUseCase.kt:60` `serving ?: food.servings.firstOrNull()`（调用方明确传了 `grams` 时被丢掉，见勘误第 2 行 —— 当前不可达，但这是颗地雷）；`InputLimits.isValidServings` 零调用；加餐走份数时**不卡 2000g 上限**，改的时候却卡 → "能加不能改" | 报告 P0-3（降级后） | 30min |
 | ~~A9~~ | ~~习惯色板绕过主题系统~~ **已修（第 5 步）**：六个 hex 从 `AddEditHabitScreen.kt:376-383` 搬进 `Color.kt` 新增的「五、习惯主题色板」，默认色收敛成**全工程唯一字面量** `Habit.DEFAULT_COLOR_HEX`（色板首项 / `HabitEntity` 列默认 / `BackupPayload` / ViewModel 四处都指它，原来是四份各写一遍）。对比度那半条**报告说反了**：六个 hex 对浅底 `#FFFFFF` 是 3.12/2.78/2.16/4.35/6.30/3.67，对深底 `#111111` 是 6.04/6.79/8.76/4.34/2.99/5.14（顺序＝蓝/绿/橙/粉/紫/青）—— 深底上只有紫（2.99）差一点，浅底上橙（2.16）与绿（2.78）反而更差。hex 是**数据**（写库、随备份往返），不能为了对比度改色，所以治法是给圆点补一圈 `outline` 描边（深浅两套截图 `b5-swatches-light.png` / `b5-swatches-dark.png` 均已目测）。数字表在 `Color.kt`「五、习惯主题色板」 | 报告 P1-5 | 1h（含深浅两套目测） |
@@ -85,6 +85,8 @@
 | D2 | #1 的收尾那条「比计划多 N 组（计划外的动作）」说明行 —— 当初**刻意没做**（怕往刚改成可折叠的周卡里塞新行）。现在分母已修好，`12/10` 本身就是真话 | 30min，可做可不做 |
 | D3 | 食物库只有 **29 条**（`assets/foods.json` 实测 29 项）；foodwake 那 1643 条中文食物营养一直没接进来 —— 当初设计里就空着的那一格 | 数据活，不是代码活 |
 | D4 | `HANDOFF.md` 顶部数字过期 —— **这条已经复发三次**（写 `74279ac`/21 未推 → 实际 `03a040e`/3；改完后又变成"八个未推"→ 实际九个已推）。2026-09-23 已改成**不写具体数字**：顶部只写"以 `git rev-list --left-right --count origin/main...HEAD` 为准"，把会过期的量换成一个永远现算的口径 | 10min |
+| D5 | **习惯「目标值」没有任何上下界** —— 2026-09-23 写 `InputLimitsCallSiteContractTest` 时扫出来的，不是猜的：`AddEditHabitViewModel.kt:201` 只判 `toDoubleOrNull()` 能不能 parse，负数与 `1e18` 都能存进库并原样画到习惯行上（`HabitRow` 的 `4 · 2` 那一行）。**这是 2026-09-20 那条根因「约定靠自觉、一个调用点一个调用点漏」的又一处实例**，而且是唯一一处还没补上的。<br>**为什么没顺手修**：这个字段**没有单位** —— 同一个 `targetValue` 要装「4 杯」「30 分钟」「8 小时」「1000 步」，跨单位的合理上界是产品判断。编一个数进去比不修更糟（会把合法值锁死）。所以先挂进契约测试的 `exemptions` 并写明"欠账"，等用户给区间。<br>⚠️ 顺带：`target_unit` 是自由文本，用户填成数字时读起来会连成一个数（`4` + `2` → 现在靠中间加间隔点缓解，见 `HabitRow.kt`） | **要你定区间**，定完 20min |
+| D6 | ~~`CheckInSheet` 的校验改动本身一条测试都没有~~ **已补（2026-09-23）**：`CheckInFormValidityTest` 13 条。判据原来长在 composable 体内、JVM 单测碰不到，所以抽成顶层 `checkInFormValidity()`（与 A4 抽 `triggerAtMillis` 同一手法）。<br>**变异检查记录**（三个杀得掉、一个杀不掉）：去 `.trim()` → `surroundingWhitespaceStillParses` 红；`isBlank`→`isEmpty` → `blankAndWhitespaceOnlyWeight…` 红；绕过 `MAX_SETS` → `setsAboveBitmapWidth…` 红。<br>⚠️ **`isValidWeightKg` 换成裸的 `weight >= 0f && weight <= 500f` 杀不掉** —— 实测确认是**等价变异**（NaN 与 ±Infinity 在裸区间比较下同样落网，两者对每个 Float 判定都相同）。`isFinite` 真正起作用的地方是 `coerceWeightKg`，不在 isValid 这条路上。测试注释里那条"少了它就会漏 Infinity"的说法是我写的**错话，已改** | ✅ |
 
 ### E 组 · 这台模拟器测不到，得真机或你手点
 
@@ -115,7 +117,7 @@
 | 6 | ~~**C2 + C3**（streak 字号 + 状态提示条）~~ ✅ 已做完（本刀） | 两条都在今日页同一屏，改完一次截图过 |
 | 7 | ~~**C6–C12**（「我的」页重构）~~ ✅ 已做完（J 第 1~6 刀，按**方案 J** 不是附件的方案 H —— 差别见 `HANDOFF.md` 顶部） | 「身体数据」二级页（J3）也一并重排了 |
 | 8 | ~~**A10 + B1 补漏**~~ ✅ 已做完（第 21 刀） | 两条都不需要你拍板：A10 照你已批的食物库那套，B1 是上一刀的漏网之鱼 |
-| 9 | **D1–D4 + E1–E3 + F1–F2** | 尾巴与外部条件 |
+| 9 | **D1–D6 + E1–E3 + F1–F2** —— D1 ✅（勾选框挪行首）、D4 ✅、D6 ✅；**D5 卡在产品判断**（习惯目标值的区间得你定），D2 建议不做、D3 是数据活 | 尾巴与外部条件 |
 
 **统一验收口径**：每轮结束都跑 `dev.sh test`（`--rerun-tasks`）+ 装包 + `dev.sh crash`；动到界面的那几轮必须真机读，不接受"单测全绿"当结论。
 数据纪律照旧：跑 `.scratch/qa_db.py` 之前**必须先 `dev.sh sql` 拉库**（本轮就在这上面栽过一次，五次"收工一致"比的是同一份陈旧副本）。

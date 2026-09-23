@@ -59,20 +59,15 @@ fun CheckInSheet(
     var durationText by remember { mutableStateOf(item.plan.targetDurationMin?.toString().orEmpty()) }
     var notesText by remember { mutableStateOf(item.checkIn?.notes.orEmpty()) }
 
-    val sets: Int? = setsText.trim().toIntOrNull()
-    val reps: Int? = repsText.trim().toIntOrNull()
-    val weight: Float? = weightText.trim().takeIf { it.isNotEmpty() }?.toFloatOrNull()
-    val duration: Int? = durationText.trim().takeIf { it.isNotEmpty() }?.toIntOrNull()
-
     // 判据与「计划表单」(`AddEditPlanViewModel.onSave`) 用同一组 `InputLimits.isValid*`，
     // 连「空 = 未填」的口径也一致。此前这里只判"能不能 parse"+「> 0」，
     // 于是 99999 组、负重量、1e6 次都能一路写进库，把容量与趋势全部拉歪。
-    val setsValid: Boolean = sets != null && InputLimits.isValidSets(sets)
-    val repsValid: Boolean = reps != null && InputLimits.isValidReps(reps)
-    val weightValid: Boolean = weightText.isBlank() || (weight != null && InputLimits.isValidWeightKg(weight))
-    val durationValid: Boolean =
-        durationText.isBlank() || (duration != null && InputLimits.isValidDurationMin(duration))
-    val formValid: Boolean = setsValid && repsValid && weightValid && durationValid
+    val form: CheckInFormValidity = checkInFormValidity(setsText, repsText, weightText, durationText)
+    val setsValid: Boolean = form.setsValid
+    val repsValid: Boolean = form.repsValid
+    val weightValid: Boolean = form.weightValid
+    val durationValid: Boolean = form.durationValid
+    val formValid: Boolean = form.formValid
 
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
@@ -166,14 +161,14 @@ fun CheckInSheet(
                 }
                 Button(
                     onClick = {
-                        val validSets = sets
-                        val validReps = reps
+                        val validSets: Int? = form.sets
+                        val validReps: Int? = form.reps
                         if (formValid && validSets != null && validReps != null) {
                             onSubmit(
                                 validSets,
                                 validReps,
-                                weight,
-                                duration,
+                                form.weightKg,
+                                form.durationMinutes,
                                 notesText.trim().takeIf { it.isNotEmpty() },
                             )
                         }
@@ -186,4 +181,51 @@ fun CheckInSheet(
             }
         }
     }
+}
+
+/**
+ * 打卡表单四个输入格的解析结果与合法性。
+ *
+ * 抽成顶层纯函数**只为了能单测**：这段判据以前直接长在 composable 体内，于是"把打卡表单
+ * 也改成走 [InputLimits]"这件事本身一条测试都没有 —— 另外三个同类表单各有一份
+ * `*InputLimitsTest`，唯独这里连测试目录都没有。2026-09-20 那一轮收的正是"约定靠自觉、
+ * 一个一个调用点漏"这条根因，结果洞留在了它自己改的那个文件上。
+ */
+internal data class CheckInFormValidity(
+    val sets: Int?,
+    val reps: Int?,
+    val weightKg: Float?,
+    val durationMinutes: Int?,
+    val setsValid: Boolean,
+    val repsValid: Boolean,
+    val weightValid: Boolean,
+    val durationValid: Boolean,
+) {
+    val formValid: Boolean get() = setsValid && repsValid && weightValid && durationValid
+}
+
+/**
+ * 「空 = 未填」的口径与计划表单一致：负重、时长留空合法（存 `null`），
+ * 组数与次数是必填项，留空即非法（否则会把 `null` 当 0 组写进去）。
+ */
+internal fun checkInFormValidity(
+    setsText: String,
+    repsText: String,
+    weightText: String,
+    durationText: String,
+): CheckInFormValidity {
+    val sets: Int? = setsText.trim().toIntOrNull()
+    val reps: Int? = repsText.trim().toIntOrNull()
+    val weight: Float? = weightText.trim().takeIf { it.isNotEmpty() }?.toFloatOrNull()
+    val duration: Int? = durationText.trim().takeIf { it.isNotEmpty() }?.toIntOrNull()
+    return CheckInFormValidity(
+        sets = sets,
+        reps = reps,
+        weightKg = weight,
+        durationMinutes = duration,
+        setsValid = sets != null && InputLimits.isValidSets(sets),
+        repsValid = reps != null && InputLimits.isValidReps(reps),
+        weightValid = weightText.isBlank() || (weight != null && InputLimits.isValidWeightKg(weight)),
+        durationValid = durationText.isBlank() || (duration != null && InputLimits.isValidDurationMin(duration)),
+    )
 }
