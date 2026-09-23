@@ -54,7 +54,7 @@ import com.ironhabit.app.domain.model.ExerciseCategory
 import com.ironhabit.app.domain.model.ExerciseSource
 import com.ironhabit.app.ui.components.ExerciseSourceChip
 import com.ironhabit.app.ui.components.exerciseSourceLabelRes
-import com.ironhabit.app.ui.components.formatMonthDay
+import com.ironhabit.app.ui.formatMonthDay
 import com.ironhabit.app.ui.components.hasVisibleSourceChip
 import com.ironhabit.app.domain.model.SuggestionReason
 import com.ironhabit.app.domain.model.WeekPlan

@@ -46,7 +46,7 @@ import com.ironhabit.app.domain.util.DateUtils
 import com.ironhabit.app.ui.components.cellColor
 import com.ironhabit.app.ui.components.planGoalText
 import com.ironhabit.app.ui.components.weekdayShortLabel
-import com.ironhabit.app.ui.screens.ai.formatKg
+import com.ironhabit.app.ui.formatKg
 import com.ironhabit.app.ui.theme.IronHabitShapes
 import com.ironhabit.app.ui.theme.IronHabitSpacing
 import kotlin.math.roundToInt

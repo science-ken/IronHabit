@@ -21,8 +21,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.TrendPoint
+import com.ironhabit.app.ui.formatMonthDay
 import com.ironhabit.app.ui.theme.IronHabitSpacing
-import kotlinx.datetime.LocalDate
 
 /**
  * 近 N 天打卡趋势柱状图（**Compose 原生 `Canvas` 手绘，零第三方依赖**）。
@@ -118,16 +118,9 @@ private fun AxisLabel(epochDay: Long) {
 }
 
 /**
- * `epochDay` → 本地日期「M/D」（纯数字，避免硬编码中文本地化文案）。
- *
- * 全工程**只有这一份**：以前它在 `TrendChart` / `PlanDateStrip` / `BodyMetricsScreen` /
- * `ExerciseDetailScreen` / `HistoryScreen` / `TrainScreen` 六个文件里各有一份逐字相同的
- * 私有副本（改一处漏五处），J 第 5 刀收拢到此。
+ * `epochDay` → 本地日期「M/D」现在住在 `ui/Format.kt` —— 它被六个页面共用，
+ * 放在这张柱状图文件里没人找得到（本文件与 `PlanDateStrip` 都靠 import 用它）。
  */
-internal fun formatMonthDay(epochDay: Long): String {
-    val date = LocalDate.fromEpochDays(epochDay.toInt())
-    return "${date.monthNumber}/${date.dayOfMonth}"
-}
 
 private val CHART_HEIGHT = 160.dp
 private const val BASELINE_WIDTH = 2f

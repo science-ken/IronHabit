@@ -48,6 +48,7 @@ import com.ironhabit.app.domain.model.TrainingReview
 import com.ironhabit.app.domain.model.WeeklyReview
 import com.ironhabit.app.domain.usecase.CoachInsightResult
 import com.ironhabit.app.ui.components.LoadingSkeleton
+import com.ironhabit.app.ui.formatKg
 import com.ironhabit.app.ui.theme.IronHabitShapes
 import com.ironhabit.app.ui.theme.IronHabitSpacing
 import com.ironhabit.app.ui.theme.IronHabitTypeStyles

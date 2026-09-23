@@ -21,6 +21,7 @@ import androidx.compose.ui.text.style.TextAlign
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.WeekDayDetail
 import com.ironhabit.app.ui.components.planGoalText
+import com.ironhabit.app.ui.formatKg
 import com.ironhabit.app.ui.theme.IronHabitSpacing
 import kotlinx.datetime.LocalDate
 import com.ironhabit.app.domain.util.DateUtils

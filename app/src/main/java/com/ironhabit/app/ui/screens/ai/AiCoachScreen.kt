@@ -235,10 +235,8 @@ private fun ProfileFactsLine(profile: UserProfile) {
 
 private const val EQUIPMENT_SEPARATOR = " / "
 
-internal fun formatKg(kg: Float): String {
-    val rounded = kotlin.math.round(kg * 10) / 10f
-    return if (rounded % 1f == 0f) rounded.toInt().toString() else rounded.toString()
-}
+// `formatKg`（算出来的浮点：先四舍五入到 1 位再去 `.0` 尾）住在 `ui/Format.kt`，
+// 与设置页那条 `toDisplayNumber` 并排，两条为什么不能合并写在那边文件头。
 
 /**
  *

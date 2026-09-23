@@ -52,7 +52,7 @@ import com.ironhabit.app.domain.model.BodyMetricType
 import com.ironhabit.app.ui.components.EmptyState
 import com.ironhabit.app.ui.components.LoadingSkeleton
 import com.ironhabit.app.ui.components.LocalSnackbarHostState
-import com.ironhabit.app.ui.components.formatMonthDay
+import com.ironhabit.app.ui.formatMonthDay
 import com.ironhabit.app.ui.theme.IronHabitShapes
 import com.ironhabit.app.ui.theme.IronHabitSpacing
 

@@ -24,7 +24,7 @@ import com.ironhabit.app.domain.model.CheckIn
 import com.ironhabit.app.domain.model.ExerciseCategory
 import com.ironhabit.app.ui.components.EmptyState
 import com.ironhabit.app.ui.components.LoadingSkeleton
-import com.ironhabit.app.ui.components.formatMonthDay
+import com.ironhabit.app.ui.formatMonthDay
 import com.ironhabit.app.ui.theme.IronHabitSpacing
 
 /**

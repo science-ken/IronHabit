@@ -17,7 +17,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ironhabit.app.R
 import com.ironhabit.app.ui.components.EmptyState
-import com.ironhabit.app.ui.components.LoadingSkeleton
+import com.ironhabit.app.ui.components.SkeletonProfileHeader
+import com.ironhabit.app.ui.components.SkeletonStatStrip
 import com.ironhabit.app.ui.screens.food.FoodLibrarySheet
 import com.ironhabit.app.ui.theme.IronHabitSpacing
 
@@ -73,9 +74,9 @@ fun ProfileScreen(
                     onAction = viewModel::onRetry,
                 )
             } else {
-                // 两块骨架与真实结构同构：档案卡与四联各约 64dp 高，加载完成后不整屏跳动。
-                LoadingSkeleton()
-                LoadingSkeleton()
+                // 与真实结构同构：档案卡一块、四联一块，数据到位时不跳版式。
+                SkeletonProfileHeader()
+                SkeletonStatStrip()
             }
             // 读不到数据时也要能走开：存哪儿那块是静态的，不依赖这次的聚合。
             ProfileStorageCard(

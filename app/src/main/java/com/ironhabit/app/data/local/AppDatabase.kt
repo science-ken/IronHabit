@@ -24,6 +24,7 @@ import com.ironhabit.app.data.local.entity.HabitLogEntity
 import com.ironhabit.app.data.local.entity.MealEntity
 import com.ironhabit.app.data.local.entity.MealItemEntity
 import com.ironhabit.app.data.local.entity.WeekPlanEntity
+import com.ironhabit.app.domain.model.DatabaseInfo
 
 /**
  * IronHabit 本地数据库声明（Room）。
@@ -55,7 +56,7 @@ import com.ironhabit.app.data.local.entity.WeekPlanEntity
         FoodServingEntity::class,
         MealItemEntity::class,
     ],
-    version = AppDatabase.VERSION,
+    version = DatabaseInfo.SCHEMA_VERSION,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -85,7 +86,7 @@ abstract class AppDatabase : RoomDatabase() {
         /** 数据库文件名。 */
         const val DATABASE_NAME: String = "ironhabit.db"
 
-        /** 当前 schema 版本。 */
-        const val VERSION: Int = 9
+        // schema 版本住在 `domain/model/DatabaseInfo.SCHEMA_VERSION`：
+        // 「我的」页要把这个数显示给用户，而 UI 不该直接看见 Room 的数据库类。
     }
 }

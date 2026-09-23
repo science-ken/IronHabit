@@ -37,20 +37,20 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.ironhabit.app.R
-import com.ironhabit.app.data.local.AppDatabase
 import com.ironhabit.app.domain.model.BodyMetric
+import com.ironhabit.app.domain.model.DatabaseInfo
 import com.ironhabit.app.domain.model.ProfileField
 import com.ironhabit.app.domain.model.ProfileLedger
 import com.ironhabit.app.domain.model.UserProfile
-import com.ironhabit.app.ui.components.SUMMARY_SEPARATOR
 import com.ironhabit.app.ui.components.ProfileCompletenessRing
-import com.ironhabit.app.ui.components.formatMonthDay
+import com.ironhabit.app.ui.components.SUMMARY_SEPARATOR
 import com.ironhabit.app.ui.components.joinLabels
 import com.ironhabit.app.ui.components.profileFieldLabelRes
 import com.ironhabit.app.ui.components.profileSummaryText
-import com.ironhabit.app.ui.screens.settings.toDisplayNumber
+import com.ironhabit.app.ui.formatMonthDay
 import com.ironhabit.app.ui.theme.IronHabitShapes
 import com.ironhabit.app.ui.theme.IronHabitSpacing
+import com.ironhabit.app.ui.toDisplayNumber
 
 /**
  * 「我的」页首屏（方案 J）的两块读数区：档案卡与关键数字四联。
@@ -401,7 +401,7 @@ internal fun ProfileLedgerCard(
  *
  * 库文件多大（字节数）没放进来：它要在 ViewModel 里注入 Context 读文件系统，
  * 而这一屏要的是"数据只在这台机器上"这件事，不是那个数。
- * schema 版本用 `AppDatabase.VERSION` 而不是写死，否则下一次迁移之后这里就开始说谎。
+ * schema 版本用 `DatabaseInfo.SCHEMA_VERSION` 而不是写死，否则下一次迁移之后这里就开始说谎。
  */
 @Composable
 internal fun ProfileStorageCard(
@@ -412,7 +412,7 @@ internal fun ProfileStorageCard(
 ) {
     val colorScheme = MaterialTheme.colorScheme
     // 两句各自落成一行：占位符契约测试是按行数实参的，嵌套调用 + 跨行会被它读成零参格式化。
-    val schemaVersion: String = stringResource(R.string.label_schema_version, AppDatabase.VERSION)
+    val schemaVersion: String = stringResource(R.string.label_schema_version, DatabaseInfo.SCHEMA_VERSION)
     val storageTitle: String = stringResource(R.string.label_profile_storage_title, schemaVersion)
 
     Column(

@@ -70,6 +70,7 @@ import com.ironhabit.app.domain.model.ThemeMode
 import com.ironhabit.app.ui.components.EmptyState
 import com.ironhabit.app.ui.components.LoadingSkeleton
 import com.ironhabit.app.ui.components.LocalSnackbarHostState
+import com.ironhabit.app.ui.toDisplayNumber
 import com.ironhabit.app.ui.components.equipmentLabelRes
 import com.ironhabit.app.ui.components.injuryLabelRes
 import com.ironhabit.app.ui.theme.IronHabitSpacing
@@ -757,14 +758,8 @@ private fun InjuryNoteField(
     )
 }
 
-/**
- * 浮点展示：整数去小数点尾巴（`20.0f → "20"`），小数原样（`22.5f → "22.5"`）。
- *
- * `internal` 而不是 `private`：「我的」页档案卡那一行「体脂 15%」念的是**同一个档案字段**，
- * 用户在设置页看到 15、到首页看到 15.0 就是两处各写一份的漂移。
- */
-internal fun Float.toDisplayNumber(): String =
-    if (this % 1f == 0f) this.toLong().toString() else this.toString()
+// 浮点展示 `toDisplayNumber` 住在 `ui/Format.kt`，与 AI 页那条 `formatKg` 并排 ——
+// 两条规则为什么不能合并，写在那边的文件头。
 
 /** 性别 → 文案资源。 */
 @StringRes
