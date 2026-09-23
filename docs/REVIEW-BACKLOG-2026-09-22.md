@@ -117,7 +117,7 @@
 | # | 事项 | 备注 |
 |---|---|---|
 | F1 | ~~2.0.9 这条线**从没打过 tag**~~ **已打**：`v2.0.9` → `8529d3f`，CI 全绿（run 35842899732，13 步全 success，含 `Verify APK is signed`）。⚠️ 换 release 包签名不同只能卸载重装，**会清库** —— 打 tag 前已把整库（含 WAL）留了本地副本 `.scratch/backup-20260923-pre-release/`（`.scratch/` 不进 git） | 你说了才打 —— 已打 |
-| F3 | **`v2.0.9` 这个 Release 上 0 个资产**，而 v2.0.6/2.0.7/2.0.8 都挂着 `app-release.apk`。不是构建失败：APK 确实产出并验过签名，作为 **run artifact** 存在（`ironhabit-release-apk`，2,020,328 字节，09:31:11 生成），`Create GitHub Release` 那一步也在它之后 success。查不出原因（无凭据的 shell 读不到 job 日志，`/logs` 返回 403）<br>**要你做**（需要登录态，我这边没有 `gh`）：打开 <https://github.com/science-ken/IronHabit/actions/runs/35842899732> 下载 `ironhabit-release-apk`，把里面的 `app-release.apk` 拖到 <https://github.com/science-ken/IronHabit/releases/edit/v2.0.9>；或者直接 Re-run job | 5min，你的账号 |
+| F3 | ~~`v2.0.9` 这个 Release 上 0 个资产~~ **已被 `v2.0.10` 取代，不用补了**：v2.0.10 的 Release 正常挂着 `app-release.apk`（2,491,270 字节），下载回来 `aapt2 dump badging` 读到 **versionCode 21 / versionName 2.0.10**，`apksigner verify` 读到证书 `CN=IronHabit`（SHA-256 `9fb90b51…`）。<br>⚠️ **换包必清库这件事这次是量出来的，不是文档里的老话**：真机上装的 debug 包证书是 `CN=Android Debug`（SHA-256 `a97482f2…`）—— 两个签名者不同 → release 包覆盖安装必失败 → 只能卸载重装 → 库没了。发布前留的整库副本在 `.scratch/backup-20260923-pre-release/`（含 WAL，`.scratch/` 不进 git）<br>v2.0.9 为什么没挂上资产仍然没查出来（无凭据读不到 job 日志，`/logs` 403）；`v2.0.9` 那个 Release 现在空着，要不要删掉或补注一句由你定 | ✅（v2.0.9 空 Release 挂着） |
 | ~~F2~~ | ~~8 个本地 commit 未推~~ **已推**：`d46dd97..82c983b` 8 个 + `27e9c42` 一条文档修正，`origin/main` 与本地 `0 0` 齐平（快进、无 force）。推之前 fetch 复核过区间里没有夹带并行会话的 commit | 你说了才推 —— 已说 |
 
 ---

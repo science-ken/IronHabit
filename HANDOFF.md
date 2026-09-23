@@ -5,10 +5,17 @@
 
 ---
 
-## ✅ 最新快照（2026-09-23 下午 · 「每周相同」拆成两个动作 · 全部本地 commit）
+## ✅ 最新快照（2026-09-23 傍晚 · 「每周相同」拆成两个动作 + 食物库 127 条两列排 · **已发到 21 / 2.0.10**）
 
-> 现值自己跑：`git rev-list --left-right --count origin/main...HEAD`（右=未推）。**这一轮之后仍未推**，
-> 说"推"才推；打 tag 要单独授权（见 §8）。
+**发布现状**：tag `v2.0.10` → `ba67136`，Release 上挂着 `app-release.apk`（2,491,270 字节）。
+把那个包下载回来读过的，不是看 CI 绿灯：`aapt2 dump badging` = **versionCode 21 / versionName 2.0.10**，
+`apksigner verify` = 证书 `CN=IronHabit`（`9fb90b51…`）。真机上现在跑的是 debug 包，证书 `CN=Android Debug`
+（`a97482f2…`）—— **两个签名者不同，所以 release 包覆盖装不上，只能卸载重装，库会没**。
+发布前留的整库副本（含 WAL）在 `.scratch/backup-20260923-pre-release/`。`v2.0.9` 那个 tag 的 Release 空着，已被取代。
+
+> 现值自己跑：`git rev-list --left-right --count origin/main...HEAD`（右=未推）、
+> `git log --oneline origin/main..HEAD`。**这一批已推、tag 已打**（用户 2026-09-23 说了"推""一起发"）；
+> 以后仍照规矩：说"推"才推，打 tag 单独授权（见 §8）。
 
 用户拍板：训练卡弹层底部那个「每周相同」开关**改成只对下周生效**。做完才发现要害不在开关：
 
