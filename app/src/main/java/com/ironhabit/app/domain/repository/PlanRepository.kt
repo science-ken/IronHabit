@@ -54,18 +54,11 @@ interface PlanRepository {
     suspend fun getRepeatRows(): List<WeekPlan>
 
     /**
-     * 勾选 / 取消「每周相同」（把某一周的计划变成"以后每周都用这份"/取消它）。
-     *
-     * @return 复制 / 停用的行数（`0` = 该周本来没有自己的计划，勾选无意义）
-     */
-    suspend fun setRepeatWeekly(weekStartEpochDay: Long, enabled: Boolean): Int
-
-    /**
      * 把 [sourceWeekStartEpochDay] 那一周的**启用行**复制成 [targetWeekStartEpochDay] 那一周专属行
      * —— 一次性的"这周的安排也排给下周"，**不碰「每周相同」模板**，所以以后各周不会跟着变。
      *
-     * 与 [setRepeatWeekly] 的区别是要害：`week_plans` 的生效规则（`WeekPlanWeekResolver`）是
-     * "该周该天没有专属行 → 回落模板"，所以**写进模板 = 无限期往后重复**，写进某一周 = 只影响那一周。
+     * 要害在生效规则（`WeekPlanWeekResolver`）："该周该天没有专属行 → 回落模板"，
+     * 所以**写进模板 = 无限期往后重复**，写进某一周 = 只影响那一周。
      *
      * ⚠️ 合并规则走 [com.ironhabit.app.data.repository.RepeatWeeklyRules]：目标周槽位上
      * 用户手改过的行，复制后**仍然**带 `is_user_edited = 1`（清掉就等于给 AI 开了覆盖的口子，D14）。
@@ -81,6 +74,9 @@ interface PlanRepository {
      *
      * 这是"以后每周都自动同一份"这个行为**唯一**的出口：只要模板还有启用行，
      * 任何没排专属行的周都会回落到它，与某一次复制无关。
+     *
+     * 命名口径：界面上这一份现在叫**「以后每周都用这份」**（旧称「每周相同」），
+     * 代码与注释仍沿用「每周相同 / 模板」指 `weekStartEpochDay = 0` 那批行。
      */
     suspend fun deactivateRepeatPlan(): Int
 

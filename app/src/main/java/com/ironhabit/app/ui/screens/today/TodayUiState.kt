@@ -85,13 +85,30 @@ data class TodayUiState(
     /** 「已算出一份预览」的一次性信号：界面据此跳到预览页，消费后立即置回 `false`。 */
     val previewRequested: Boolean = false,
     /**
-     * 「每周相同」是否已开启（= 存在那份"以后每周都用这份"的计划）。
+     * 「以后每周都用这份」那份模板里的**启用**行数。
      *
-     * 语义：没有单独排计划的周，都会显示这一份。
+     * `0` = 没有模板在生效 → 界面那一行整行不显示（不画一个"停用"按钮去解释一件没发生的事）。
+     * 它不是开关状态：模板是"哪些周会回落它"的结果，与本周复制过什么无关。
      */
-    val isRepeatWeeklyOn: Boolean = false,
-    /** 正在切换「每周相同」（开关禁用，避免连点）。 */
-    val isTogglingRepeatWeekly: Boolean = false,
+    val repeatPlanRowCount: Int = 0,
+    /**
+     * 「复制到下周」的确认待决态（`null` = 没有待确认）。
+     *
+     * 只在**下周已经有自己的行**时出现：复制是并集 + 同槽位覆盖内容，
+     * 而本应用的规矩是"覆盖用户数据前必确认"（与身体数据删除、导入确认框同源）。
+     * 值 = 下周现有的启用行数，念进确认框正文。
+     */
+    val copyToNextWeekConfirm: Int? = null,
+    /** 正在复制或停用（按钮禁用，避免连点写两遍）。 */
+    val isRepeatActionBusy: Boolean = false,
+    /**
+     * 「复制到下周 / 停用」的回执，画在**弹层内部**。
+     *
+     * ⚠️ 不走全局 Snackbar：本应用的 §7 坑 3 —— `ModalBottomSheet` 会把 Snackbar 整个盖住，
+     * 用户点了按钮什么也看不见（本轮真机复现：写库成功、界面零反馈）。
+     */
+    val repeatNoteRes: Int? = null,
+    val repeatNoteArgs: List<String> = emptyList(),
     val todayEpochDay: Long = 0L,
     /**
      * 所选日**所在周**的复盘（喂给「本周」与「体重变化」两块磁贴）。

@@ -49,6 +49,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.drop
@@ -125,9 +126,9 @@ class TodayViewModel @Inject constructor(
         }
     }
 
-    /** 「每周相同」那份计划是否存在（存在 = 已开启）。 */
-    private val repeatWeeklyFlow: Flow<Boolean> =
-        planRepository.observeRepeatPlan().map { plans -> plans.isNotEmpty() }
+    /** 「以后每周都用这份」那份模板里的启用行数（`0` = 界面上那一行不显示）。 */
+    private val repeatPlanCountFlow: Flow<Int> =
+        planRepository.observeRepeatPlan().map { plans -> plans.size }
 
     /** 数据流（Room 触发 → 聚合视图 → UiState），按 `stateIn` 转为冷启动的 StateFlow；支持手动重试。 */
     private val overviewState: StateFlow<TodayUiState> =
@@ -141,8 +142,8 @@ class TodayViewModel @Inject constructor(
                         combine(
                             getTodayOverview(day),
                             getTodayMeals(day),
-                            repeatWeeklyFlow,
-                        ) { overview, meals, repeatOn ->
+                            repeatPlanCountFlow,
+                        ) { overview, meals, repeatPlanCount ->
                             // 周复盘挂在同一次触发里取：写库之后整屏（含本周磁贴）一起刷新。
                             // 取整周用 BuildWeeklyReviewUseCase 自己的规则，避免和 AI 教练页口径分叉。
                             val review: WeeklyReview? = weeklyReviewOrNull(
@@ -157,7 +158,7 @@ class TodayViewModel @Inject constructor(
                                 mealItems = meals.items,
                                 mealIntake = meals.intake,
                                 dietTarget = meals.target,
-                                isRepeatWeeklyOn = repeatOn,
+                                repeatPlanRowCount = repeatPlanCount,
                                 weeklyReview = review,
                                 weekHeatmap = heat,
                             )
@@ -568,38 +569,117 @@ class TodayViewModel @Inject constructor(
         _uiState.update { state -> state.copy(previewRequested = false) }
     }
 
+    /** 游标所在周的周一（不是"今天"那周 —— 日期游标可以拨到别的周）。 */
+    private fun cursorWeekStart(): Long = DateUtils.weekStartMon1(selectedEpochDay.value)
+
+    /** 游标那一周的**下一周**周一 = 「复制到下周」的落点。 */
+    private fun cursorNextWeekStart(): Long = cursorWeekStart() + DateUtils.DAYS_IN_WEEK
+
     /**
-     * 切换「每周相同」。
+     * 「复制到下周」：把**这一周**的启用行复制成下周的专属行。
      *
-     * - **打开**：把**这一周**的计划复制成"以后每周都用这份"（该周没有自己的计划时是空操作）；
-     * - **关闭**：把那份额外的计划整体软停用 —— 之后没有单独排计划的周就是空的。
-     *
-     * 沿用 `PlanRepository.setRepeatWeekly`（只 upsert / 只软停用，**没有 DELETE**）。
+     * 与旧「每周相同」的分别是要害：写进下周 = 只有下周变；写进模板 = 以后每个没单独排课的周都变。
+     * 下周已经有自己的行时**先要一次确认**（复制是并集 + 同槽位换内容，
+     * 而本应用对"覆盖用户数据"一贯先确认 —— 与身体数据删除、导入确认框同源）。
      */
-    fun onToggleRepeatWeekly(enabled: Boolean) {
-        if (_uiState.value.isTogglingRepeatWeekly) return
-        val targetWeek: Long = DateUtils.weekStartMon1(selectedEpochDay.value)
+    fun onCopyToNextWeek() {
+        val state = _uiState.value
+        if (state.isRepeatActionBusy || state.copyToNextWeekConfirm != null) return
+        val nextWeek: Long = cursorNextWeekStart()
 
         viewModelScope.launch {
-            _uiState.update { state -> state.copy(isTogglingRepeatWeekly = true) }
             try {
-                planRepository.setRepeatWeekly(weekStartEpochDay = targetWeek, enabled = enabled)
-                _uiState.update { state ->
-                    state.copy(
-                        isTogglingRepeatWeekly = false,
-                        snackbarRes = if (enabled) {
-                            R.string.msg_repeat_weekly_on
-                        } else {
-                            R.string.msg_repeat_weekly_off
-                        },
-                        snackbarArgs = emptyList(),
-                    )
+                val nextWeekRows: Int = planRepository.getRowsForWeek(nextWeek).count { plan -> plan.isActive }
+                if (nextWeekRows > 0) {
+                    _uiState.update { it.copy(copyToNextWeekConfirm = nextWeekRows) }
+                } else {
+                    copyWeekIntoNextWeek()
                 }
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (throwable: Throwable) {
+                _uiState.update { it.copy(errorRes = R.string.error_generic) }
+            }
+        }
+    }
+
+    /** 确认框里点了「复制」。 */
+    fun onCopyToNextWeekConfirmed() {
+        if (_uiState.value.copyToNextWeekConfirm == null) return
+        viewModelScope.launch { copyWeekIntoNextWeek() }
+    }
+
+    /** 确认框被划掉 / 点了取消：什么都不写。 */
+    fun onCopyToNextWeekCancelled() {
+        _uiState.update { state -> state.copy(copyToNextWeekConfirm = null) }
+    }
+
+    private suspend fun copyWeekIntoNextWeek() {
+        val sourceWeek: Long = cursorWeekStart()
+        _uiState.update { state ->
+            state.copy(isRepeatActionBusy = true, copyToNextWeekConfirm = null)
+        }
+        try {
+            val copied: Int = planRepository.copyWeekInto(
+                sourceWeekStartEpochDay = sourceWeek,
+                targetWeekStartEpochDay = sourceWeek + DateUtils.DAYS_IN_WEEK,
+            )
+            _uiState.update { state -> state.copy(isRepeatActionBusy = false) }
+            showRepeatNote(
+                if (copied == 0) R.string.msg_copy_next_week_empty else R.string.msg_copy_next_week_done,
+                copied,
+            )
+        } catch (cancellation: CancellationException) {
+            _uiState.update { state -> state.copy(isRepeatActionBusy = false) }
+            throw cancellation
+        } catch (throwable: Throwable) {
+            _uiState.update { state ->
+                state.copy(isRepeatActionBusy = false, errorRes = R.string.error_generic)
+            }
+        }
+    }
+
+    /**
+     * 在**弹层内部**挂一句回执，[REPEAT_NOTE_MS] 后自己消失。
+     *
+     * 为什么不用现成的 Snackbar 通道：`ModalBottomSheet` 会把全局 Snackbar 整个盖住
+     * （本仓库 §7 坑 3），真机复现过一次"写库成功、界面零反馈"。
+     * 计时放在这里而不是界面的 `LaunchedEffect` 里，是为了不把 effect 放进
+     * `if (sheet 开着)` 这种条件分支 —— 那是 B5/A7 那条"effect 进分支会互相打断"的坑。
+     */
+    private suspend fun showRepeatNote(res: Int, count: Int) {
+        _uiState.update { state ->
+            state.copy(repeatNoteRes = res, repeatNoteArgs = listOf(count.toString()))
+        }
+        delay(REPEAT_NOTE_MS)
+        _uiState.update { state ->
+            if (state.repeatNoteRes == res) {
+                state.copy(repeatNoteRes = null, repeatNoteArgs = emptyList())
+            } else {
+                state
+            }
+        }
+    }
+
+    /**
+     * 停用「以后每周都用这份」那份模板（整体软停用，**不 DELETE**，再勾「每周都加」就回来）。
+     *
+     * 这是"以后每周自动同一份"这个行为唯一的出口 —— 只要模板还有启用行，
+     * 任何没排专属行的周都会回落到它，与某一次复制无关。
+     */
+    fun onDisableRepeatPlan() {
+        if (_uiState.value.isRepeatActionBusy) return
+        viewModelScope.launch {
+            _uiState.update { state -> state.copy(isRepeatActionBusy = true) }
+            try {
+                val stopped: Int = planRepository.deactivateRepeatPlan()
+                _uiState.update { state -> state.copy(isRepeatActionBusy = false) }
+                showRepeatNote(R.string.msg_repeat_plan_stopped, stopped)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (throwable: Throwable) {
                 _uiState.update { state ->
-                    state.copy(isTogglingRepeatWeekly = false, errorRes = R.string.error_generic)
+                    state.copy(isRepeatActionBusy = false, errorRes = R.string.error_generic)
                 }
             }
         }
@@ -693,9 +773,9 @@ class TodayViewModel @Inject constructor(
                 selectedWeekStartEpochDay = DateUtils.weekStartMon1(data.dateEpochDay),
                 hasPlanThisWeek = data.plannedWeekdays.isNotEmpty(),
                 // ⚠️ 这个字段必须一起搬过来：`overviewState` 里算好的值如果不落到 `_uiState`，
-                // 「每周相同」开关就会永远显示"关"（真机上就是这么踩到的：点了、库里也写了，
+                // 「以后每周都用这份」那一行就永远不出现（以前是开关永远显示"关"：点了、库里也写了，
                 // 但开关弹回去，看着像"点了没反应"）。
-                isRepeatWeeklyOn = data.isRepeatWeeklyOn,
+                repeatPlanRowCount = data.repeatPlanRowCount,
                 // 同一个坑的第二处：本函数逐字段搬运，漏一个字段那格就永远是初始值。
                 // 漏掉它时「本周」磁贴在任何一周都不出现（真机实测踩到）。
                 weeklyReview = data.weeklyReview,
@@ -715,6 +795,9 @@ class TodayViewModel @Inject constructor(
     private companion object {
         /** 触发器口径：取全历史活跃日（自 1970-01-01 起）。 */
         const val TRIGGER_SINCE_EPOCH_DAY: Long = 0L
+
+        /** 「复制到下周 / 停用」那句回执在弹层里停留多久。 */
+        const val REPEAT_NOTE_MS: Long = 4_000L
 
         /** 无订阅者后保留缓存 5 秒，避免旋转/切页立即重查。 */
         const val STOP_TIMEOUT_MS: Long = 5_000L

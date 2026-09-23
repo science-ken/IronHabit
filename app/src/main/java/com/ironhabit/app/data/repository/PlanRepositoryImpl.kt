@@ -73,28 +73,6 @@ class PlanRepositoryImpl @Inject constructor(
     override suspend fun getRepeatRows(): List<WeekPlan> =
         weekPlanDao.getRepeatRows().map(PlanMapper::toDomain)
 
-    /**
-     * 勾选 / 取消「每周相同」。
-     *
-     * - **勾上**：把这一周的**启用行**复制成"每周相同"那份（`week_start_epoch_day = 0`）。
-     *   逐个走 `upsertExplicit` —— 这样即使这个槽位上还躺着一条**早先取消时软删掉的行**，
-     *   也会被"复活 + 更新"，而不是撞唯一索引（`REPLACE` 是红线，不能用）。
-     *   复制时两个标记**只增不清**，规则见 [RepeatWeeklyRules]。
-     * - **取消**：把"每周相同"那份整体**软停用**（`is_active = 0`，不 DELETE），
-     *   于是没有自己计划的周就变成空的（界面显示「创建训练计划」）。
-     *
-     * @return 复制/停用的行数（`0` = 该周本来就没有自己的计划，勾选无意义）
-     */
-    override suspend fun setRepeatWeekly(weekStartEpochDay: Long, enabled: Boolean): Int =
-        if (enabled) {
-            copyWeekInto(
-                sourceWeekStartEpochDay = weekStartEpochDay,
-                targetWeekStartEpochDay = WeekPlan.TEMPLATE_WEEK_START,
-            )
-        } else {
-            deactivateRepeatPlan()
-        }
-
     override suspend fun copyWeekInto(
         sourceWeekStartEpochDay: Long,
         targetWeekStartEpochDay: Long,

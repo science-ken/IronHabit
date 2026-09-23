@@ -39,7 +39,7 @@ import org.junit.Test
  *
  * `merge(local, data)` 是**逐字段**把 local 的界面态搬进 data 的，漏一个字段
  * 就会在每次 Room 重 emit 时被静默打回默认值 —— 这个坑在本仓库已经咬过三次
- * （`weeklyReview`、`isRepeatWeeklyOn`、本周热力）。补充动作这五个字段
+ * （`weeklyReview`、`isRepeatWeeklyOn`（现 `repeatPlanRowCount`）、本周热力）。补充动作这五个字段
  * 恰好全是"一次性 suspend 拉的、不在聚合流里"，是最容易被漏的一类。
  *
  * 断言用的值都是**故意选得和默认值不一样**的：来源用 `REMOTE_LLM`（默认 `LOCAL_RULES`）、

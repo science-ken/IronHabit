@@ -62,6 +62,8 @@ class StringResourcePlaceholderContractTest {
         entry("msg_diet_filtered", ArgKind.STRING) // Today/AiCoach Snackbar + AiCoachScreen:639（toString()，历史崩溃主角）
         entry("msg_reminder_set", ArgKind.STRING) // SettingsViewModel:66（formatTime(...)）
         entry("msg_plan_created", ArgKind.STRING) // TodayViewModel:354-357（writtenCount.toString()）
+        entry("msg_copy_next_week_done", ArgKind.STRING) // TodayViewModel「复制到下周」（copied.toString()）
+        entry("msg_repeat_plan_stopped", ArgKind.STRING) // TodayViewModel 停用模板（stopped.toString()）
 
         // ---------------- 【通道 B】Int 实参（PlanBasisItem.args） ----------------
         entry("basis_overload", ArgKind.NUMERIC) // LocalRuleAdvisor（overloadCount: Int）
@@ -81,6 +83,8 @@ class StringResourcePlaceholderContractTest {
         entry("label_streak_days", ArgKind.NUMERIC) // HabitRow 勾选行小字 / TodayBento（streak.current）
         entry("dialog_delete_habit_message", ArgKind.STRING) // DisciplineScreen 删除确认框（habit.name）
         entry("dialog_delete_body_metric_message", ArgKind.STRING, ArgKind.STRING) // BodyMetricsScreen 删除确认框（日期 · 值+单位）
+        entry("dialog_copy_next_week_message", ArgKind.STRING) // TodayScreen 复制到下周确认框（rowCount.toString()）
+        entry("hint_repeat_plan", ArgKind.STRING) // TodayScreen 模板出口行（repeatPlanRowCount.toString()）
         entry("label_streak_best", ArgKind.NUMERIC) // TodayBento（streak.best）
         entry("label_streak_days_value", ArgKind.NUMERIC) // TodayBento hero 磁贴（streak.current，displaySmall 那一行）
         entry("label_progress_ratio", ArgKind.NUMERIC, ArgKind.NUMERIC) // TodayBento（今日完成、习惯 n/m）

@@ -175,7 +175,8 @@ class TodayViewModelDateCursorTest {
 
     /**
      * 回归：`applyData` 逐字段搬运，漏掉 `weeklyReview` 时「本周」磁贴在**任何一周都不出现**
-     * （真机实测踩到，与 `isRepeatWeeklyOn` 是同一类坑 —— 数据流算好了却没落到 `_uiState`）。
+     * （真机实测踩到，与当年的 `isRepeatWeeklyOn`（现 `repeatPlanRowCount`）是同一类坑 ——
+     *  数据流算好了却没落到 `_uiState`）。
      */
     @Test
     fun weeklyReviewReachesUiState() = runTest(mainDispatcherRule.testDispatcher) {

@@ -68,10 +68,9 @@
     <string name="msg_plan_created">已为这一周排好 %1$s 条计划</string>
     <string name="msg_plan_creating">正在生成这一周的计划…</string>
     <string name="label_week_of">%1$s 那一周</string>
-    <string name="hint_plan_week_scope">只对这一周生效；想每周都用同一份，可在计划里勾「每周相同」</string>
     <!-- 「你在改哪一周」：新增/编辑表单与训练页顶部的归属提示 -->
     <string name="scope_plan_this_week">你正在改：这一周（%1$s）</string>
-    <string name="scope_plan_template">你正在改：「每周相同」那份 —— 所有没单独排计划的周都会跟着变</string>
+    <string name="scope_plan_template">你正在改：「以后每周都用这份」那一份 —— 所有没单独排计划的周都会跟着变</string>
     <string name="label_week_this">本周 %1$s</string>
     <!-- ===== 计划预览（生成 → 逐天采纳 → 不写库）===== -->
     <string name="title_plan_preview">本周计划预览 · %1$s</string>
@@ -88,7 +87,7 @@
     <!-- 采纳过之后再点这个按钮不是"撤销"，已写的行留在库里 —— 文案必须说清它其实是收工。 -->
     <string name="plan_preview_done">完成，保留已采纳的</string>
     <string name="plan_preview_rest_day">休息日 · 不排动作</string>
-    <string name="plan_preview_template_day">这天由「每周相同」那份负责，本次不动它</string>
+    <string name="plan_preview_template_day">这天由「以后每周都用这份」那一份负责，本次不动它</string>
     <string name="msg_plan_nothing_adoptable">这次没有可采纳的新内容（现有安排都被保留）</string>
     <string name="msg_plan_adopted_count">已写入 %1$s 条计划</string>
     <string name="plan_preview_empty">没有待采纳的草案了</string>
@@ -96,10 +95,17 @@
     <string name="plan_preview_source_ai">AI 生成</string>
     <string name="plan_preview_footer">已采纳 %1$d / %2$d 天 · 共 %3$d 条</string>
     <string name="plan_preview_footer_none">一天都没采纳 · 现在点「取消」什么都不写</string>
-    <string name="action_repeat_weekly">每周相同</string>
-    <string name="hint_repeat_weekly">勾上之后，没有单独排计划的周都会用这一份</string>
-    <string name="msg_repeat_weekly_on">已设为「每周相同」：以后没单独排计划的周都会用这一份</string>
-    <string name="msg_repeat_weekly_off">已取消「每周相同」：没排计划的周会是空的</string>
+    <string name="action_copy_next_week">复制到下周</string>
+    <string name="action_copy">复制</string>
+    <string name="hint_copy_next_week">只把这一份排给下周，以后各周不受影响</string>
+    <string name="msg_copy_next_week_done">已把 %1$s 条排进下周</string>
+    <string name="msg_copy_next_week_empty">这一周还没有自己的计划，没什么可复制</string>
+    <string name="dialog_copy_next_week_title">下周已经有自己的计划</string>
+    <string name="dialog_copy_next_week_message">同一动作、同一天的会被这周这份替换，其余保留 —— 下周现有 %1$s 条。</string>
+    <string name="title_repeat_plan">以后每周都用这份</string>
+    <string name="hint_repeat_plan">%1$s 条在生效 —— 没单独排计划的周都会落在这份上</string>
+    <string name="action_disable_repeat_plan">停用</string>
+    <string name="msg_repeat_plan_stopped">已停用「以后每周都用这份」（%1$s 条）</string>
     <string name="empty_today_habits">还没有习惯，去「自律」页添加一个吧</string>
 
     <!-- ===== 训练页 ===== -->
@@ -781,7 +787,7 @@
     <!-- ===== 动作库「加入计划」（v6）===== -->
     <string name="title_add_to_plan">加入每周训练计划</string>
     <string name="label_pick_days">练哪几天（可多选）</string>
-    <string name="label_also_repeat_weekly">每周都加（每周相同）</string>
+    <string name="label_also_repeat_weekly">每周都加（以后每周都用这份）</string>
     <string name="hint_also_repeat_weekly">勾上后，以后没单独排计划的周也会练到它</string>
     <string name="msg_plan_updated">训练计划已更新</string>
     <string name="cd_add_to_plan">加入每周训练计划</string>

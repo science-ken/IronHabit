@@ -11,13 +11,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.SelfImprovement
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Switch
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -30,8 +30,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -296,11 +294,29 @@ fun TodayScreen(
                                     )
                                 }
                                 if (!isFutureDay) {
-                                    RepeatWeeklyRow(
-                                        checked = uiState.isRepeatWeeklyOn,
-                                        enabled = !uiState.isTogglingRepeatWeekly,
-                                        onCheckedChange = viewModel::onToggleRepeatWeekly,
+                                    CopyNextWeekRow(
+                                        enabled = !uiState.isRepeatActionBusy,
+                                        note = uiState.repeatNoteRes?.let { res ->
+                                            stringResource(res, *uiState.repeatNoteArgs.toTypedArray())
+                                        },
+                                        onClick = viewModel::onCopyToNextWeek,
                                     )
+                                    // 模板没有启用行时整行不画 —— 不解释一件没发生的事。
+                                    if (uiState.repeatPlanRowCount > 0) {
+                                        RepeatPlanRow(
+                                            rowCount = uiState.repeatPlanRowCount,
+                                            enabled = !uiState.isRepeatActionBusy,
+                                            onDisable = viewModel::onDisableRepeatPlan,
+                                        )
+                                    }
+                                    // 下周非空时的那一次确认（覆盖用户数据前必确认，与导入 / 删除同源）。
+                                    uiState.copyToNextWeekConfirm?.let { nextWeekRows ->
+                                        CopyNextWeekConfirmDialog(
+                                            rowCount = nextWeekRows,
+                                            onConfirm = viewModel::onCopyToNextWeekConfirmed,
+                                            onDismiss = viewModel::onCopyToNextWeekCancelled,
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -535,19 +551,21 @@ private fun WeekPlanEmptyCard(
 }
 
 /**
- * 「每周相同」开关行（P3）。
+ * 「复制到下周」一行（一次动作，不是一个状态）。
  *
- * 语义：勾上之后，**没有单独排计划的周**都会用这一份（等于以前那个"模板"）；
- * 取消之后，没排计划的周就是空的，只显示「创建训练计划」。
+ * 为什么是按钮而不是以前那个开关：复制过去的行属于**下周**，开关拨回"关"的时候
+ * 分不清下周哪几行是这次复制的、哪几行是用户自己排的或 AI 排的 —— 只能靠猜去删行，
+ * 而删行在这个仓库里是红线。所以这里只承诺一个方向：写进去。
  *
- * 界面刻意用"人话"解释后果（[R.string.hint_repeat_weekly]），因为"模板 / 循环 / 专属"
- * 这些词对用户没有意义 —— 他关心的是"下周会不会自动有课"。
+ * @param note 上一次动作的回执，**占用副标题那一行**而不是另起一行：
+ *   这一行是弹层内容的最后一块，另起一行要么把它顶出屏幕（真机量过：按钮被推到 y=1911），
+ *   要么把用户刚按的东西挪走。全局 Snackbar 也不行 —— `ModalBottomSheet` 会盖住它（§7 坑 3）。
  */
 @Composable
-private fun RepeatWeeklyRow(
-    checked: Boolean,
+private fun CopyNextWeekRow(
     enabled: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
+    note: String?,
+    onClick: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -557,26 +575,86 @@ private fun RepeatWeeklyRow(
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = stringResource(R.string.action_repeat_weekly),
+                text = stringResource(R.string.action_copy_next_week),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
-                text = stringResource(R.string.hint_repeat_weekly),
+                text = note ?: stringResource(R.string.hint_copy_next_week),
+                style = MaterialTheme.typography.bodySmall,
+                color = if (note != null) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+        }
+        Button(onClick = onClick, enabled = enabled) {
+            Text(text = stringResource(R.string.action_copy))
+        }
+    }
+}
+
+/**
+ * 「以后每周都用这份」= 模板的出口行。
+ *
+ * ⚠️ 这一行才是"以后每周自动同一份"的开关所在：生效规则是"这一周没有专属行 → 回落模板"
+ * （`WeekPlanWeekResolver`），所以只要模板还有启用行，**下下周、下下下周都会是同一份**，
+ * 与某一次「复制到下周」无关。要停的是这里，不是复制。
+ */
+@Composable
+private fun RepeatPlanRow(
+    rowCount: Int,
+    enabled: Boolean,
+    onDisable: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = IronHabitSpacing.xs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = stringResource(R.string.title_repeat_plan),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                // 条数念出来：这一行说的是"多少周会被影响"，没有数字就只是一句抽象话。
+                text = stringResource(R.string.hint_repeat_plan, rowCount.toString()),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        // 与 `SetCheckboxRow` 里那条同一教训：没有 contentDescription 的控件在无障碍
-        // 与 uiautomator 里都是隐形的（本轮走查时 dump 里只看得见「每周相同」这行字，
-        // 开关本身是一个无文字节点，落点只能靠截图量）。
-        // `semantics {}` 的 lambda 不是 @Composable，所以 `stringResource` 必须先取出来。
-        val switchLabel: String = stringResource(R.string.action_repeat_weekly)
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            enabled = enabled,
-            modifier = Modifier.semantics { contentDescription = switchLabel },
-        )
+        TextButton(onClick = onDisable, enabled = enabled) {
+            Text(text = stringResource(R.string.action_disable_repeat_plan))
+        }
     }
+}
+
+/** 下周已经有自己的计划时，「复制到下周」先要这一次确认。 */
+@Composable
+private fun CopyNextWeekConfirmDialog(
+    rowCount: Int,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(text = stringResource(R.string.dialog_copy_next_week_title)) },
+        text = {
+            Text(text = stringResource(R.string.dialog_copy_next_week_message, rowCount.toString()))
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(text = stringResource(R.string.action_copy))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(text = stringResource(R.string.action_cancel))
+            }
+        },
+    )
 }
