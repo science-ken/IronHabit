@@ -86,36 +86,51 @@ class PlanRepositoryImpl @Inject constructor(
      * @return 复制/停用的行数（`0` = 该周本来就没有自己的计划，勾选无意义）
      */
     override suspend fun setRepeatWeekly(weekStartEpochDay: Long, enabled: Boolean): Int =
-        // B-17：整份复制/停用是**多行**操作 —— 包进单事务，中途失败不留"半套模板"。
+        if (enabled) {
+            copyWeekInto(
+                sourceWeekStartEpochDay = weekStartEpochDay,
+                targetWeekStartEpochDay = WeekPlan.TEMPLATE_WEEK_START,
+            )
+        } else {
+            deactivateRepeatPlan()
+        }
+
+    override suspend fun copyWeekInto(
+        sourceWeekStartEpochDay: Long,
+        targetWeekStartEpochDay: Long,
+    ): Int =
+        // B-17：整份复制是**多行**操作 —— 包进单事务，中途失败不留"半套"。
         database.withTransaction {
-            if (!enabled) {
-                weekPlanDao.deactivateRepeatRows()
+            val weekRows: List<WeekPlan> = weekPlanDao.getRowsForWeek(sourceWeekStartEpochDay)
+                .map(PlanMapper::toDomain)
+                .filter { plan -> plan.isActive }
+            if (weekRows.isEmpty()) {
+                0
             } else {
-                val weekRows: List<WeekPlan> = weekPlanDao.getRowsForWeek(weekStartEpochDay)
-                    .map(PlanMapper::toDomain)
-                    .filter { plan -> plan.isActive }
-                if (weekRows.isEmpty()) {
-                    0
-                } else {
-                    // 复制前先读一次模板现有行：命中同一槽位时要按 [RepeatWeeklyRules] 合并，
-                    // 不能整行盖掉用户在手改标记上留下的痕迹。
-                    val existingBySlot: Map<Pair<Int, Long>, WeekPlan> = weekPlanDao.getRepeatRows()
+                // 复制前先读一次目标周的行：命中同一槽位时要按 [RepeatWeeklyRules] 合并，
+                // 不能整行盖掉用户在手改标记上留下的痕迹。
+                // （目标周是模板时 `getRowsForWeek(0)` 与 `getRepeatRows()` 同一条 SQL。）
+                val existingBySlot: Map<Pair<Int, Long>, WeekPlan> =
+                    weekPlanDao.getRowsForWeek(targetWeekStartEpochDay)
                         .map(PlanMapper::toDomain)
                         .associateBy { plan -> plan.dayOfWeek to plan.exerciseId }
-                    for (plan in weekRows) {
-                        weekPlanDao.upsertExplicit(
-                            PlanMapper.toEntity(
-                                RepeatWeeklyRules.copyIntoTemplate(
-                                    source = plan,
-                                    existing = existingBySlot[plan.dayOfWeek to plan.exerciseId],
-                                ),
+                for (plan in weekRows) {
+                    weekPlanDao.upsertExplicit(
+                        PlanMapper.toEntity(
+                            RepeatWeeklyRules.copyIntoWeek(
+                                source = plan,
+                                existing = existingBySlot[plan.dayOfWeek to plan.exerciseId],
+                                weekStartEpochDay = targetWeekStartEpochDay,
                             ),
-                        )
-                    }
-                    weekRows.size
+                        ),
+                    )
                 }
+                weekRows.size
             }
         }
+
+    override suspend fun deactivateRepeatPlan(): Int =
+        database.withTransaction { weekPlanDao.deactivateRepeatRows() }
 
     override fun observeAll(): Flow<List<WeekPlan>> =
         weekPlanDao.observeAll()
@@ -196,11 +211,12 @@ class PlanRepositoryImpl @Inject constructor(
 }
 
 /**
- * 勾选「每周相同」时，一条本周行复制成模板行的字段合并规则（纯函数，与 `BackupRestoreRules` 同一取舍：
- * `PlanRepositoryImpl` 本身要 `AppDatabase` + Hilt，JVM 里起不来）。
+ * 复制一份计划行时（复制成「每周相同」模板 / 复制成另一周的专属行）的字段合并规则
+ * （纯函数，与 `BackupRestoreRules` 同一取舍：`PlanRepositoryImpl` 本身要 `AppDatabase` + Hilt，
+ * JVM 里起不来）。
  *
  * ⚠️ 两个标记**只增不清**：
- * - [WeekPlan.isUserEdited]：模板槽位上原本躺着一条用户手改行，复制之后它**仍然要受保护**。
+ * - [WeekPlan.isUserEdited]：目标槽位上原本躺着一条用户手改行，复制之后它**仍然要受保护**。
  *   清成 `false` 会让下一次「生成计划」把这些槽位当成没主 —— 覆盖甚至复活用户手改过的内容
  *   （`GenerateTrainingPlanUseCase` 的 `blockedSlots` / `userOwnedDays` 全靠这个标记）。
  *   2026-09-22 真机查出：勾一次开关，模板里 4 条 `is_user_edited=1` 全变 0。
@@ -209,9 +225,15 @@ class PlanRepositoryImpl @Inject constructor(
  */
 internal object RepeatWeeklyRules {
 
-    fun copyIntoTemplate(source: WeekPlan, existing: WeekPlan?): WeekPlan = source.copy(
+    /**
+     * 把一条来源行复制成 [weekStartEpochDay] 那一周（模板传 [WeekPlan.TEMPLATE_WEEK_START]）的行。
+     *
+     * 复制给下周与复制给模板要守的是**同一组**标记规则，所以只有一份实现：
+     * 两份迟早会一处修一处漏（本项目 2026-09-20 那条根因"约定靠自觉"的形状）。
+     */
+    fun copyIntoWeek(source: WeekPlan, existing: WeekPlan?, weekStartEpochDay: Long): WeekPlan = source.copy(
         id = 0L,
-        weekStartEpochDay = WeekPlan.TEMPLATE_WEEK_START,
+        weekStartEpochDay = weekStartEpochDay,
         isActive = true,
         isUserEdited = existing?.isUserEdited == true || source.isUserEdited,
         createdAt = existing?.createdAt?.takeIf { created -> created > 0L } ?: source.createdAt,
