@@ -7,9 +7,15 @@
 
 ## ✅ 最新快照（2026-09-23 · 「我的」页重构 C6–C12 做完，按**方案 J** 落地 · **已推**）
 
-八个 commit 已全部推到 `origin/main`（`d46dd97..82c983b`，快进、无 force）：
-`2b34307` 数据层 → `a83cb04` 档案卡 + 四联 → `2b548b0` 新路由「训练统计」 → `36be3a1` 记录台账 + 存哪儿
-→ `ea29194` 饼图同色系色阶 + `formatMonthDay` 收拢 → `f461ab0` 身体数据页重排（J3）→ 两条文档收口。
+这一轮的 commit（前缀 `feat(profile)` / `feat(stats,profile)` / `feat(body)` / `fix(theme,ui)` / `docs`，
+从 `2b34307` 起）：数据层 → 档案卡 + 四联 → 新路由「训练统计」 → 记录台账 + 存哪儿
+→ 饼图同色系色阶 + `formatMonthDay` 收拢 → 身体数据页重排（J3）→ 三条文档收口。
+
+> ⚠️ **这里刻意不写"几个 commit / 未推几个 / HEAD 是哪个"** —— 这三类数字在 2026-09-22 一天里过期过三次，
+> 每一次都会让下一轮把已做完的事再找一遍。要现值就跑：
+> `git rev-list --left-right --count origin/main...HEAD`（左边是落后、右边是未推）
+> `git log --oneline origin/main..HEAD`
+
 全库 635 条 JVM 单测绿；深浅两套截图 + 真机逐条对过 `dev.sh sql`，台账每个数都能在 SQL 里复现。
 
 ⚠️ **这一页做过两版设计，落地的是 J，不是用户发来的那份附件（方案 H）。**
