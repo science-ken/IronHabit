@@ -42,7 +42,10 @@
     <!-- ===== 今日页 ===== -->
     <string name="title_today">今日</string>
     <string name="title_today_train">今日训练</string>
-    <string name="title_today_habits">今日习惯</string>
+    <!-- 不写「今日习惯」：磁贴的分母是**全部启用习惯**，不是"今天该做的那几个"
+         （按应做日过滤就没法提前或额外勾一天 —— 2026-09-23 拍板保留能力、改标签）。
+         周五仍可能显示 0/1，那是设计，不是 bug。 -->
+    <string name="title_today_habits">习惯</string>
     <string name="title_progress">今日完成</string>
     <string name="label_week_total_sets">总组数</string>
     <string name="label_streak_days">连续 %1$d 天</string>
