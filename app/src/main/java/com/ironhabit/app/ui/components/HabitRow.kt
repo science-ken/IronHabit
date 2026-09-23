@@ -40,9 +40,16 @@ import com.ironhabit.app.ui.theme.IronHabitSpacing
  * 为什么是色条而不是给 emoji 加个彩色圆底：emoji 本身是彩色字形，压在紫色/橙色上会糊成一团，
  * 反而把颜色读没了；色条不跟任何人抢地方，自律页与今日页一次同时生效。
  *
- * 左侧显示 emoji 与习惯名（下方小字显示连续天数 `label_streak_days`），
- * 右侧为编辑按钮（→ [onEdit]）、[Checkbox]（勾选/取消 → [onToggle]），
- * 以及**只在调用方给了 [onDelete] 时**才出现的删除按钮（最右，离勾选最远）。
+ * 左侧依次为 [Checkbox]（勾选/取消 → [onToggle]）、emoji 与习惯名（下方小字显示连续天数
+ * `label_streak_days`）；右侧为编辑按钮（→ [onEdit]），以及**只在调用方给了 [onDelete] 时**
+ * 才出现的删除按钮（最右）。
+ *
+ * **勾选框为什么在行首**（`REVIEW-BACKLOG-2026-09-22.md` 的 D1，即口头说的 #10；
+ * 不是 `defects.md` 里那个同名的 D1）：它以前在行尾，而行首那个 emoji 看着像"这一行的把手"、
+ * 其实什么都点不动 —— 用户第一反应去点它，每次打卡都白点一下。把真开关挪到眼睛最先落到的位置，
+ * 比给 emoji 补一个点击入口更诚实：一行只有一个打卡入口，TalkBack 也只需要念一次。
+ * 代价是右手单手持机时勾选框离拇指最远，这一条是用户看过四方案对比图后拍的板（见
+ * `.scratch/ironhabit-habit-tap/compare-2x2.png`），不是漏考虑。
  *
  * **只读态**（[enabled] = `false`，用于「所选日 > 今天」）：禁用勾选（打卡）入口，
  * 但「编辑」与「删除」（改的是习惯定义本身，与日期无关）仍可用。
@@ -79,6 +86,13 @@ fun HabitRow(
                 .width(COLOR_BAR_WIDTH)
                 .clip(IronHabitShapes.full)
                 .background(habitColor(item.habit.colorHex)),
+        )
+
+        // 勾选框放在最左：这一行唯一的打卡入口，摆在眼睛第一个落到的地方。
+        Checkbox(
+            checked = item.isCompletedToday,
+            onCheckedChange = onToggle,
+            enabled = enabled,
         )
 
         Row(
@@ -125,13 +139,8 @@ fun HabitRow(
                     contentDescription = stringResource(R.string.action_edit),
                 )
             }
-            Checkbox(
-                checked = item.isCompletedToday,
-                onCheckedChange = onToggle,
-                enabled = enabled,
-            )
-            // 放最右：与勾选框隔开一个控件的距离，误触概率最低。
-            // 确认框在调用方（DisciplineScreen）—— 本组件是今日页与自律页共用的哑组件。
+            // 删除按钮仍在最右。勾选框挪到行首之后，它与编辑按钮之间少了一个控件做缓冲，
+            // 误触会弹确认框（确认框在调用方 DisciplineScreen）—— 本组件是今日页与自律页共用的哑组件。
             if (onDelete != null) {
                 IconButton(onClick = onDelete) {
                     Icon(

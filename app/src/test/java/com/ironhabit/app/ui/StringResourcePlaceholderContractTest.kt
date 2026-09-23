@@ -78,7 +78,7 @@ class StringResourcePlaceholderContractTest {
         entry("basis_library_too_narrow", ArgKind.NUMERIC) // LocalRuleAdvisor
 
         // ---------------- 【直调】stringResource(R.string.x, ...) 字面量调用 ----------------
-        entry("label_streak_days", ArgKind.NUMERIC) // HabitRow:70 / TodayBento（streak.current）
+        entry("label_streak_days", ArgKind.NUMERIC) // HabitRow 勾选行小字 / TodayBento（streak.current）
         entry("dialog_delete_habit_message", ArgKind.STRING) // DisciplineScreen 删除确认框（habit.name）
         entry("dialog_delete_body_metric_message", ArgKind.STRING, ArgKind.STRING) // BodyMetricsScreen 删除确认框（日期 · 值+单位）
         entry("label_streak_best", ArgKind.NUMERIC) // TodayBento（streak.best）
