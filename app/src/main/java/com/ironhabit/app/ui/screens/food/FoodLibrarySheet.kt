@@ -1,9 +1,13 @@
 package com.ironhabit.app.ui.screens.food
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
@@ -28,6 +32,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -37,15 +42,15 @@ import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.Food
 import com.ironhabit.app.domain.model.FoodServing
 import com.ironhabit.app.domain.model.FoodSource
+import com.ironhabit.app.ui.theme.IronHabitShapes
 import com.ironhabit.app.ui.theme.IronHabitSpacing
 import kotlinx.coroutines.launch
 
 /**
- * 食物库弹层：浏览 / 搜索 / 新建 / 编辑 / 停用。
+ * 食物库弹层：浏览 / 搜索 / 新建 / 编辑 / 停用，**以及"记进这一餐"**。
  *
- * ⚠️ **本刀（第 1 刀）它只做"库"的事，不做"记进这一餐"** ——
- * 把选中的食物写进一餐是第 2 刀的 `meal_items`，现在点条目是**打开编辑**，不是加入。
- * 这不是遗漏：`meal_items` 还没建，先放一个"点了没反应"的按钮比骗用户好。
+ * 同一个组件两种模式，由 [FoodLibrarySheet.onPick] 决定：给了就是挑选模式（点份量 = 记一条
+ * `meal_items`），没给就是管理模式（点条目 = 编辑 / 停用）。
  *
  * 弹层必须可滚动 + `imePadding`：这条是从 `MealEditSheet` 真机踩来的
  * （字段一多，保存/取消会被裁到够不着）。
@@ -210,15 +215,35 @@ private fun FoodListSection(
         )
     }
 
-    uiState.visibleFoods.forEach { food ->
-        if (onPick != null) {
-            FoodPickRow(food = food, onPick = onPick)
-        } else {
-            FoodRow(
-                food = food,
-                onEdit = { viewModel.onOpenEdit(food) },
-                onDeactivate = { viewModel.onDeactivate(food.id) },
-            )
+    // **两两一排**而不是每条一行：内置库 127 条，一条三行时真机量到相邻两条相距 348px
+    // （一屏只放得下 3 条半，滑到第 127 条要 36 屏）。
+    // 为什么手工配对而不是 LazyVerticalGrid：这个弹层的内容在一个 `verticalScroll` 的 Column 里，
+    // 网格里再套一个可滚动容器是嵌套滚动 —— 手势会打架。
+    uiState.visibleFoods.chunked(GRID_COLUMNS).forEach { rowFoods ->
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.md),
+        ) {
+            rowFoods.forEach { food ->
+                if (onPick != null) {
+                    FoodPickCard(
+                        modifier = Modifier.weight(1f),
+                        food = food,
+                        onPick = onPick,
+                    )
+                } else {
+                    FoodCard(
+                        modifier = Modifier.weight(1f),
+                        food = food,
+                        onEdit = { viewModel.onOpenEdit(food) },
+                        onDeactivate = { viewModel.onDeactivate(food.id) },
+                    )
+                }
+            }
+            // 落单的那格补一个占位：否则最后一条会独占整行宽度，看起来像另一种排版。
+            if (rowFoods.size < GRID_COLUMNS) {
+                Spacer(modifier = Modifier.weight(1f))
+            }
         }
     }
 
@@ -272,25 +297,31 @@ private fun FoodInactiveRow(
 }
 
 /**
- * 挑选模式的一行：名称 + 每 100g 热量 + **每个份一个按钮**。
+ * 挑选模式的一格：名称 + 每 100g 热量 + **每个份一个按钮**。
  *
  * 点份就直接记进去一份；没有份的食物给一个"按克数"，
  * 由调用方按 100g 起记（真正的克数编辑在条目行上改）。
+ *
+ * 热量这一行**不省**：挑食物时"这条多密"正是当场要判的事，
+ * 为了再省 20dp 把它藏进详情，等于把用户推到"先记下来再看"。
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun FoodPickRow(
+private fun FoodPickCard(
+    modifier: Modifier = Modifier,
     food: Food,
     onPick: (Food, FoodServing?) -> Unit,
 ) {
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = IronHabitSpacing.xs),
+        modifier = modifier
+            .clip(IronHabitShapes.card)
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+            .padding(IronHabitSpacing.md),
         verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.xs),
     ) {
         Text(
             text = food.name,
-            style = MaterialTheme.typography.bodyLarge,
+            style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurface,
         )
         Text(
@@ -298,10 +329,9 @@ private fun FoodPickRow(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
-        ) {
+        // 双份量的（127 条里有 14 条）在一格内换行，不为了省高度只给第一个份 ——
+        // "米饭只能按碗记、想按盘记找不到入口"就是退化成老问题。
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm)) {
             if (food.hasServing) {
                 food.servings.forEach { serving ->
                     OutlinedButton(onClick = { onPick(food, serving) }) {
@@ -317,55 +347,52 @@ private fun FoodPickRow(
     }
 }
 
+/** 管理模式的一格：名字（内置的带标记）+ 热量 + 份量摘要 + 编辑 / 停用。 */
 @Composable
-private fun FoodRow(
+private fun FoodCard(
+    modifier: Modifier = Modifier,
     food: Food,
     onEdit: () -> Unit,
     onDeactivate: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = IronHabitSpacing.xs),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
+    Column(
+        modifier = modifier
+            .clip(IronHabitShapes.card)
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+            .padding(IronHabitSpacing.md),
+        verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.xs),
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = food.name,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                if (food.source == FoodSource.BUILT_IN) {
-                    Text(
-                        text = stringResource(R.string.label_food_built_in),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
+        Text(
+            text = food.name,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            text = stringResource(R.string.label_food_per_100g_summary, food.kcalPer100g),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (food.hasServing) {
             Text(
-                text = stringResource(R.string.label_food_per_100g_summary, food.kcalPer100g),
+                text = servingSummaryText(food.servings),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            if (food.hasServing) {
-                Text(
-                    text = servingSummaryText(food.servings),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+        }
+        if (food.source == FoodSource.BUILT_IN) {
+            Text(
+                text = stringResource(R.string.label_food_built_in),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.xs)) {
+            TextButton(onClick = onEdit) {
+                Text(text = stringResource(R.string.action_edit))
             }
-        }
-        TextButton(onClick = onEdit) {
-            Text(text = stringResource(R.string.action_edit))
-        }
-        TextButton(onClick = onDeactivate) {
-            Text(text = stringResource(R.string.action_deactivate))
+            TextButton(onClick = onDeactivate) {
+                Text(text = stringResource(R.string.action_deactivate))
+            }
         }
     }
 }
@@ -530,3 +557,11 @@ private fun servingSummaryText(servings: List<FoodServing>): String =
     servings.map { serving ->
         stringResource(R.string.label_food_serving_summary, serving.unit, serving.grams)
     }.joinToString("、")
+
+/**
+ * 库列表一排几格。
+ *
+ * 两列而不是三列：三列时「猪肉（瘦，生）」这种 7 字名要折三行，
+ * 卡片高度反而追平了旧版一条一行占的垂直空间。
+ */
+private const val GRID_COLUMNS = 2
