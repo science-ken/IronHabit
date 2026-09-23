@@ -275,6 +275,34 @@ fun heatmapLevels(): List<Color> =
     if (LocalIsDarkTheme.current) HeatmapLevelsDark else HeatmapLevelsLight
 
 // =============================================================================
+// 八、把**用户存的**色值解析成 Color —— 全工程唯一一处
+// =============================================================================
+
+/** `#RRGGBB` 的形状。只接受这一种：库里存的就是选色器写进去的 6 位十六进制。 */
+private val HABIT_HEX: Regex = Regex("#([0-9a-fA-F]{6})")
+
+/**
+ * 习惯的 `color_hex`（用户数据）→ 可渲染的 [Color]；**形状不对就回落到默认色，不抛**。
+ *
+ * 为什么不用 `android.graphics.Color.parseColor()`：
+ * 1. 它在非法输入上抛 `IllegalArgumentException`。而导入路径**不校验这个字段**
+ *    （`BackupRepositoryImpl` 的 `HabitBackup.toEntity` 把 `colorHex` 原样透传），
+ *    所以一份手改过的备份 JSON 就能让自律页与今日页整页崩，而不是只在编辑表单里崩一下；
+ * 2. 它是 Android 框架 API，纯 Kotlin 的写法才能被 JVM 单测钉住（见 `HabitColorTest`）。
+ *
+ * 本文件是"颜色只在 Color.kt 决定"这条规矩的例外窗口：这里的输入不是设计色，
+ * 是**存在库里的用户数据**，总得有个地方把它变成像素 —— 那就只有这一个地方。
+ */
+fun habitColor(hex: String): Color {
+    val bits: Long = hex.rgbBits() ?: Habit.DEFAULT_COLOR_HEX.rgbBits() ?: 0L
+    return Color(0xFF000000L or bits)
+}
+
+/** `#RRGGBB` → 低 24 位颜色整数；形状不对返回 `null`，由调用方决定回落成什么。 */
+private fun String.rgbBits(): Long? =
+    HABIT_HEX.matchEntire(this)?.groupValues?.get(1)?.toLongOrNull(16)
+
+// =============================================================================
 // 七、饼图分类色阶 —— 四档**同色系明度阶梯**
 // =============================================================================
 // 以前这里取的是 `primary + secondary + tertiary + primaryContainer`，也就是

@@ -53,6 +53,7 @@ import com.ironhabit.app.ui.components.EmptyState
 import com.ironhabit.app.ui.components.LoadingSkeleton
 import com.ironhabit.app.ui.components.LocalSnackbarHostState
 import com.ironhabit.app.ui.theme.HABIT_COLOR_HEXES
+import com.ironhabit.app.ui.theme.habitColor
 import com.ironhabit.app.ui.theme.IronHabitSpacing
 
 /**
@@ -272,9 +273,9 @@ private fun HabitColorPicker(
         horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.md),
     ) {
         HABIT_COLOR_HEXES.forEach { hex ->
-            val swatch: Color = remember(hex) {
-                Color(android.graphics.Color.parseColor(hex))
-            }
+            // 解析走 `habitColor`（全工程唯一一处）：导入路径不校验 `color_hex`，
+            // 直接用 `android.graphics.Color.parseColor` 会让一份手改过的备份 JSON 崩掉这一页。
+            val swatch: Color = habitColor(hex)
             val selected = selectedHex.equals(hex, ignoreCase = true)
             val colorName: String = stringResource(colorNameRes(hex))
             // 触摸区补足 48dp（M3 最小目标），视觉圆点仍是 36dp —— 两个尺寸解耦。
