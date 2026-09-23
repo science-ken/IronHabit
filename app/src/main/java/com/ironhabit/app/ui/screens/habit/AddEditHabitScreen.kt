@@ -19,9 +19,13 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
@@ -328,10 +332,31 @@ private fun WeeklyDaysPicker(
         horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
     ) {
         WEEKDAY_RES.forEachIndexed { index, labelRes ->
+            val selected: Boolean = (mask shr index) and 1 == 1
             FilterChip(
-                selected = (mask shr index) and 1 == 1,
+                selected = selected,
                 onClick = { onToggle(index) },
                 label = { Text(text = stringResource(labelRes)) },
+                // 默认选中态走 secondaryContainer = Neutral95(#F0F0F0)，与页面白底只差 5% 明度，
+                // 而且不带任何图标 —— 真机上"取消周三"被读成"选中周三"（台账 A12，mask 127→123 才发现）。
+                // 这里换成 primaryContainer 实底，并补一个勾：颜色之外再多一条不依赖颜色的线索，
+                // 与上面「频率」那排 SegmentedButton 的 ✓ 同一套语言。
+                leadingIcon = {
+                    Box(modifier = Modifier.size(FilterChipDefaults.IconSize)) {
+                        if (selected) {
+                            Icon(
+                                imageVector = Icons.Filled.Check,
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
+                    }
+                },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                ),
             )
         }
     }
