@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,6 +26,7 @@ import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.CategoryShare
 import com.ironhabit.app.domain.model.ExerciseCategory
 import com.ironhabit.app.ui.theme.IronHabitSpacing
+import com.ironhabit.app.ui.theme.pieSliceLevels
 import kotlin.math.roundToInt
 
 /**
@@ -55,8 +55,13 @@ fun CategoryPieChart(
         return
     }
 
-    val sliceColors: List<Color> = sliceColors(MaterialTheme.colorScheme)
+    // 颜色按**分类**取档，不按列表位置：`categoryShareRows()` 没有 `ORDER BY`，
+    // 按位置取色会让同一个分类每次刷新换一个颜色。
+    val levels: List<Color> = pieSliceLevels()
     val total: Int = nonEmpty.sumOf { share -> share.count }
+
+    /** 某个分类在这一张图上的颜色（扇区与图例点共用，两处不会各算一遍）。 */
+    fun colorOf(share: CategoryShare): Color = levels[share.category.ordinal % levels.size]
 
     Row(
         modifier = modifier,
@@ -69,11 +74,11 @@ fun CategoryPieChart(
                 val arcTopLeft = Offset(stroke / 2f, stroke / 2f)
                 val arcSize = Size(size.width - stroke, size.height - stroke)
                 var startAngle = START_ANGLE
-                nonEmpty.forEachIndexed { index, share ->
+                nonEmpty.forEach { share ->
                     val sweep: Float = share.ratio.coerceIn(0f, 1f) * FULL_SWEEP
                     if (sweep > 0f) {
                         drawArc(
-                            color = sliceColors[index % sliceColors.size],
+                            color = colorOf(share),
                             startAngle = startAngle,
                             sweepAngle = sweep,
                             useCenter = false,
@@ -111,9 +116,9 @@ fun CategoryPieChart(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.Center,
         ) {
-            nonEmpty.forEachIndexed { index, share ->
+            nonEmpty.forEach { share ->
                 LegendRow(
-                    color = sliceColors[index % sliceColors.size],
+                    color = colorOf(share),
                     label = categoryLabel(share.category),
                     count = share.count,
                     ratio = share.ratio,
@@ -161,19 +166,9 @@ private fun categoryLabel(category: ExerciseCategory): String = stringResource(
 )
 
 /**
- * 分类色。
- *
- * ⚠️ 第 4 类（`CUSTOM`）以前直接用 `colorScheme.error`（红）—— 那是"出错了"的语义色，
- * 拿它当一种动作分类，用户第一反应是这里出了问题（审查报告 2.3）。
- * 换成 `primaryContainer`：与 primary 同色系（同一个维度 = 训练量），深浅两套底上都成立，
- * 且不占用任何语义色。
+ * 分类色住在 `ui/theme/Color.kt` 的 `pieSliceLevels()` —— 与热力图密度表共用同一批
+ * 青的中间明度档，且那份表里记着实测的相邻对比度。本文件只负责按分类取档。
  */
-private fun sliceColors(colorScheme: ColorScheme): List<Color> = listOf(
-    colorScheme.primary,
-    colorScheme.secondary,
-    colorScheme.tertiary,
-    colorScheme.primaryContainer,
-)
 
 private val PIE_SIZE = 120.dp
 

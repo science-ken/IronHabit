@@ -24,8 +24,8 @@ import com.ironhabit.app.domain.model.CheckIn
 import com.ironhabit.app.domain.model.ExerciseCategory
 import com.ironhabit.app.ui.components.EmptyState
 import com.ironhabit.app.ui.components.LoadingSkeleton
+import com.ironhabit.app.ui.components.formatMonthDay
 import com.ironhabit.app.ui.theme.IronHabitSpacing
-import kotlinx.datetime.LocalDate
 
 /**
  * 「动作详情」页：动作信息 + 打卡历史列表 + 编辑入口。
@@ -133,12 +133,6 @@ private fun CheckInHistoryRow(checkIn: CheckIn) {
             color = MaterialTheme.colorScheme.primary,
         )
     }
-}
-
-/** `epochDay` → 「M/D」（纯数字，无硬编码中文）。 */
-private fun formatMonthDay(epochDay: Long): String {
-    val date = LocalDate.fromEpochDays(epochDay.toInt())
-    return "${date.monthNumber}/${date.dayOfMonth}"
 }
 
 /** 分类 → 文案资源。 */

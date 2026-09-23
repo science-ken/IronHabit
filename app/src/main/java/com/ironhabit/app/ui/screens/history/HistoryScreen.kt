@@ -24,9 +24,9 @@ import com.ironhabit.app.R
 import com.ironhabit.app.ui.components.EmptyState
 import com.ironhabit.app.ui.components.HeatmapGrid
 import com.ironhabit.app.ui.components.LoadingSkeleton
+import com.ironhabit.app.ui.components.formatMonthDay
 import com.ironhabit.app.ui.theme.IronHabitSpacing
 import kotlin.math.roundToInt
-import kotlinx.datetime.LocalDate
 
 /**
  * 「打卡历史」页（P0-9）：区间完成率 + 热力图 + 按日期倒序的打卡明细。
@@ -170,10 +170,4 @@ private fun SectionTitle(text: String) {
         color = MaterialTheme.colorScheme.onSurface,
         modifier = Modifier.fillMaxWidth(),
     )
-}
-
-/** `epochDay` → 「M/D」（纯数字，无硬编码中文）。 */
-private fun formatMonthDay(epochDay: Long): String {
-    val date = LocalDate.fromEpochDays(epochDay.toInt())
-    return "${date.monthNumber}/${date.dayOfMonth}"
 }

@@ -47,8 +47,8 @@ import com.ironhabit.app.domain.model.BodyMetricType
 import com.ironhabit.app.ui.components.EmptyState
 import com.ironhabit.app.ui.components.LoadingSkeleton
 import com.ironhabit.app.ui.components.LocalSnackbarHostState
+import com.ironhabit.app.ui.components.formatMonthDay
 import com.ironhabit.app.ui.theme.IronHabitSpacing
-import kotlinx.datetime.LocalDate
 
 /**
  * 「身体数据」页（P1）：类型选择 + 当前值 + 趋势线（Canvas 手绘，零第三方依赖）+ 录入 + 列表。
@@ -363,12 +363,6 @@ private fun metricLabelRes(type: BodyMetricType): Int = when (type) {
     BodyMetricType.CHEST -> R.string.metric_chest
     BodyMetricType.ARM -> R.string.metric_arm
     BodyMetricType.HIP -> R.string.metric_hip
-}
-
-/** `epochDay` → 「M/D」（纯数字，无硬编码中文）。 */
-private fun formatMonthDay(epochDay: Long): String {
-    val date = LocalDate.fromEpochDays(epochDay.toInt())
-    return "${date.monthNumber}/${date.dayOfMonth}"
 }
 
 private val CHART_HEIGHT = 140.dp

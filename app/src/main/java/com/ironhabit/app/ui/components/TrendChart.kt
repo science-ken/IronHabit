@@ -120,10 +120,9 @@ private fun AxisLabel(epochDay: Long) {
 /**
  * `epochDay` → 本地日期「M/D」（纯数字，避免硬编码中文本地化文案）。
  *
- * `internal` 而不是 `private`：「我的」页记录台账每行右下角的「最近 9/19」用的是同一个格式。
- * ⚠️ 这句在四个页面里还各有一份**逐字相同**的私有副本（`BodyMetricsScreen` /
- * `ExerciseDetailScreen` / `HistoryScreen` / `TrainScreen`），本包 `PlanDateStrip` 那份
- * 已在这次收拢掉。全收一处是笔该还的债，但不属于「我的」页这一刀的范围。
+ * 全工程**只有这一份**：以前它在 `TrendChart` / `PlanDateStrip` / `BodyMetricsScreen` /
+ * `ExerciseDetailScreen` / `HistoryScreen` / `TrainScreen` 六个文件里各有一份逐字相同的
+ * 私有副本（改一处漏五处），J 第 5 刀收拢到此。
  */
 internal fun formatMonthDay(epochDay: Long): String {
     val date = LocalDate.fromEpochDays(epochDay.toInt())

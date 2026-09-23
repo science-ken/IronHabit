@@ -65,6 +65,17 @@ private val Teal90 = Color(0xFFD7EDE7)
 private val Teal95 = Color(0xFFB4FFF2)
 
 // =============================================================================
+// 六、青的**中间明度档** —— 热力图密度表与饼图分类色共用这几档
+// =============================================================================
+// 这几档以前只以裸 hex 的形式活在 `HeatmapLevels*` 那两张表里。饼图要复用同一条
+// 明度阶梯就得把 hex 再打一遍，于是同一支色出现两处真相 —— 正是本项目反复踩的
+// "两边各写一份迟早漂"。提到这里之后，两张表都从同一批 val 组装。
+private val TealMid56 = Color(0xFF3A9A80)
+private val TealMid76 = Color(0xFF6FBFA9)
+private val TealDeep52 = Color(0xFF2F6E60)
+private val TealMid64 = Color(0xFF479985)
+
+// =============================================================================
 // 三、辅助强调色 —— 暗金（tertiary：成就 / 连续 / 纪录）
 // =============================================================================
 private val Gold10 = Color(0xFF251A00)
@@ -233,11 +244,11 @@ val IronHabitDarkColorScheme = darkColorScheme(
  * 直接反向，"没练"会比"练了一次"更抢眼。0 档要更响只能整表重排，不是改一格。
  */
 private val HeatmapLevelsLight: List<Color> = listOf(
-    Color(0xFFDCDCDC), // 0 无数据：安静，但要能看出是一格
+    Neutral80,        // 0 无数据：安静，但要能看出是一格
     Color(0xFFA7D9CC), // 1
-    Color(0xFF6FBFA9), // 2
-    Color(0xFF3A9A80), // 3
-    Color(0xFF0B6E5B), // 4 高密度：与浅色 primary 同色
+    TealMid76,        // 2
+    TealMid56,        // 3
+    Teal40,           // 4 高密度：与浅色 primary 同色
 )
 
 /**
@@ -252,13 +263,55 @@ private val HeatmapLevelsLight: List<Color> = listOf(
  */
 private val HeatmapLevelsDark: List<Color> = listOf(
     Color(0xFF303030), // 0 无数据
-    Color(0xFF2F6E60), // 1
-    Color(0xFF479985), // 2
-    Color(0xFF6FBFA9), // 3
-    Color(0xFF84D5C8), // 4 高密度：与深色 primary 同色
+    TealDeep52,       // 1
+    TealMid64,        // 2
+    TealMid76,        // 3
+    Teal80,           // 4 高密度：与深色 primary 同色
 )
 
 /** 当前主题下的热力密度色阶。分主题是因为深浅底上"深=显眼"的直觉是反的。 */
 @Composable
 fun heatmapLevels(): List<Color> =
     if (LocalIsDarkTheme.current) HeatmapLevelsDark else HeatmapLevelsLight
+
+// =============================================================================
+// 七、饼图分类色阶 —— 四档**同色系明度阶梯**
+// =============================================================================
+// 以前这里取的是 `primary + secondary + tertiary + primaryContainer`，也就是
+// 「青 + 中灰 + 暗金 + 淡青」四支不同维度的色。两个问题：
+//
+// 1. **相邻两块分不出来**。环形图现在坐在 `surfaceContainerHigh` 磁贴上
+//    （浅 `#F0F0F0` / 深 `#1D1D1D`），实测相邻档对比度只有 **1.16**（青↔灰）与
+//    **1.21**（灰↔金）—— 远低于"同一维度里两个类别"该有的落差，
+//    两块楔形只能靠色相分，而色相正是最不可靠的那一维。
+// 2. **第 4 档几乎融进卡片**。`primaryContainer` 淡青对磁贴底只有 **1.07**，
+//    等于那一个分类没画。
+//
+// 换成青的明度阶梯（与热力图共用同一批中间档）后：
+//    浅色 相邻 2.13 / 1.80 / 1.59，首尾 6.09，最浅一档对磁贴底 **1.90**
+//    深色 相邻 1.50 / 2.00 / 1.75，首尾 5.26，最暗一档对磁贴底 **2.83**
+// 最小相邻落差从 1.16 提到 1.50 以上。
+//
+// ⚠️ 下标 = `ExerciseCategory.ordinal`（声明序：自重 / 力量 / 有氧 / 自定义），
+// **不是**列表里的位置 —— `StatsDao.categoryShareRows()` 只有 `GROUP BY` 没有 `ORDER BY`，
+// 按位置取色会让同一个分类每次刷新换一个颜色。
+// 四档**不占用任何语义色**：`error` 红是"出错了"，`tertiary` 金是"成就/连续"，
+// 都不该拿来表示"这是有氧还是自重"（审查报告 2.3 那条 C5 的原始理由）。
+private val PieSliceLevelsLight: List<Color> = listOf(
+    Teal20,     // 自重：最深一档
+    Teal40,     // 力量：与 primary 同色 —— 这两类最常见，放在落差最大的一对相邻档上
+    TealMid56,  // 有氧
+    TealMid76,  // 自定义：最浅一档，对磁贴底仍有 1.90
+)
+
+private val PieSliceLevelsDark: List<Color> = listOf(
+    Teal95,     // 自重：最亮
+    Teal80,     // 力量：与深色 primary 同色
+    TealMid64,  // 有氧
+    TealDeep52, // 自定义：最暗一档，对磁贴底 2.83
+)
+
+/** 当前主题下的饼图四档色阶（图例点与扇区取同一份，不会两边各算一次）。 */
+@Composable
+fun pieSliceLevels(): List<Color> =
+    if (LocalIsDarkTheme.current) PieSliceLevelsDark else PieSliceLevelsLight

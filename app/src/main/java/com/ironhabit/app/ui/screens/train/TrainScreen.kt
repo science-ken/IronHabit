@@ -54,6 +54,7 @@ import com.ironhabit.app.domain.model.ExerciseCategory
 import com.ironhabit.app.domain.model.ExerciseSource
 import com.ironhabit.app.ui.components.ExerciseSourceChip
 import com.ironhabit.app.ui.components.exerciseSourceLabelRes
+import com.ironhabit.app.ui.components.formatMonthDay
 import com.ironhabit.app.ui.components.hasVisibleSourceChip
 import com.ironhabit.app.domain.model.SuggestionReason
 import com.ironhabit.app.domain.model.WeekPlan
@@ -64,7 +65,6 @@ import com.ironhabit.app.ui.components.planGoalText
 import com.ironhabit.app.ui.components.weekRangeText
 import com.ironhabit.app.ui.screens.ai.SourceLine
 import com.ironhabit.app.ui.theme.IronHabitSpacing
-import kotlinx.datetime.LocalDate
 
 /** 训练页三个分段。 */
 private enum class TrainTab(@StringRes val labelRes: Int) {
@@ -762,12 +762,6 @@ private fun categoryLabelRes(category: ExerciseCategory): Int = when (category) 
     ExerciseCategory.STRENGTH -> R.string.category_strength
     ExerciseCategory.CARDIO -> R.string.category_cardio
     ExerciseCategory.CUSTOM -> R.string.category_custom
-}
-
-/** `epochDay` → 「M/D」（纯数字，无硬编码中文）。 */
-private fun formatMonthDay(epochDay: Long): String {
-    val date = LocalDate.fromEpochDays(epochDay.toInt())
-    return "${date.monthNumber}/${date.dayOfMonth}"
 }
 
 private val WEEKDAY_SHORT_RES = listOf(
