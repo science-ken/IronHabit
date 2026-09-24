@@ -1,5 +1,6 @@
 package com.ironhabit.app.ui.screens.planpreview
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,6 +12,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -25,8 +27,17 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ironhabit.app.R
+import com.ironhabit.app.domain.ai.external.ProfileFieldDiff
 import com.ironhabit.app.domain.model.AdviceSource
+import com.ironhabit.app.domain.model.Equipment
+import com.ironhabit.app.domain.model.InjuryArea
+import com.ironhabit.app.ui.components.INJURY_SEPARATOR
 import com.ironhabit.app.ui.components.LocalSnackbarHostState
+import com.ironhabit.app.ui.components.SUMMARY_SEPARATOR
+import com.ironhabit.app.ui.components.equipmentLabelRes
+import com.ironhabit.app.ui.components.goalLabelRes
+import com.ironhabit.app.ui.components.injuryLabelRes
+import com.ironhabit.app.ui.components.joinLabels
 import com.ironhabit.app.ui.screens.ai.ImportPlanNoteList
 import com.ironhabit.app.ui.theme.IronHabitSpacing
 
@@ -136,6 +147,18 @@ fun PlanPreviewScreen(
                     )
                 }
                 item { ImportPlanNoteList(notes = uiState.importNotes) }
+                // 档案 diff 也在这同一屏：它和"这几天的计划"是同一份文档带来的两件事，
+                // 拆成两屏会让人点两次"确定"却只表达了一个意图。
+                if (uiState.profileRows.isNotEmpty()) {
+                    item {
+                        ProfileDiffBlock(
+                            rows = uiState.profileRows,
+                            enabled = !uiState.busy,
+                            onToggle = viewModel::onToggleProfileField,
+                            onApply = viewModel::onApplyProfile,
+                        )
+                    }
+                }
             }
             // 模型每次都写好了这段「为什么这么排」，以前这一页 grep analysis 零命中 ——
             // 等于白花钱生成再扔掉。本地规则不产中文（LocalRuleAdvisor 只吐资源名），
@@ -335,3 +358,135 @@ private fun DayCard(day: PlanPreviewViewModel.Day, weekday: Int, onAdopt: () -> 
         }
     }
 }
+
+/**
+ * 档案 diff：一行一项，**勾哪几项改哪几项**，点「应用」立即逐字段写、不给撤销。
+ *
+ * 默认一行都不勾 —— 文档"想改"不等于用户"同意改"。
+ */
+@Composable
+private fun ProfileDiffBlock(
+    rows: List<PlanPreviewViewModel.ProfileRow>,
+    enabled: Boolean,
+    onToggle: (Int) -> Unit,
+    onApply: () -> Unit,
+) {
+    val checkedCount: Int = rows.count { row -> row.checked }
+    Column(verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.xs)) {
+        Text(
+            text = stringResource(R.string.plan_preview_profile_title),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        rows.forEachIndexed { index, row ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(
+                    checked = row.checked,
+                    onCheckedChange = { onToggle(index) },
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(profileFieldLabelRes(row.diff)),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = profileFieldValueText(row.diff),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+        Button(onClick = onApply, enabled = enabled && checkedCount > 0) {
+            val count: Int = checkedCount
+            Text(text = stringResource(R.string.plan_preview_profile_apply, count))
+        }
+    }
+}
+
+/** 这一行改的是档案里哪一项。 */
+@StringRes
+private fun profileFieldLabelRes(diff: ProfileFieldDiff): Int = when (diff) {
+    is ProfileFieldDiff.GoalChange -> R.string.plan_preview_field_goal
+    is ProfileFieldDiff.WeightChange -> R.string.plan_preview_field_goal_weight
+    is ProfileFieldDiff.DaysChange -> R.string.plan_preview_field_days
+    is ProfileFieldDiff.EquipmentChange -> R.string.plan_preview_field_equipment
+    is ProfileFieldDiff.InjuryAreaChange -> R.string.plan_preview_field_injuries
+    is ProfileFieldDiff.InjuryNoteChange -> R.string.plan_preview_field_injury_note
+}
+
+/**
+ * 「旧值 → 新值」。
+ *
+ * 枚举的中文说法全部复用 `ProfileSummaryCard` 里那份唯一映射 —— 档案词汇不该在这一页再念出
+ * 第二套叫法（那正是以前"两份派生漂出不同结果"的成因）。
+ * 空集合与空备注念「（不设）」，让用户看得出**这是要清空**，而不是"这里没写东西"。
+ */
+@Composable
+private fun profileFieldValueText(diff: ProfileFieldDiff): String {
+    val emptyText: String = stringResource(R.string.plan_preview_profile_empty)
+    val arrow: String = " → "
+    return when (diff) {
+        is ProfileFieldDiff.GoalChange -> {
+            val from: String = stringResource(goalLabelRes(diff.from))
+            val to: String = stringResource(goalLabelRes(diff.to))
+            from + arrow + to
+        }
+
+        is ProfileFieldDiff.WeightChange -> {
+            val from: String = diff.from?.let { kilogramText(it) } ?: emptyText
+            kilogramText(diff.to).let { to -> from + arrow + to }
+        }
+
+        is ProfileFieldDiff.DaysChange -> {
+            val from: String = stringResource(R.string.plan_preview_profile_days_value, diff.from)
+            val to: String = stringResource(R.string.plan_preview_profile_days_value, diff.to)
+            from + arrow + to
+        }
+
+        is ProfileFieldDiff.EquipmentChange -> {
+            val from: String = equipmentListText(diff.from, emptyText)
+            val to: String = equipmentListText(diff.to, emptyText)
+            from + arrow + to
+        }
+
+        is ProfileFieldDiff.InjuryAreaChange -> {
+            val from: String = injuryListText(diff.from, emptyText)
+            val to: String = injuryListText(diff.to, emptyText)
+            from + arrow + to
+        }
+
+        is ProfileFieldDiff.InjuryNoteChange -> {
+            val from: String = diff.from?.takeIf { it.isNotBlank() } ?: emptyText
+            val to: String = diff.to.takeIf { it.isNotBlank() } ?: emptyText
+            from + arrow + to
+        }
+    }
+}
+
+@Composable
+private fun equipmentListText(values: Set<Equipment>, emptyText: String): String =
+    if (values.isEmpty()) {
+        emptyText
+    } else {
+        joinLabels(
+            resIds = values.sortedBy { it.ordinal }.map { equipmentLabelRes(it) },
+            separator = SUMMARY_SEPARATOR,
+        )
+    }
+
+@Composable
+private fun injuryListText(values: Set<InjuryArea>, emptyText: String): String =
+    if (values.isEmpty()) {
+        emptyText
+    } else {
+        joinLabels(
+            resIds = values.sortedBy { it.ordinal }.map { injuryLabelRes(it) },
+            separator = INJURY_SEPARATOR,
+        )
+    }
+
+/** 整数就不带小数点（"80 kg" 比 "80.0 kg" 像人话），有小数则原样。 */
+private fun kilogramText(kg: Float): String =
+    if (kg % 1f == 0f) "${kg.toInt()} kg" else "$kg kg"

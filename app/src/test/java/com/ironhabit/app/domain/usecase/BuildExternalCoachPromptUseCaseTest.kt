@@ -214,8 +214,23 @@ class BuildExternalCoachPromptUseCaseTest {
         val text = useCase()(review, weekStart)
 
         assertTrue(
-            "本版只导计划：模板必须挡住模型输出档案改动，否则用户以为改了、其实没改",
-            text.contains("不要输出、也不要建议修改任何身体测量数据"),
+            "实测值永远不收：不写死这一句，模型就会顺手改身高体重",
+            text.contains("不收 AI 填的这一项"),
         )
+    }
+
+    @Test
+    fun template_listsTheLegalProfileValuesGeneratedFromTheEnums() = runTest {
+        stub()
+
+        val text = useCase()(review, weekStart)
+
+        // 合法值从枚举现生成：手抄清单的话，加一个 Goal 成员就会出现
+        // "模型写了个合法值、App 说认不出"那种查不出头的分歧。
+        assertTrue(text.contains("CUT/BULK/RECOMP/SHAPE/MAINTAIN"))
+        assertTrue(text.contains("BARBELL"))
+        assertTrue(text.contains("LOWER_BACK"))
+        assertTrue(text.contains("trainingDaysPerWeek"))
+        assertFalse("占位符一个都不许残留", text.contains("{{"))
     }
 }

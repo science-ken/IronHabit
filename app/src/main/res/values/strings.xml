@@ -656,7 +656,20 @@
     <string name="plan_preview_note_sets_clamped">%1$s：组数 %2$s 超出可记录范围，已按上限改过</string>
     <string name="plan_preview_note_reps_clamped">%1$s：次数 %2$s 超出可记录范围，已按上限改过</string>
     <string name="plan_preview_note_profile_forbidden">%1$s 是你的实测数据，App 不收 AI 填的这一项</string>
-    <string name="plan_preview_note_profile_not_applied">这份文档还想改你 %1$s 项档案设置 —— 现在只导入计划，那几项没有应用</string>
+    <string name="plan_preview_note_profile_value_rejected">档案里的 %1$s 它写了一个 App 认不出的值，没有采纳，也没有替你猜</string>
+    <!-- ===== 档案 diff（刀 2）===== -->
+    <!-- 默认一行都不勾：文档"想改"不等于用户"同意改"，而勾下去是立即写进档案、不给撤销。 -->
+    <string name="plan_preview_profile_title">这份文档还想改的档案（勾哪几项就改哪几项）</string>
+    <string name="plan_preview_profile_apply">应用勾选项（%1$d）</string>
+    <string name="plan_preview_profile_applied">已改 %1$s 项档案</string>
+    <string name="plan_preview_field_goal">健身目标</string>
+    <string name="plan_preview_field_goal_weight">目标体重</string>
+    <string name="plan_preview_field_days">每周训练天数</string>
+    <string name="plan_preview_field_equipment">可用器械</string>
+    <string name="plan_preview_field_injuries">伤病部位</string>
+    <string name="plan_preview_field_injury_note">伤病备注</string>
+    <string name="plan_preview_profile_empty">（不设）</string>
+    <string name="plan_preview_profile_days_value">%1$d 天</string>
     <!-- 不说这句，用户会以为问回来的计划从此归他保管；它其实是「AI 生成的行」，下次重排会被停用。 -->
     <string name="plan_preview_import_overwrite">导入的这些条算「AI 生成的行」：以后点「生成计划」时，没被再次列出的会被停用。想留住就在计划里手动改那一条。</string>
 

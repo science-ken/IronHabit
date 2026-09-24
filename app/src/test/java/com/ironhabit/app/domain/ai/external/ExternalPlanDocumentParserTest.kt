@@ -1,8 +1,11 @@
 package com.ironhabit.app.domain.ai.external
 
 import com.ironhabit.app.domain.model.AdviceSource
+import com.ironhabit.app.domain.model.Equipment
 import com.ironhabit.app.domain.model.Exercise
 import com.ironhabit.app.domain.model.ExerciseCategory
+import com.ironhabit.app.domain.model.Goal
+import com.ironhabit.app.domain.model.InjuryArea
 import com.ironhabit.app.domain.model.PlanReason
 import com.ironhabit.app.domain.model.TrainingFocus
 import org.junit.Assert.assertEquals
@@ -373,20 +376,72 @@ class ExternalPlanDocumentParserTest {
     }
 
     @Test
-    fun parse_profileAllowedFields_areListedAsNotAppliedThisVersion() {
+    fun parse_profileAllowedFields_becomeAStructuredPatch() {
         val draft = parsed(
             doc(
                 """{"exercise":"杠铃深蹲","targetSets":3,"targetReps":12}""",
-                ""","profile":{"goal":"BULK","trainingDaysPerWeek":5}""",
+                ""","profile":{"goal":"BULK","trainingDaysPerWeek":5,"injuryNote":"深蹲到底右膝有点顶"}""",
             ),
         )
 
-        val note = draft.notes.single { it.kind == ExternalPlanNote.Kind.PROFILE_NOT_APPLIED }
-        assertEquals(listOf(2), note.args)
+        assertEquals(Goal.BULK, draft.profile.goal)
+        assertEquals(5, draft.profile.trainingDaysPerWeek)
+        assertEquals("深蹲到底右膝有点顶", draft.profile.injuryNote)
         assertTrue(
-            "允许字段不进拒收名单",
-            draft.notes.none { it.kind == ExternalPlanNote.Kind.PROFILE_FIELD_FORBIDDEN },
+            "允许字段现在会进 diff 清单，不再报「这一版没应用」",
+            draft.notes.isEmpty(),
         )
+    }
+
+    @Test
+    fun parse_profileUnknownEnumValues_areNamedAndDropped_notGuessed() {
+        // 合法值是**枚举名**（模板里就是把整份枚举清单发给模型的），中文标签不在合同内 ——
+        // 模型真写了中文，这里会点名退回，而不是猜一个。
+        val draft = parsed(
+            doc(
+                """{"exercise":"杠铃深蹲","targetSets":3,"targetReps":12}""",
+                ""","profile":{"goal":"TONING","equipment":["反重力椅","BARBELL"]}""",
+            ),
+        )
+
+        assertNull("TONING 不是任何目标的别名，不猜", draft.profile.goal)
+        assertEquals("认不出的器械丢掉，认得出的留下", setOf(Equipment.BARBELL), draft.profile.equipment)
+        assertEquals(
+            listOf(
+                ExternalPlanNote.Kind.PROFILE_VALUE_REJECTED,
+                ExternalPlanNote.Kind.PROFILE_VALUE_REJECTED,
+            ),
+            draft.notes.map { it.kind },
+        )
+        assertEquals(listOf("goal", "equipment[反重力椅]"), draft.notes.map { it.subject })
+    }
+
+    @Test
+    fun parse_profileWhereNoNameIsRecognised_dropsTheFieldInsteadOfClearingIt() {
+        // 全认不出 ≠ "用户没有器械"。当成空集合写下去等于静默清空他的约束。
+        val draft = parsed(
+            doc(
+                """{"exercise":"杠铃深蹲","targetSets":3,"targetReps":12}""",
+                ""","profile":{"equipment":["量子训练舱","意念拉力带"]}""",
+            ),
+        )
+
+        assertNull(draft.profile.equipment)
+        assertEquals(2, draft.notes.count { it.kind == ExternalPlanNote.Kind.PROFILE_VALUE_REJECTED })
+    }
+
+    @Test
+    fun parse_profileExplicitEmptyArray_isTakenAsADeliberateClear() {
+        // 空数组是**明确指令**（"我没伤病了"），和"名字全认不出"是两回事。
+        val draft = parsed(
+            doc(
+                """{"exercise":"杠铃深蹲","targetSets":3,"targetReps":12}""",
+                ""","profile":{"injuryAreas":[]}""",
+            ),
+        )
+
+        assertEquals(emptySet<InjuryArea>(), draft.profile.injuryAreas)
+        assertTrue(draft.notes.isEmpty())
     }
 
     @Test

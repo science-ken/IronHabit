@@ -1,6 +1,7 @@
 package com.ironhabit.app.domain.usecase
 
 import com.ironhabit.app.domain.ai.external.ExternalPlanNote
+import com.ironhabit.app.domain.ai.external.ProfileFieldDiff
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -26,9 +27,21 @@ class PlanPreviewHolder @Inject constructor() {
      */
     private var importNotes: List<ExternalPlanNote> = emptyList()
 
-    fun set(preview: PlanPreview, importNotes: List<ExternalPlanNote> = emptyList()) {
+    /**
+     * 这份文档还想改的档案项（已与当前档案比过，只留下真的会变的）。
+     *
+     * 和 [importNotes] 同一份生命周期：它说的就是**这一份**导入，分开存会错配。
+     */
+    private var profileDiffs: List<ProfileFieldDiff> = emptyList()
+
+    fun set(
+        preview: PlanPreview,
+        importNotes: List<ExternalPlanNote> = emptyList(),
+        profileDiffs: List<ProfileFieldDiff> = emptyList(),
+    ) {
         current = preview
         this.importNotes = importNotes
+        this.profileDiffs = profileDiffs
     }
 
     /** 取出当前快照但不消耗它（页面重建、配置变更时还要能再渲染一次）。 */
@@ -37,9 +50,12 @@ class PlanPreviewHolder @Inject constructor() {
     /** 导入清单（内置生成路恒为空 → 预览页那一块整块不显示）。 */
     fun peekImportNotes(): List<ExternalPlanNote> = importNotes
 
+    fun peekProfileDiffs(): List<ProfileFieldDiff> = profileDiffs
+
     /** 采纳完 / 取消完必须清掉，避免下一次进来看到上一次的陈旧草案。 */
     fun clear() {
         current = null
         importNotes = emptyList()
+        profileDiffs = emptyList()
     }
 }

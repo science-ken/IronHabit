@@ -5,8 +5,10 @@ import com.ironhabit.app.domain.ai.external.ExternalDocOutcome
 import com.ironhabit.app.domain.ai.external.ExternalDocRefusal
 import com.ironhabit.app.domain.ai.external.ExternalPlanDocumentParser
 import com.ironhabit.app.domain.ai.external.ExternalPlanNote
+import com.ironhabit.app.domain.ai.external.ProfileFieldDiff
 import com.ironhabit.app.domain.repository.ExerciseRepository
 import com.ironhabit.app.domain.repository.PlanRepository
+import com.ironhabit.app.domain.repository.SettingsRepository
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.first
@@ -33,6 +35,7 @@ import kotlinx.coroutines.withContext
 class ImportExternalPlanUseCase @Inject constructor(
     private val planRepository: PlanRepository,
     private val exerciseRepository: ExerciseRepository,
+    private val settingsRepository: SettingsRepository,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
 
@@ -74,7 +77,14 @@ class ImportExternalPlanUseCase @Inject constructor(
                         // 所以连着预览一起回：`preservedCount` / `templateOwnedDays` 就是"为什么没地方写"。
                         ExternalPlanImport.NothingAdoptable(preview, parsed.draft.notes)
                     } else {
-                        ExternalPlanImport.Ready(preview, parsed.draft.notes)
+                        // 档案差异在这里算，是因为**只有此刻**才知道当前档案是什么：
+                        // 值没变的项不进列表，界面就不会出现「目标：增肌 → 增肌」那种噪音勾选。
+                        val profile = settingsRepository.profile().first()
+                        ExternalPlanImport.Ready(
+                            preview = preview,
+                            notes = parsed.draft.notes,
+                            profileDiffs = parsed.draft.profile.diffsAgainst(profile),
+                        )
                     }
                 }
             }
@@ -106,6 +116,15 @@ sealed interface ExternalPlanImport {
         val notes: List<ExternalPlanNote>,
     ) : ExternalPlanImport
 
-    /** 有可采纳的草案：交给预览页逐天采纳，[notes] 同屏如实列出。 */
-    data class Ready(val preview: PlanPreview, val notes: List<ExternalPlanNote>) : ExternalPlanImport
+    /**
+     * 有可采纳的草案：交给预览页逐天采纳，[notes] 同屏如实列出。
+     *
+     * [profileDiffs] 是这份文档还想改的档案项（已与当前档案比过、只留下真的会变的）；
+     * 空表 = 它没提档案，或者提了但值全和现在一样。
+     */
+    data class Ready(
+        val preview: PlanPreview,
+        val notes: List<ExternalPlanNote>,
+        val profileDiffs: List<ProfileFieldDiff> = emptyList(),
+    ) : ExternalPlanImport
 }

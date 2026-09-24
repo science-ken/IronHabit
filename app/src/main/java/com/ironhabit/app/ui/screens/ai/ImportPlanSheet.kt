@@ -253,7 +253,7 @@ private fun ImportPlanNoteLine(note: ExternalPlanNote) {
         ExternalPlanNote.Kind.SETS_CLAMPED -> stringResource(R.string.plan_preview_note_sets_clamped, subject, firstArg)
         ExternalPlanNote.Kind.REPS_CLAMPED -> stringResource(R.string.plan_preview_note_reps_clamped, subject, firstArg)
         ExternalPlanNote.Kind.PROFILE_FIELD_FORBIDDEN -> stringResource(R.string.plan_preview_note_profile_forbidden, subject)
-        ExternalPlanNote.Kind.PROFILE_NOT_APPLIED -> stringResource(R.string.plan_preview_note_profile_not_applied, firstArg)
+        ExternalPlanNote.Kind.PROFILE_VALUE_REJECTED -> stringResource(R.string.plan_preview_note_profile_value_rejected, subject)
     }
     Text(
         text = "· $text",

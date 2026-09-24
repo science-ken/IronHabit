@@ -176,7 +176,11 @@ class StringResourcePlaceholderContractTest {
         entry("plan_preview_note_sets_clamped", ArgKind.STRING, ArgKind.STRING)
         entry("plan_preview_note_reps_clamped", ArgKind.STRING, ArgKind.STRING)
         entry("plan_preview_note_profile_forbidden", ArgKind.STRING)
-        entry("plan_preview_note_profile_not_applied", ArgKind.STRING)
+        entry("plan_preview_note_profile_value_rejected", ArgKind.STRING)
+        // 档案 diff（刀 2）：天数与按钮计数是数字，走 %d；「已改 N 项」经 snackbarArg（String 通道）走 %s。
+        entry("plan_preview_profile_days_value", ArgKind.NUMERIC)
+        entry("plan_preview_profile_apply", ArgKind.NUMERIC)
+        entry("plan_preview_profile_applied", ArgKind.STRING)
 
         // ---------------- 【未使用】strings.xml 有占位符、代码暂无引用 ----------------
         entry("label_week_of", ArgKind.STRING)

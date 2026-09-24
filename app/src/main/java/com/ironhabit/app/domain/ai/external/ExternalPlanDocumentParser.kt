@@ -2,7 +2,10 @@ package com.ironhabit.app.domain.ai.external
 
 import com.ironhabit.app.domain.ai.remote.stripCodeFence
 import com.ironhabit.app.domain.model.AdviceSource
+import com.ironhabit.app.domain.model.Equipment
 import com.ironhabit.app.domain.model.Exercise
+import com.ironhabit.app.domain.model.Goal
+import com.ironhabit.app.domain.model.InjuryArea
 import com.ironhabit.app.domain.model.InputLimits
 import com.ironhabit.app.domain.model.PlanItemDraft
 import com.ironhabit.app.domain.model.PlanProposal
@@ -92,7 +95,8 @@ object ExternalPlanDocumentParser {
                 )
             }
 
-        notes += profileNotes(document.profile)
+        val (profilePatch, profileNotes) = resolveProfile(document.profile)
+        notes += profileNotes
 
         if (days.isEmpty()) {
             // 和内置 B-3 同口径：一条都不剩 ≠ "这周什么都不练"。当成有效结果送去采纳会把整周清空。
@@ -118,6 +122,7 @@ object ExternalPlanDocumentParser {
                     analysis = document.analysis?.trim()?.takeIf { it.isNotEmpty() },
                 ),
                 notes = notes.toList(),
+                profile = profilePatch,
             ),
         )
     }
@@ -179,13 +184,15 @@ object ExternalPlanDocumentParser {
     }
 
     /**
-     * 档案段落进来的态度（本版）：**点名拒收实测值 + 一条"没应用"的说明**。
+     * 档案段：允许的字段读成补丁，**身体实测/身份字段点名拒收**。
      *
-     * 身体实测/身份字段（身高、年龄、体脂、当前体重、性别）一律不收 —— 那是**测量值不是建议**，
-     * 模型填进来就是数据污染，而且档案数字会喂给以后每一次本地生成。
+     * 实测值不收 —— 那是**测量值不是建议**，模型填进来就是数据污染，
+     * 而且档案数字会喂给以后每一次本地生成。
      */
-    private fun profileNotes(profile: ExternalProfile?): List<ExternalPlanNote> {
-        if (profile == null) return emptyList()
+    private fun resolveProfile(profile: ExternalProfile?): Pair<ExternalProfilePatch, List<ExternalPlanNote>> {
+        if (profile == null) return ExternalProfilePatch() to emptyList()
+
+        val notes = mutableListOf<ExternalPlanNote>()
         val forbidden = buildList {
             profile.heightCm?.let { add(ExternalPlanSchema.FIELD_HEIGHT_CM) }
             profile.age?.let { add(ExternalPlanSchema.FIELD_AGE) }
@@ -193,24 +200,57 @@ object ExternalPlanDocumentParser {
             (profile.weightKg ?: profile.currentWeightKg)?.let { add(ExternalPlanSchema.FIELD_WEIGHT_KG) }
             profile.gender?.let { add(ExternalPlanSchema.FIELD_GENDER) }
         }
-        val allowedCount = countNotNulls(
-            profile.goal,
-            profile.goalWeightKg,
-            profile.trainingDaysPerWeek,
-            profile.equipment,
-            profile.injuryAreas,
-            profile.injuryNote,
-        )
-        return forbidden.map { field -> ExternalPlanNote(ExternalPlanNote.Kind.PROFILE_FIELD_FORBIDDEN, null, field) } +
-            // 允许的那部分本版（只导计划）确实没应用 —— 不说等于静默丢掉用户写进来的东西。
-            if (allowedCount > 0) {
-                listOf(ExternalPlanNote(ExternalPlanNote.Kind.PROFILE_NOT_APPLIED, null, args = listOf(allowedCount)))
-            } else {
-                emptyList()
-            }
+        notes += forbidden.map { field ->
+            ExternalPlanNote(ExternalPlanNote.Kind.PROFILE_FIELD_FORBIDDEN, null, field)
+        }
+
+        val goal: Goal? = profile.goal?.let { raw -> enumNameOrNull<Goal>(raw) }
+            .also { if (it == null && !profile.goal.isNullOrBlank()) notes += rejected("goal") }
+
+        val equipment: Set<Equipment>? = profile.equipment?.let { names ->
+            resolveNames(names) { raw -> enumNameOrNull<Equipment>(raw) }
+                .also { it.second.forEach { name -> notes += rejected("equipment[$name]") } }
+                .first
+        }
+        val injuryAreas: Set<InjuryArea>? = profile.injuryAreas?.let { names ->
+            resolveNames(names) { raw -> enumNameOrNull<InjuryArea>(raw) }
+                .also { it.second.forEach { name -> notes += rejected("injuryAreas[$name]") } }
+                .first
+        }
+
+        return ExternalProfilePatch(
+            goal = goal,
+            goalWeightKg = profile.goalWeightKg,
+            trainingDaysPerWeek = profile.trainingDaysPerWeek,
+            equipment = equipment,
+            injuryAreas = injuryAreas,
+            injuryNote = profile.injuryNote,
+        ) to notes
     }
 
-    private fun countNotNulls(vararg values: Any?): Int = values.count { it != null }
+    /**
+     * 名字列表 → 枚举集合。**认不出的逐条回报，不猜**（`SHAPE` 不等于 `TONING`）。
+     *
+     * 全部认不出时返回 `null`（= 这一项不采纳）而不是空集合 —— 空集合在档案里是有意义的值
+     * （"我没有伤病了" / "只用自重"），拿"模型编了三个假名字"去触发它，等于静默清空用户的约束。
+     * 用户真想要空集合，就写一个空数组 `[]`，那是明确指令。
+     */
+    private fun <T> resolveNames(
+        names: List<String>,
+        resolve: (String) -> T?,
+    ): Pair<Set<T>?, List<String>> {
+        if (names.isEmpty()) return emptySet<T>() to emptyList()
+        val resolved = names.mapNotNull { name -> resolve(name.trim())?.let { name.trim() to it } }
+        if (resolved.isEmpty()) return null to names.map { it.trim() }
+        val unknown = names.map { it.trim() } - resolved.map { it.first }.toSet()
+        return resolved.map { it.second }.toSet() to unknown
+    }
+
+    private inline fun <reified T : Enum<T>> enumNameOrNull(raw: String): T? =
+        enumValues<T>().firstOrNull { it.name == raw.trim().uppercase() }
+
+    private fun rejected(field: String) =
+        ExternalPlanNote(ExternalPlanNote.Kind.PROFILE_VALUE_REJECTED, null, field)
 
     /** 去围栏 → 抽出 JSON 子串 → 宽松反序列化；任何失败都返回 `null`（调用方转成可识别拒收原因）。 */
     private fun decode(raw: String): ExternalDocument? {
@@ -298,6 +338,8 @@ data class ExternalPlanDraft(
     /** 归一到内置同形状，直接交给 `PlanDraftProjector` 投影。 */
     val proposal: PlanProposal,
     val notes: List<ExternalPlanNote>,
+    /** 档案段（已过滤 + 已钳制前的原值）。空补丁 = 文档没提档案。 */
+    val profile: ExternalProfilePatch = ExternalProfilePatch(),
 )
 
 /**
@@ -338,8 +380,8 @@ data class ExternalPlanNote(
         /** 文档改了身体实测/身份字段，**拒收**（subject = 字段名）。 */
         PROFILE_FIELD_FORBIDDEN,
 
-        /** 文档带了允许修改的档案字段，但本版只导计划，**没有应用**（args：条数）。 */
-        PROFILE_NOT_APPLIED,
+        /** 档案字段写了个认不出的值（`goal:"TONING"`、编造的器械名…），**不猜、不采纳**（subject = 字段名）。 */
+        PROFILE_VALUE_REJECTED,
     }
 }
 

@@ -124,9 +124,14 @@ private fun genderLabelRes(gender: Gender): Int = when (gender) {
     Gender.FEMALE -> R.string.label_profile_gender_female
 }
 
-/** 目标 → 文案资源。 */
+/**
+ * 目标 → 文案资源。
+ *
+ * `internal`：档案词汇的中文说法只留一份是本文件立的规矩，
+ * 「本周计划预览」页的档案 diff 行也要念同一句（那边不能另起一套叫法）。
+ */
 @StringRes
-private fun goalLabelRes(goal: Goal): Int = when (goal) {
+internal fun goalLabelRes(goal: Goal): Int = when (goal) {
     Goal.CUT -> R.string.label_profile_goal_cut
     Goal.BULK -> R.string.label_profile_goal_bulk
     Goal.RECOMP -> R.string.label_profile_goal_recomp
@@ -194,4 +199,4 @@ internal fun joinLabels(resIds: List<Int>, separator: String): String =
     buildList { for (id in resIds) add(stringResource(id)) }.joinToString(separator)
 
 /** 伤病之间用斜杠，和概要先分开的「·」区分开：`膝/肩` 是一件事，不是两格档案。 */
-private const val INJURY_SEPARATOR = "/"
+internal const val INJURY_SEPARATOR = "/"

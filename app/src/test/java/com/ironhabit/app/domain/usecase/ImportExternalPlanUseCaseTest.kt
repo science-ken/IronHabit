@@ -2,12 +2,15 @@ package com.ironhabit.app.domain.usecase
 
 import com.ironhabit.app.domain.ai.external.ExternalDocRefusal
 import com.ironhabit.app.domain.ai.external.ExternalPlanNote
+import com.ironhabit.app.domain.ai.external.ProfileFieldDiff
 import com.ironhabit.app.domain.model.AdviceSource
 import com.ironhabit.app.domain.model.Exercise
 import com.ironhabit.app.domain.model.ExerciseCategory
+import com.ironhabit.app.domain.model.UserProfile
 import com.ironhabit.app.domain.model.WeekPlan
 import com.ironhabit.app.domain.repository.ExerciseRepository
 import com.ironhabit.app.domain.repository.PlanRepository
+import com.ironhabit.app.domain.repository.SettingsRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -34,10 +37,12 @@ class ImportExternalPlanUseCaseTest {
 
     private val exerciseRepository: ExerciseRepository = mockk(relaxed = true)
     private val planRepository: PlanRepository = mockk(relaxed = true)
+    private val settingsRepository: SettingsRepository = mockk(relaxed = true)
 
     private fun useCase(): ImportExternalPlanUseCase = ImportExternalPlanUseCase(
         planRepository = planRepository,
         exerciseRepository = exerciseRepository,
+        settingsRepository = settingsRepository,
         ioDispatcher = UnconfinedTestDispatcher(),
     )
 
@@ -45,10 +50,12 @@ class ImportExternalPlanUseCaseTest {
         library: List<Exercise>,
         weekRows: List<WeekPlan> = emptyList(),
         templateRows: List<WeekPlan> = emptyList(),
+        profile: UserProfile = UserProfile(trainingDaysPerWeek = 3),
     ) {
         everyLibrary(library)
         coEvery { planRepository.getRowsForWeek(any()) } returns weekRows
         coEvery { planRepository.getRepeatRows() } returns templateRows
+        every { settingsRepository.profile() } returns flowOf(profile)
     }
 
     private fun everyLibrary(library: List<Exercise>) {
@@ -129,6 +136,24 @@ class ImportExternalPlanUseCaseTest {
             "但挡手改槽位用的行还是要读到的（这里没有手改行，所以只是不回收）",
             listOf(2L),
             ready.preview.draftsByDay.getValue(1).map { it.exerciseId },
+        )
+    }
+
+    @Test
+    fun import_ready_alsoCarriesTheProfileDiffsAgainstTheCurrentProfile() = runTest {
+        stub(library, profile = UserProfile(trainingDaysPerWeek = 3, goalWeightKg = 80f))
+        val text = """
+            {"schema":"ironhabit-plan-import/v1","days":[{"dayOfWeek":1,"items":[
+                {"exercise":"杠铃深蹲","targetSets":3,"targetReps":12}]}],
+             "profile":{"trainingDaysPerWeek":5,"goalWeightKg":80}}
+        """.trimIndent()
+
+        val ready = useCase()(text, targetWeek) as ExternalPlanImport.Ready
+
+        assertEquals(
+            "只留下真的会变的：80kg 和现在一样 → 不占一行；3→5 天要改",
+            listOf(ProfileFieldDiff.DaysChange(from = 3, to = 5)),
+            ready.profileDiffs,
         )
     }
 

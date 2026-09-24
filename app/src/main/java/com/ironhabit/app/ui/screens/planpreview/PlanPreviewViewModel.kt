@@ -5,9 +5,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.ai.external.ExternalPlanNote
+import com.ironhabit.app.domain.ai.external.ProfileFieldDiff
 import com.ironhabit.app.domain.model.AdviceSource
 import com.ironhabit.app.domain.model.WeekPlan
 import com.ironhabit.app.domain.repository.ExerciseRepository
+import com.ironhabit.app.domain.usecase.ApplyExternalProfileUseCase
 import com.ironhabit.app.domain.usecase.GenerateTrainingPlanUseCase
 import com.ironhabit.app.domain.usecase.PlanPreview
 import com.ironhabit.app.domain.usecase.PlanPreviewHolder
@@ -33,10 +35,18 @@ class PlanPreviewViewModel @Inject constructor(
     private val generateTrainingPlan: GenerateTrainingPlanUseCase,
     private val holder: PlanPreviewHolder,
     private val exerciseRepository: ExerciseRepository,
+    private val applyProfile: ApplyExternalProfileUseCase,
 ) : ViewModel() {
 
     /** 一条草案的展示形态（动作名已经从库里查好了）。 */
     data class Item(val name: String, val goal: String)
+
+    /**
+     * 一行档案改动 + 用户勾没勾。
+     *
+     * **默认不勾**：文档"想改"不等于用户"同意改"，何况这一勾是立即写进档案、不给撤销。
+     */
+    data class ProfileRow(val diff: ProfileFieldDiff, val checked: Boolean = false)
 
     /** 这一天在预览里的身份。 */
     enum class Kind {
@@ -77,6 +87,8 @@ class PlanPreviewViewModel @Inject constructor(
          * 摊在**采纳之前**而不是之后：用户点"采纳这天"之后才发现少了两条，已经来不及知道少了什么。
          */
         val importNotes: List<ExternalPlanNote> = emptyList(),
+        /** 这份文档还想改的档案项（逐字段勾选）。内置生成路恒为空 → 那一块整块不显示。 */
+        val profileRows: List<ProfileRow> = emptyList(),
         val preservedCount: Int = 0,
         /**
          * 这次写好的「为什么这么排」（远端与外部导入都有；本地规则恒为 `null`，
@@ -114,6 +126,7 @@ class PlanPreviewViewModel @Inject constructor(
                 state.copy(
                     weekRange = weekRangeText(snapshot.weekStartEpochDay),
                     importNotes = holder.peekImportNotes(),
+                    profileRows = holder.peekProfileDiffs().map { diff -> ProfileRow(diff) },
                     source = snapshot.source,
                     fellBackFromRemote = snapshot.fallbackReason != null,
                     analysis = snapshot.analysis,
@@ -187,6 +200,45 @@ class PlanPreviewViewModel @Inject constructor(
             }
             // 草案全部采纳完就把快照丢掉，避免下次进来看到上一轮的陈旧内容。
             if (_uiState.value.pendingDays == 0) holder.clear()
+        }
+    }
+
+    /** 勾某一行档案改动。 */
+    fun onToggleProfileField(index: Int) {
+        _uiState.update { state ->
+            val rows = state.profileRows.toMutableList()
+            if (index in rows.indices) rows[index] = rows[index].copy(checked = !rows[index].checked)
+            state.copy(profileRows = rows)
+        }
+    }
+
+    /**
+     * 应用**勾了的**那几项档案改动：立即逐字段写、不给撤销。
+     *
+     * 时机与「采纳这天」一致（点一下就进库，反悔要自己去「我的」页改回来）。
+     * 混在一个"整页确认"的按钮里反而更糟：档案和计划是两件事，一次点击同时改两张表，
+     * 用户没法说清自己刚才同意了哪一个。
+     */
+    fun onApplyProfile() {
+        if (_uiState.value.busy) return
+        val checked: List<ProfileFieldDiff> = _uiState.value.profileRows
+            .filter { row -> row.checked }
+            .map { row -> row.diff }
+        if (checked.isEmpty()) return
+
+        _uiState.update { it.copy(busy = true) }
+        viewModelScope.launch {
+            val applied: Int = applyProfile(checked)
+            _uiState.update { state ->
+                state.copy(
+                    busy = false,
+                    // 改完就把那几行撤下清单：留着它们，第二次点「应用」会把同一批值再写一遍，
+                    // 而界面看起来什么都没发生。
+                    profileRows = state.profileRows.filterNot { row -> row.checked },
+                    snackbarRes = R.string.plan_preview_profile_applied,
+                    snackbarArg = applied.toString(),
+                )
+            }
         }
     }
 

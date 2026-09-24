@@ -1,6 +1,9 @@
 package com.ironhabit.app.domain.usecase
 
 import com.ironhabit.app.domain.ai.external.ExternalPlanSchema
+import com.ironhabit.app.domain.model.Equipment
+import com.ironhabit.app.domain.model.Goal
+import com.ironhabit.app.domain.model.InjuryArea
 import com.ironhabit.app.domain.model.ProfileLimits
 import com.ironhabit.app.domain.model.WeekPlan
 import com.ironhabit.app.domain.model.WeeklyReview
@@ -57,7 +60,15 @@ class BuildExternalCoachPromptUseCase @Inject constructor(
             .replace(PLACEHOLDER_WEEK, weekLabel(targetWeekStartEpochDay))
             .replace(PLACEHOLDER_EXISTING, existingSummary(weekRows, names))
             .replace(PLACEHOLDER_PACKAGE, packageJson)
+            // 合法值**从枚举现生成**：手抄一份清单，等于给"加了成员忘了同步模板"留个坑，
+            // 而那个坑的表现形式是模型写了个合法值、App 说认不出。
+            .replace(PLACEHOLDER_GOALS, enumNames<Goal>())
+            .replace(PLACEHOLDER_EQUIPMENTS, enumNames<Equipment>())
+            .replace(PLACEHOLDER_INJURIES, enumNames<InjuryArea>())
     }
+
+    private inline fun <reified T : Enum<T>> enumNames(): String =
+        enumValues<T>().joinToString("/") { entry -> entry.name }
 
     /** 目标周的日期范围（模型没有"今天"的概念，必须给绝对日期）。 */
     private fun weekLabel(weekStartEpochDay: Long): String {
@@ -111,6 +122,9 @@ class BuildExternalCoachPromptUseCase @Inject constructor(
         const val PLACEHOLDER_WEEK = "{{WEEK}}"
         const val PLACEHOLDER_EXISTING = "{{EXISTING}}"
         const val PLACEHOLDER_PACKAGE = "{{PACKAGE}}"
+        const val PLACEHOLDER_GOALS = "{{GOALS}}"
+        const val PLACEHOLDER_EQUIPMENTS = "{{EQUIPMENTS}}"
+        const val PLACEHOLDER_INJURIES = "{{INJURIES}}"
 
         val TEMPLATE: String = """
 帮我为下一周安排训练计划。**只输出一个 JSON 对象**，我要把它原样粘回我的健身 App 导入。
@@ -126,7 +140,14 @@ class BuildExternalCoachPromptUseCase @Inject constructor(
    • targetSets 是 1..31 的整数，targetReps 是 1..100 的整数；自重动作 targetWeightKg 填 null。
    • 组数/次数/重量按【我的数据】里真有的字段定：week.days[].items 是我实际举起的重量与 RPE，summary.progressed 是本周加过重的动作，summary.stalled 是卡住没动的动作。做满且 RPE 偏低可以小幅加重。
 5. analysis：1~3 句简体中文，说明这份计划为什么这样排（App 会原样显示给用户看）。
-6. 只输出上面这些字段。不要输出、也不要建议修改任何身体测量数据（身高、体重、体脂、年龄）或档案设置——App 这一版只导入训练计划。
+6. 只有在你确实认为该调整时，才在顶层加一个 "profile" 对象；**只允许下面这些字段**，枚举值必须逐字照抄（大写、不改拼写）：
+   • goal：{{GOALS}}
+   • goalWeightKg：数字（kg）
+   • trainingDaysPerWeek：3..6 的整数
+   • equipment：数组，元素只能取自 {{EQUIPMENTS}}
+   • injuryAreas：数组，元素只能取自 {{INJURIES}}；确认用户没有伤病时才给空数组 []
+   • injuryNote：一句话（不超过 200 字）
+   身高、体重、体脂、年龄、性别**一律不要写**：那是你的实测数据，App 不收 AI 填的这一项，写了会被逐条退回。
 7. 如果你在上面【我的数据】里找不到 library 数组（那是我能用的动作清单），**不要**只回一个空壳计划：请在 analysis 里直接说"没收到 library"，并告诉用户重新复制模板整段再发一次。
 
 【我的数据】下面这段 JSON 里有三样你要用到的东西：**library**（我能用的动作清单，只能逐字用里面的 name）、**profile**（目标 / 器械 / 伤病）、**week 与 summary**（这一周实际练了什么、哪些动作在进步、哪些卡住了）。
