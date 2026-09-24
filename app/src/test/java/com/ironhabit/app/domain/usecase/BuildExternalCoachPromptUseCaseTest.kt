@@ -13,6 +13,7 @@ import com.ironhabit.app.domain.repository.ExerciseRepository
 import com.ironhabit.app.domain.repository.PlanRepository
 import com.ironhabit.app.domain.repository.SettingsRepository
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -55,7 +56,7 @@ class BuildExternalCoachPromptUseCaseTest {
             listOf(exercise(1L, "杠铃深蹲"), exercise(2L, "卧推")),
         )
         coEvery { planRepository.getRowsForWeek(any()) } returns weekRows
-        coEvery { exportWeekPackage(any(), any()) } returns packageJson
+        coEvery { exportWeekPackage(any(), any(), any()) } returns packageJson
     }
 
     private fun exercise(id: Long, name: String) = Exercise(
@@ -81,6 +82,41 @@ class BuildExternalCoachPromptUseCaseTest {
         body = BodyReview(startWeightKg = null, latestWeightKg = null, sampleCount = 0),
         diet = DietReview(loggedDays = 0, avgKcal = null, avgProteinG = null),
     )
+
+    @Test
+    fun template_embedsTheCompactPackage_becausePastingLosesTheTail() = runTest {
+        stub()
+
+        useCase()(review, weekStart)
+
+        // 缩进把字节数放大一倍多，而整段被截断时丢的是**尾部** —— library 恰好排在最后。
+        // 模型因此回一句"没收到动作库"，用户白问一次（真机实测到的就是这个）。
+        coVerify(exactly = 1) { exportWeekPackage(any(), true, false) }
+    }
+
+    @Test
+    fun template_onlyNamesFieldsThePackageActuallyCarries() = runTest {
+        stub()
+
+        val text = useCase()(review, weekStart)
+
+        assertFalse(
+            "数据包里没有 history 数组（那是内置 DeepSeek 载荷才有的字段）：提了它，模型只会回「没收到 history」",
+            text.contains("history"),
+        )
+        assertTrue("动作名白名单必须点名 library", text.contains("library"))
+        assertTrue("加重判据要指向真有的字段", text.contains("summary.progressed"))
+    }
+
+    @Test
+    fun template_tellsTheModelToSaySoInsteadOfReturningAnEmptyShell() = runTest {
+        stub()
+
+        val text = useCase()(review, weekStart)
+
+        // 真机拿到的那份输出就是"三个空天 + 一句解释"：宁可它说没收到，也别编一堆假动作名。
+        assertTrue(text.contains("没收到 library"))
+    }
 
     @Test
     fun template_replacesEveryPlaceholder() = runTest {

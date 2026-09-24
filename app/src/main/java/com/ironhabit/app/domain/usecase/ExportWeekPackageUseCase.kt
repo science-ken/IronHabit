@@ -69,12 +69,28 @@ class ExportWeekPackageUseCase @Inject constructor(
 ) {
 
     @OptIn(ExperimentalSerializationApi::class)
-    private val json: Json = Json {
+    private val prettyJson: Json = Json {
         prettyPrint = true
         explicitNulls = true
     }
 
-    suspend operator fun invoke(review: WeeklyReview, includeDetails: Boolean = true): String {
+    /** 紧凑版：给提问模板用（见 [invoke] 的 `pretty` 说明）。 */
+    @OptIn(ExperimentalSerializationApi::class)
+    private val compactJson: Json = Json {
+        explicitNulls = true
+    }
+
+    /**
+     * @param pretty `true` = 缩进换行（「AI 会看到什么」弹层要给人读）；
+     *   `false` = 紧凑一行。**拼进提问模板时必须用 false**：整段模板要粘进聊天框，
+     *   输入被截断时丢掉的是**尾部**，而 `library` 恰好排在最后 —— 缩进把字节数放大一倍多，
+     *   等于把"动作清单被截掉"的概率翻倍。字段名与嵌套两种模式完全一致（那才是合同）。
+     */
+    suspend operator fun invoke(
+        review: WeeklyReview,
+        includeDetails: Boolean = true,
+        pretty: Boolean = true,
+    ): String {
         val profile = settingsRepository.profile().first()
         val library: List<Exercise> = exerciseRepository.observeActive().first()
 
@@ -154,7 +170,8 @@ class ExportWeekPackageUseCase @Inject constructor(
         )
 
         // 序列化与仓库读取都放 IO：字符串可能几百 KB（明细全量时），别占主线程。
-        return withContext(ioDispatcher) { json.encodeToString(WeekPackageDto.serializer(), dto) }
+        val encoder: Json = if (pretty) prettyJson else compactJson
+        return withContext(ioDispatcher) { encoder.encodeToString(WeekPackageDto.serializer(), dto) }
     }
 
     /** epochDay → ISO 日期（`"2026-09-14"`）。仓库层用 `Long`，本机 kotlinx-datetime 用 `Int`。 */

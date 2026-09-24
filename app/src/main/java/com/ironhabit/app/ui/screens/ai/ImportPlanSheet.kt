@@ -181,6 +181,19 @@ internal fun ImportPlanSheet(
                     )
                 }
                 ImportPlanNoteList(notes = uiState.notes)
+                // 模型自己写的原因原样贴出来（它是自由文本，不进 String.format，也不参与任何数字）。
+                uiState.refusalAnalysis?.let { said ->
+                    Text(
+                        text = stringResource(R.string.ai_import_ai_said),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = said,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
 
             Button(

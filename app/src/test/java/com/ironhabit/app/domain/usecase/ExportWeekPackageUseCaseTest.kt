@@ -141,9 +141,23 @@ class ExportWeekPackageUseCaseTest {
         profile: UserProfile = UserProfile(),
         library: List<Exercise> = emptyList(),
         includeDetails: Boolean = true,
+        pretty: Boolean = true,
     ): String {
         stub(profile = profile, library = library)
-        return useCase()(review(), includeDetails)
+        return useCase()(review(), includeDetails, pretty)
+    }
+
+    @Test
+    fun compactMode_isTheSameContractJustWithoutIndentation() = runTest {
+        val library = (1..6L).map { id -> exercise(id, "动作$id") }
+
+        val pretty = exported(library = library)
+        val compact = exported(library = library, pretty = false)
+
+        assertFalse("紧凑版不该有换行", compact.contains("\n"))
+        assertTrue("紧凑版必须明显更短（这就是它能多扛住粘贴截断的原因）", compact.length < pretty.length / 2)
+        // 合同只看字段名与嵌套：两种模式解析出来必须一模一样。
+        assertEquals(pretty.toJson(), compact.toJson())
     }
 
     @Test

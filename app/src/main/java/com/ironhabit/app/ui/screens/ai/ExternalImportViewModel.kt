@@ -63,6 +63,8 @@ class ExternalImportViewModel @Inject constructor(
         val isParsing: Boolean = false,
         /** 整份拒收时的那一句说明；`null` = 没有拒收。 */
         @StringRes val refusalRes: Int? = null,
+        /** 模型在 `analysis` 里自己说的话，跟着拒收一起摊开（它常常就是原因）。 */
+        val refusalAnalysis: String? = null,
         /** 逐条"什么没进来 / 什么被动过"。拒收时也可能非空（全被挡掉那一种）。 */
         val notes: List<ExternalPlanNote> = emptyList(),
         @StringRes val snackbarRes: Int? = null,
@@ -117,6 +119,7 @@ class ExternalImportViewModel @Inject constructor(
                 isBuildingTemplate = false,
                 templateFailedRes = null,
                 refusalRes = null,
+                refusalAnalysis = null,
                 notes = emptyList(),
             )
         }
@@ -129,7 +132,9 @@ class ExternalImportViewModel @Inject constructor(
     }
 
     fun onTextChange(text: String) {
-        _uiState.update { it.copy(text = text, refusalRes = null, notes = emptyList()) }
+        _uiState.update {
+            it.copy(text = text, refusalRes = null, refusalAnalysis = null, notes = emptyList())
+        }
     }
 
     /** 「读取剪贴板」按下的结果由 UI 层传进来（剪贴板只能从 Compose 侧读）。 */
@@ -138,7 +143,9 @@ class ExternalImportViewModel @Inject constructor(
             _uiState.update { it.copy(snackbarRes = R.string.ai_import_clipboard_empty) }
             return
         }
-        _uiState.update { it.copy(text = clipboardText, refusalRes = null, notes = emptyList()) }
+        _uiState.update {
+            it.copy(text = clipboardText, refusalRes = null, refusalAnalysis = null, notes = emptyList())
+        }
     }
 
     /**
@@ -183,7 +190,9 @@ class ExternalImportViewModel @Inject constructor(
         if (_uiState.value.isParsing) return
         val text: String = _uiState.value.text
         val weekStart: Long = weekStartEpochDay()
-        _uiState.update { it.copy(isParsing = true, refusalRes = null, notes = emptyList()) }
+        _uiState.update {
+            it.copy(isParsing = true, refusalRes = null, refusalAnalysis = null, notes = emptyList())
+        }
 
         viewModelScope.launch {
             val result: ExternalPlanImport = importPlan(text, weekStart)
@@ -193,6 +202,8 @@ class ExternalImportViewModel @Inject constructor(
                     it.copy(
                         isParsing = false,
                         refusalRes = refusalResFor(result.reason),
+                        // 模型自己那句话是原因本体（"没收到动作库"之类），比我们能猜的诊断准。
+                        refusalAnalysis = result.analysis,
                         notes = result.notes,
                     )
                 }
@@ -215,6 +226,7 @@ class ExternalImportViewModel @Inject constructor(
                             sheetOpen = false,
                             text = "",
                             refusalRes = null,
+                            refusalAnalysis = null,
                             notes = emptyList(),
                             previewRequested = true,
                         )
@@ -244,6 +256,7 @@ class ExternalImportViewModel @Inject constructor(
         ExternalDocRefusal.NOT_A_DOCUMENT -> R.string.ai_import_refuse_not_json
         ExternalDocRefusal.WRONG_SCHEMA -> R.string.ai_import_refuse_wrong_schema
         ExternalDocRefusal.TOO_LARGE -> R.string.ai_import_refuse_too_large
+        ExternalDocRefusal.EMPTY_PLAN -> R.string.ai_import_refuse_empty_plan
         ExternalDocRefusal.NO_USABLE_ITEMS -> R.string.ai_import_refuse_no_items
     }
 }

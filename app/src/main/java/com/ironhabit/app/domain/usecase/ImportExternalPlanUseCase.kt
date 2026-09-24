@@ -47,7 +47,7 @@ class ImportExternalPlanUseCase @Inject constructor(
 
             when (parsed) {
                 is ExternalDocOutcome.Refused ->
-                    ExternalPlanImport.Refused(parsed.reason, parsed.notes)
+                    ExternalPlanImport.Refused(parsed.reason, parsed.notes, parsed.analysis)
 
                 is ExternalDocOutcome.Parsed -> {
                     // 🔒 必须拿**该周全量**（含软删除行）：投影器靠它挡手改/软删槽位。
@@ -84,8 +84,17 @@ class ImportExternalPlanUseCase @Inject constructor(
 /** 导入的三态。界面对每一态都有**各自**的说法，不许合并成"成功/失败"两态。 */
 sealed interface ExternalPlanImport {
 
-    /** 整份不收（格式不对 / 不是本 App 的合同 / 太大 / 一条有效都没有），[notes] 在"全被挡掉"时仍有内容。 */
-    data class Refused(val reason: ExternalDocRefusal, val notes: List<ExternalPlanNote> = emptyList()) : ExternalPlanImport
+    /**
+     * 整份不收（格式不对 / 不是本 App 的合同 / 太大 / 一条有效都没有）。
+     *
+     * [analysis] 是模型自己写的那段话：它经常在里面直接说了为什么没排（"没收到动作库"），
+     * 那是用户唯一能看懂的原因，不显示出来就等于把线索扔掉。
+     */
+    data class Refused(
+        val reason: ExternalDocRefusal,
+        val notes: List<ExternalPlanNote> = emptyList(),
+        val analysis: String? = null,
+    ) : ExternalPlanImport
 
     /**
      * 读通了、也合法，但本周没有一个槽位能写（全被保护规则挡住）。

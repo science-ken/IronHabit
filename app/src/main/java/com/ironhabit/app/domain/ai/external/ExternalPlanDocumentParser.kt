@@ -96,8 +96,17 @@ object ExternalPlanDocumentParser {
 
         if (days.isEmpty()) {
             // 和内置 B-3 同口径：一条都不剩 ≠ "这周什么都不练"。当成有效结果送去采纳会把整周清空。
-            // 但清单要给出去 —— "为什么一条都没进来"这时候最值钱。
-            return ExternalDocOutcome.Refused(ExternalDocRefusal.NO_USABLE_ITEMS, notes.toList())
+            //
+            // 但两种"空"要给两句话，因为下一步完全不同：
+            // - 文档里**根本没写动作**（days 为空 / 每天 items 都空）→ 多半是它没收到 library，
+            //   该重发模板；这时候说"动作名对不上"是把用户往错方向支。
+            // - 写了动作但**每条都被防线挡掉** → 才是名字对不上，逐条清单在这里最值钱。
+            val hadAnyItem: Boolean = document.days.any { day -> day.items.isNotEmpty() }
+            return ExternalDocOutcome.Refused(
+                reason = if (hadAnyItem) ExternalDocRefusal.NO_USABLE_ITEMS else ExternalDocRefusal.EMPTY_PLAN,
+                notes = notes.toList(),
+                analysis = document.analysis?.trim()?.takeIf { it.isNotEmpty() },
+            )
         }
 
         return ExternalDocOutcome.Parsed(
@@ -258,6 +267,8 @@ sealed interface ExternalDocOutcome {
     data class Refused(
         val reason: ExternalDocRefusal,
         val notes: List<ExternalPlanNote> = emptyList(),
+        /** 模型自己在 `analysis` 里写的话。拒收时尤其要看它 —— 它常常直接说了为什么没排。 */
+        val analysis: String? = null,
     ) : ExternalDocOutcome
 }
 
@@ -275,7 +286,10 @@ enum class ExternalDocRefusal {
     /** 超过 [ExternalPlanDocumentParser.MAX_DOC_BYTES]。 */
     TOO_LARGE,
 
-    /** 读通了但一条有效条目都没有（全被防线挡掉）—— 与内置 B-3 同口径，不能当有效结果落库。 */
+    /** 文档结构上就没写任何动作（`days` 空 / 每天 `items` 都空）—— 与下面那条不同，多半是它没收到动作库。 */
+    EMPTY_PLAN,
+
+    /** 写了动作，但每一条都被防线挡掉（全对不上动作库）—— 与内置 B-3 同口径，不能当有效结果落库。 */
     NO_USABLE_ITEMS,
 }
 

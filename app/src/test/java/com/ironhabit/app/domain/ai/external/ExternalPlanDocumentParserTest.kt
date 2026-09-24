@@ -122,6 +122,37 @@ class ExternalPlanDocumentParserTest {
         )
     }
 
+    @Test
+    fun parse_documentWithNoItemsAtAll_isEmptyPlanAndKeepsWhatTheModelSaid() {
+        // 真机实测到的那份输出：三天都是空 items，模型在 analysis 里说了"没收到数据"。
+        // 这必须和"有条目但全被挡掉"分开 —— 前者要重发模板，后者要改动作名。
+        val text = """
+            {"schema":"${ExternalPlanSchema.SCHEMA}","days":[
+                {"dayOfWeek":1,"focus":"FULL_BODY","items":[]},
+                {"dayOfWeek":3,"focus":"LOWER_BODY","items":[]}],
+             "analysis":"未收到 library 与 history 数据，无法逐字匹配动作名，因此只生成三个训练日框架。"}
+        """.trimIndent()
+
+        val outcome = ExternalPlanDocumentParser.parse(text, library)
+
+        val refused = outcome as ExternalDocOutcome.Refused
+        assertEquals(ExternalDocRefusal.EMPTY_PLAN, refused.reason)
+        assertEquals(
+            "模型自己那句话是唯一线索，不能丢",
+            true,
+            refused.analysis?.contains("未收到 library"),
+        )
+    }
+
+    @Test
+    fun parse_emptyDaysArray_isEmptyPlanNotAQuietSuccess() {
+        val text = """{"schema":"${ExternalPlanSchema.SCHEMA}","days":[]}"""
+
+        val refused = ExternalPlanDocumentParser.parse(text, library) as ExternalDocOutcome.Refused
+
+        assertEquals(ExternalDocRefusal.EMPTY_PLAN, refused.reason)
+    }
+
     // ---------------- 整份拒收的五种原因 ----------------
 
     @Test

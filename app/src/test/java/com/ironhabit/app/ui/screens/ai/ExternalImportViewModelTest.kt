@@ -186,15 +186,21 @@ class ExternalImportViewModelTest {
         val vm = viewModel()
         val notes = listOf(ExternalPlanNote(ExternalPlanNote.Kind.UNKNOWN_EXERCISE, 1, "不存在"))
         coEvery { importPlan(any(), any()) } returns ExternalPlanImport.Refused(
-            ExternalDocRefusal.NO_USABLE_ITEMS,
+            ExternalDocRefusal.EMPTY_PLAN,
             notes,
+            analysis = "未收到 library 数据",
         )
         vm.onTextChange("一段读不通的东西")
 
         vm.parse()
         advanceUntilIdle()
 
-        assertEquals(R.string.ai_import_refuse_no_items, vm.uiState.value.refusalRes)
+        assertEquals(R.string.ai_import_refuse_empty_plan, vm.uiState.value.refusalRes)
+        assertEquals(
+            "模型自己那句话要交给界面贴出来，它比 App 猜的原因准",
+            "未收到 library 数据",
+            vm.uiState.value.refusalAnalysis,
+        )
         assertEquals(notes, vm.uiState.value.notes)
         assertFalse("没跳页", vm.uiState.value.previewRequested)
         assertNull(holder.peek())
@@ -209,6 +215,7 @@ class ExternalImportViewModelTest {
             ExternalDocRefusal.NOT_A_DOCUMENT to R.string.ai_import_refuse_not_json,
             ExternalDocRefusal.WRONG_SCHEMA to R.string.ai_import_refuse_wrong_schema,
             ExternalDocRefusal.TOO_LARGE to R.string.ai_import_refuse_too_large,
+            ExternalDocRefusal.EMPTY_PLAN to R.string.ai_import_refuse_empty_plan,
             ExternalDocRefusal.NO_USABLE_ITEMS to R.string.ai_import_refuse_no_items,
         )
         val vm = viewModel()

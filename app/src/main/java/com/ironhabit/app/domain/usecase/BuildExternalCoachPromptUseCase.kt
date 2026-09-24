@@ -44,7 +44,8 @@ class BuildExternalCoachPromptUseCase @Inject constructor(
     suspend operator fun invoke(review: WeeklyReview, targetWeekStartEpochDay: Long): String {
         val profile = settingsRepository.profile().first()
         val daysPerWeek: Int = ProfileLimits.coerceTrainingDaysPerWeek(profile.trainingDaysPerWeek)
-        val packageJson: String = exportWeekPackage(review, includeDetails = true)
+        // 紧凑版：模板要整段粘进聊天框，缩进多出来的字节就是把 library 被截断的概率翻倍。
+        val packageJson: String = exportWeekPackage(review, includeDetails = true, pretty = false)
 
         val weekRows: List<WeekPlan> = planRepository.getRowsForWeek(targetWeekStartEpochDay)
         val names: Map<Long, String> = exerciseRepository.observeActive().first()
@@ -123,11 +124,12 @@ class BuildExternalCoachPromptUseCase @Inject constructor(
 4. items 每项是一个动作：{"exercise":"动作名","targetSets":4,"targetReps":8,"targetWeightKg":80.0}
    • exercise 必须**逐字**取自下面【我的数据】里 library 数组的 name；库里没有的动作一律不要写，也不要建议新动作。
    • targetSets 是 1..31 的整数，targetReps 是 1..100 的整数；自重动作 targetWeightKg 填 null。
-   • 时长/组数/次数/重量按你能从 history 与 progressed 里读到的事实来定，做满且 RPE 偏低可以小幅加重。
+   • 组数/次数/重量按【我的数据】里真有的字段定：week.days[].items 是我实际举起的重量与 RPE，summary.progressed 是本周加过重的动作，summary.stalled 是卡住没动的动作。做满且 RPE 偏低可以小幅加重。
 5. analysis：1~3 句简体中文，说明这份计划为什么这样排（App 会原样显示给用户看）。
 6. 只输出上面这些字段。不要输出、也不要建议修改任何身体测量数据（身高、体重、体脂、年龄）或档案设置——App 这一版只导入训练计划。
+7. 如果你在上面【我的数据】里找不到 library 数组（那是我能用的动作清单），**不要**只回一个空壳计划：请在 analysis 里直接说"没收到 library"，并告诉用户重新复制模板整段再发一次。
 
-【我的数据】以下是我这一周的训练复盘、身体档案与可用动作库（JSON）：
+【我的数据】下面这段 JSON 里有三样你要用到的东西：**library**（我能用的动作清单，只能逐字用里面的 name）、**profile**（目标 / 器械 / 伤病）、**week 与 summary**（这一周实际练了什么、哪些动作在进步、哪些卡住了）。
 {{PACKAGE}}
 
 【要写进的那一周】{{WEEK}}，它目前已经有：
