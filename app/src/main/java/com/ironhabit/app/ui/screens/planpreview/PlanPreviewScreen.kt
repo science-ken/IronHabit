@@ -98,80 +98,96 @@ fun PlanPreviewScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        // 断网或远端报错时结果同样是本地规则，而这页原来只写「本地规则」三个字 ——
-        // 用户白等一次超时却读不到原因。AI 教练屏早就有这句话（`SourceLine`），同一件事说同一句。
-        if (uiState.fellBackFromRemote) {
-            Text(
-                text = stringResource(R.string.ai_source_fallback),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Text(
-            text = stringResource(R.string.plan_preview_hint),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        // 外部文档导入的两句话，都必须在**点采纳之前**读到：
-        // 一句是"这些条以后会被重新生成覆盖"（不说=用户以为问回来的计划从此归他保管），
-        // 一句是逐条"什么没导进来"（不列=他只会发现这周莫名少了两条）。
-        if (uiState.source == AdviceSource.EXTERNAL_AI_IMPORT) {
-            Text(
-                text = stringResource(R.string.plan_preview_import_overwrite),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            ImportPlanNoteList(notes = uiState.importNotes)
-        }
-        // 模型每次都写好了这段「为什么这么排」，以前这一页 grep analysis 零命中 ——
-        // 等于白花钱生成再扔掉。本地规则不产中文（LocalRuleAdvisor 只吐资源名），
-        // 所以 analysis 为 null 时整块不显示，不拿规则文案硬凑一段看起来像 AI 写的话。
-        val analysis: String? = uiState.analysis
-        if (!analysis.isNullOrBlank()) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                ),
-            ) {
-                Column(
-                    modifier = Modifier.padding(IronHabitSpacing.lg),
-                    verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.xs),
-                ) {
+        // ⚠️ 标题以下**全部**放进同一个滚动容器。以前顶部这几块（提示 / 覆盖警告 / 清单 /
+        // 教练说明）是不滚的固定内容，而下面的计划列表用 `weight(1f)` 只吃剩下的空间 ——
+        // 外部 AI 写的「教练说明」动辄四五句，一长就把列表压成一条半，用户既滑不动上面的字，
+        // 也看不到后面几天的计划（真机反馈：「文字无法下滑导致看计划很局限」）。
+        LazyColumn(
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.md),
+        ) {
+            // 断网或远端报错时结果同样是本地规则，而这页原来只写「本地规则」三个字 ——
+            // 用户白等一次超时却读不到原因。AI 教练屏早就有这句话（`SourceLine`），同一件事说同一句。
+            if (uiState.fellBackFromRemote) {
+                item {
                     Text(
-                        text = stringResource(R.string.plan_preview_analysis_label),
-                        style = MaterialTheme.typography.labelSmall,
-                    )
-                    Text(
-                        text = analysis,
-                        style = MaterialTheme.typography.bodyMedium,
+                        text = stringResource(R.string.ai_source_fallback),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
-        }
-        if (uiState.preservedCount > 0) {
-            Text(
-                text = stringResource(R.string.plan_preview_preserved, uiState.preservedCount),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+            item {
+                Text(
+                    text = stringResource(R.string.plan_preview_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (uiState.source == AdviceSource.EXTERNAL_AI_IMPORT) {
+                // 外部文档导入的两句话，都必须在**点采纳之前**读到：
+                // 一句是"这些条以后会被重新生成覆盖"（不说=用户以为问回来的计划从此归他保管），
+                // 一句是逐条"什么没导进来"（不列=他只会发现这周莫名少了两条）。
+                item {
+                    Text(
+                        text = stringResource(R.string.plan_preview_import_overwrite),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                item { ImportPlanNoteList(notes = uiState.importNotes) }
+            }
+            // 模型每次都写好了这段「为什么这么排」，以前这一页 grep analysis 零命中 ——
+            // 等于白花钱生成再扔掉。本地规则不产中文（LocalRuleAdvisor 只吐资源名），
+            // 所以 analysis 为 null 时整块不显示，不拿规则文案硬凑一段看起来像 AI 写的话。
+            val analysis: String? = uiState.analysis
+            if (!analysis.isNullOrBlank()) {
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        ),
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(IronHabitSpacing.lg),
+                            verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.xs),
+                        ) {
+                            Text(
+                                text = stringResource(R.string.plan_preview_analysis_label),
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                            Text(
+                                text = analysis,
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                    }
+                }
+            }
+            if (uiState.preservedCount > 0) {
+                item {
+                    Text(
+                        text = stringResource(R.string.plan_preview_preserved, uiState.preservedCount),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
 
-        if (uiState.days.isEmpty()) {
-            Text(
-                text = stringResource(R.string.plan_preview_empty),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.fillMaxWidth().padding(top = IronHabitSpacing.xl),
-                textAlign = TextAlign.Center,
-            )
-        }
+            if (uiState.days.isEmpty()) {
+                item {
+                    Text(
+                        text = stringResource(R.string.plan_preview_empty),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.fillMaxWidth().padding(top = IronHabitSpacing.xl),
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            }
 
-        LazyColumn(
-            modifier = Modifier.weight(1f).fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
-        ) {
             items(uiState.days, key = { day -> day.dayOfWeek }) { day ->
                 DayCard(
                     day = day,
