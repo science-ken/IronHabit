@@ -84,6 +84,17 @@ class ImportExternalPlanUseCase @Inject constructor(
                             preview = preview,
                             notes = parsed.draft.notes,
                             profileDiffs = parsed.draft.profile.diffsAgainst(profile),
+                            // 投影成 WeekPlan 时"为什么"会被丢掉（库里没这一列），
+                            // 所以在丢之前先按「天 × 动作」摘出来，交给预览页折叠显示。
+                            reasons = parsed.draft.proposal.days
+                                .flatMap { day ->
+                                    day.items.mapNotNull { item ->
+                                        item.explanation?.let { explanation ->
+                                            (day.dayOfWeek to item.exerciseId) to explanation
+                                        }
+                                    }
+                                }
+                                .toMap(),
                         )
                     }
                 }
@@ -126,5 +137,7 @@ sealed interface ExternalPlanImport {
         val preview: PlanPreview,
         val notes: List<ExternalPlanNote>,
         val profileDiffs: List<ProfileFieldDiff> = emptyList(),
+        /** 「天 × 动作」→ 模型写的那句为什么。只在预览页折叠显示，**不落库**。 */
+        val reasons: Map<Pair<Int, Long>, String> = emptyMap(),
     ) : ExternalPlanImport
 }

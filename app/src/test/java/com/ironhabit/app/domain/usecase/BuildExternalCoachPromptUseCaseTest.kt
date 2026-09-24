@@ -208,6 +208,19 @@ class BuildExternalCoachPromptUseCaseTest {
     }
 
     @Test
+    fun template_asksForAPerItemReason_andTheExampleCarriesOne() = runTest {
+        stub()
+
+        val text = useCase()(review, weekStart)
+
+        assertTrue("不点名要，模型不会主动给每条动作写理由", text.contains("\"reason\""))
+        assertTrue(
+            "示例里也得带一个：模型是照着示例的形状输出的，示例没有它就会省略",
+            text.contains("上周做满且 RPE 6，小幅加重"),
+        )
+    }
+
+    @Test
     fun template_tellsTheModelNotToTouchMeasurements() = runTest {
         stub()
 

@@ -182,6 +182,15 @@ data class PlanItemDraft(
      */
     val targetDurationMin: Int? = null,
     val reason: PlanReason,
+    /**
+     * 外部 AI 文档给这一条写的**一句话解释**（自由文本）。
+     *
+     * ⚠️ **不落库**：`week_plans` 没有对应列，采纳之后这句话就没了 —— 它是"这次决定的理由"，
+     * 不是动作的永久备注。为它加一列要动数据库迁移 + 备份 schema + 实体 + DAO，
+     * 换来的是一条 AI 写的注释常驻在计划行上，不值。
+     * 内置生成与本地规则恒为 `null`（它们不产中文，见 `LocalRuleAdvisor` 只吐资源名）。
+     */
+    val explanation: String? = null,
 )
 
 /** 一条"为什么这样排"（纯数据，UI 只渲染）。 */

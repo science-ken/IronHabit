@@ -156,6 +156,56 @@ class ExternalPlanDocumentParserTest {
         assertEquals(ExternalDocRefusal.EMPTY_PLAN, refused.reason)
     }
 
+    // ---------------- 每条动作的"为什么"（刀 3）----------------
+
+    @Test
+    fun parse_itemReason_isKeptForThePreview_withoutTouchingTheNumbers() {
+        val draft = parsed(
+            doc("""{"exercise":"杠铃深蹲","targetSets":3,"targetReps":12,"reason":"上周做满且 RPE 6"}"""),
+        )
+
+        val item = draft.proposal.days.single().items.single()
+        assertEquals("上周做满且 RPE 6", item.explanation)
+        assertEquals("理由只是文字，不参与任何数字", 3, item.targetSets)
+    }
+
+    @Test
+    fun parse_overLongItemReason_isTruncatedNotDropped() {
+        val long: String = "顶".repeat(ExternalPlanDocumentParser.MAX_REASON_CHARS + 140)
+
+        val draft = parsed(doc("""{"exercise":"杠铃深蹲","targetSets":3,"targetReps":12,"reason":"$long"}"""))
+
+        val kept: String? = draft.proposal.days.single().items.single().explanation
+        assertEquals(
+            "整段丢掉等于这条没理由；留前半句才是理由本体",
+            ExternalPlanDocumentParser.MAX_REASON_CHARS,
+            kept?.length,
+        )
+    }
+
+    @Test
+    fun parse_blankItemReason_becomesNull_soTheToggleDoesNotAppear() {
+        val draft = parsed(doc("""{"exercise":"杠铃深蹲","targetSets":3,"targetReps":12,"reason":"   "}"""))
+
+        assertNull(draft.proposal.days.single().items.single().explanation)
+    }
+
+    @Test
+    fun parse_droppedItem_takesItsReasonAlong() {
+        // 动作名对不上 → 整条丢，它那句理由也跟着消失（否则会出现"给一条不存在的动作解释"）。
+        val outcome = ExternalPlanDocumentParser.parse(
+            doc("""{"exercise":"不存在的动作","targetSets":3,"targetReps":12,"reason":"很有道理"}"""),
+            library,
+        )
+
+        val refused = outcome as ExternalDocOutcome.Refused
+        assertEquals(ExternalDocRefusal.NO_USABLE_ITEMS, refused.reason)
+        assertEquals(
+            listOf(ExternalPlanNote.Kind.UNKNOWN_EXERCISE),
+            refused.notes.map { it.kind },
+        )
+    }
+
     // ---------------- 整份拒收的五种原因 ----------------
 
     @Test

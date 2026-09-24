@@ -38,8 +38,13 @@ class PlanPreviewViewModel @Inject constructor(
     private val applyProfile: ApplyExternalProfileUseCase,
 ) : ViewModel() {
 
-    /** 一条草案的展示形态（动作名已经从库里查好了）。 */
-    data class Item(val name: String, val goal: String)
+    /**
+     * 一条草案的展示形态（动作名已经从库里查好了）。
+     *
+     * [explanation] 是外部 AI 给这一条写的"为什么"，只在预览页折叠显示；
+     * 内置生成与本地规则恒为 `null`（库里没有这一列，采纳之后这句话就没了）。
+     */
+    data class Item(val name: String, val goal: String, val explanation: String? = null)
 
     /**
      * 一行档案改动 + 用户勾没勾。
@@ -122,6 +127,7 @@ class PlanPreviewViewModel @Inject constructor(
         viewModelScope.launch {
             val names: Map<Long, String> = exerciseRepository.observeActive().first()
                 .associate { exercise -> exercise.id to exercise.name }
+            val reasons: Map<Pair<Int, Long>, String> = holder.peekReasons()
             _uiState.update { state ->
                 state.copy(
                     weekRange = weekRangeText(snapshot.weekStartEpochDay),
@@ -138,7 +144,13 @@ class PlanPreviewViewModel @Inject constructor(
                                 dayOfWeek = day,
                                 dateLabel = monthDayText(snapshot.weekStartEpochDay + day - 1),
                                 sets = rows.sumOf { row -> row.targetSets },
-                                items = rows.map { row -> Item(name = names[row.exerciseId] ?: "-", goal = goalOf(row)) },
+                                items = rows.map { row ->
+                                    Item(
+                                        name = names[row.exerciseId] ?: "-",
+                                        goal = goalOf(row),
+                                        explanation = reasons[day to row.exerciseId],
+                                    )
+                                },
                                 kind = Kind.DRAFT,
                             )
 

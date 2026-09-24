@@ -670,6 +670,10 @@
     <string name="plan_preview_field_injury_note">伤病备注</string>
     <string name="plan_preview_profile_empty">（不设）</string>
     <string name="plan_preview_profile_days_value">%1$d 天</string>
+    <!-- ===== 每条动作的"为什么"（刀 3）===== -->
+    <!-- 默认折起来：它是文字，不该和组数次数抢视觉；但入口必须在，那正是换用外部模型的理由。 -->
+    <string name="plan_preview_reasons_show">看它为什么这样排（%1$d）</string>
+    <string name="plan_preview_reasons_hide">收起理由</string>
     <!-- 不说这句，用户会以为问回来的计划从此归他保管；它其实是「AI 生成的行」，下次重排会被停用。 -->
     <string name="plan_preview_import_overwrite">导入的这些条算「AI 生成的行」：以后点「生成计划」时，没被再次列出的会被停用。想留住就在计划里手动改那一条。</string>
 

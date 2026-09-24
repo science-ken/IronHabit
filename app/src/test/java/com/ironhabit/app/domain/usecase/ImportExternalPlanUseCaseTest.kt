@@ -157,6 +157,23 @@ class ImportExternalPlanUseCaseTest {
         )
     }
 
+    @Test
+    fun import_ready_carriesPerItemReasonsKeyedByDayAndExercise() = runTest {
+        stub(library)
+        val text = document(
+            """{"exercise":"杠铃深蹲","targetSets":3,"targetReps":12,"reason":"做满且强度有余量"}""",
+            day = 1,
+        )
+
+        val ready = useCase()(text, targetWeek) as ExternalPlanImport.Ready
+
+        assertEquals(
+            "投影成 WeekPlan 时理由会被丢掉（库里没这一列），所以要在丢之前按「天 × 动作」摘出来",
+            mapOf((1 to 1L) to "做满且强度有余量"),
+            ready.reasons,
+        )
+    }
+
     // ---------------- 保护规则确实生效（不是只在投影器里说说） ----------------
 
     @Test

@@ -219,7 +219,7 @@ class ExternalImportViewModel @Inject constructor(
                 }
 
                 is ExternalPlanImport.Ready -> {
-                    planPreviewHolder.set(result.preview, result.notes, result.profileDiffs)
+                    planPreviewHolder.set(result.preview, result.notes, result.profileDiffs, result.reasons)
                     _uiState.update { state ->
                         state.copy(
                             isParsing = false,

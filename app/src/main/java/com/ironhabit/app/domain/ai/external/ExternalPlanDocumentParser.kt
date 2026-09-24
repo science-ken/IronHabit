@@ -53,6 +53,14 @@ object ExternalPlanDocumentParser {
     const val MAX_ITEMS_PER_DAY: Int = 12
 
     /**
+     * 一条"为什么"保留多少字。
+     *
+     * 模板要的是**一句话**，模型偶尔会交一整段。160 字够写完一句带从句的解释，
+     * 再长就不该出现在一张卡片里 —— 截断而不是丢弃，因为前半句通常就是理由本体。
+     */
+    const val MAX_REASON_CHARS: Int = 160
+
+    /**
      * 把用户粘回来的文本读成草案。
      *
      * @param text 粘贴的原始文本（可能带围栏、前后有模型的解释话）
@@ -178,6 +186,8 @@ object ExternalPlanDocumentParser {
                     ?.let { seconds -> seconds / SECONDS_PER_MINUTE }
                     ?.takeIf { minutes -> minutes >= MIN_DURATION_MIN },
                 reason = if (resolved.isEmpty()) PlanReason.PRIMARY_LIFT else PlanReason.SUPPLEMENT,
+                // 只截不断：模型写了一整段时留前 160 字，比"这条没有理由"有用，也不会撑爆卡片。
+                explanation = raw.reason?.trim()?.takeIf { it.isNotEmpty() }?.take(MAX_REASON_CHARS),
             )
         }
         return resolved
@@ -412,6 +422,8 @@ private data class ExternalItem(
     val targetSets: Int,
     val targetReps: Int,
     val targetWeightKg: Float? = null,
+    /** 可选：这一条为什么排进来（自由文本，只在预览页折叠显示，不落库）。 */
+    val reason: String? = null,
 )
 
 /**

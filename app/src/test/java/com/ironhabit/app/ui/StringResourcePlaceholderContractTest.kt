@@ -181,6 +181,8 @@ class StringResourcePlaceholderContractTest {
         entry("plan_preview_profile_days_value", ArgKind.NUMERIC)
         entry("plan_preview_profile_apply", ArgKind.NUMERIC)
         entry("plan_preview_profile_applied", ArgKind.STRING)
+        // 刀 3：每条动作"为什么"的展开按钮（计数是 Int，走 %d）。
+        entry("plan_preview_reasons_show", ArgKind.NUMERIC)
 
         // ---------------- 【未使用】strings.xml 有占位符、代码暂无引用 ----------------
         entry("label_week_of", ArgKind.STRING)

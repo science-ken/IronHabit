@@ -17,9 +17,13 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -340,6 +344,10 @@ private fun DayCard(day: PlanPreviewViewModel.Day, weekday: Int, onAdopt: () -> 
                     )
                 }
             }
+            // 外部 AI 给每条动作写的"为什么"。默认折起来 —— 它是文字，不该和组数次数抢视觉；
+            // 但必须留一个入口，那正是用户把外部模型换掉内置模型的主要理由。
+            val explainedCount: Int = day.items.count { item -> !item.explanation.isNullOrBlank() }
+            var reasonsExpanded by remember(day.dayOfWeek) { mutableStateOf(false) }
             day.items.forEach { item ->
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(
@@ -352,6 +360,32 @@ private fun DayCard(day: PlanPreviewViewModel.Day, weekday: Int, onAdopt: () -> 
                         text = item.goal,
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                // 理由跟在**它解释的那一行**下面，而不是另起一块清单：
+                // 分开放的话用户得自己在两处之间对号，那是"为什么是它"最没用的呈现方式。
+                if (reasonsExpanded) {
+                    item.explanation?.let { reason ->
+                        Text(
+                            text = "· $reason",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.fillMaxWidth().padding(bottom = IronHabitSpacing.xs),
+                        )
+                    }
+                }
+            }
+            if (explainedCount > 0) {
+                TextButton(
+                    onClick = { reasonsExpanded = !reasonsExpanded },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        text = if (reasonsExpanded) {
+                            stringResource(R.string.plan_preview_reasons_hide)
+                        } else {
+                            stringResource(R.string.plan_preview_reasons_show, explainedCount)
+                        },
                     )
                 }
             }

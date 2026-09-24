@@ -139,6 +139,7 @@ class BuildExternalCoachPromptUseCase @Inject constructor(
    • exercise 必须**逐字**取自下面【我的数据】里 library 数组的 name；库里没有的动作一律不要写，也不要建议新动作。
    • targetSets 是 1..31 的整数，targetReps 是 1..100 的整数；自重动作 targetWeightKg 填 null。
    • 组数/次数/重量按【我的数据】里真有的字段定：week.days[].items 是我实际举起的重量与 RPE，summary.progressed 是本周加过重的动作，summary.stalled 是卡住没动的动作。做满且 RPE 偏低可以小幅加重。
+   • 可选 "reason"：用一句话（40 字以内）说明**为什么排这个动作**。App 里默认折叠，用户点开才看得到，所以别把同样的话再写进 analysis。
 5. analysis：1~3 句简体中文，说明这份计划为什么这样排（App 会原样显示给用户看）。
 6. 只有在你确实认为该调整时，才在顶层加一个 "profile" 对象；**只允许下面这些字段**，枚举值必须逐字照抄（大写、不改拼写）：
    • goal：{{GOALS}}
@@ -158,7 +159,7 @@ class BuildExternalCoachPromptUseCase @Inject constructor(
 这些不要重复排、也不要删；要改就改组数次数重量。
 
 【输出示例（只示意结构，动作名换成我库里的）】
-{"schema":"{{SCHEMA}}","analysis":"结合你的增肌目标与上周深蹲做满且强度有余量，本周加重并补一个髋部动作。","days":[{"dayOfWeek":1,"focus":"LOWER_BODY","items":[{"exercise":"杠铃深蹲","targetSets":4,"targetReps":8,"targetWeightKg":80.0}]}]}
+{"schema":"{{SCHEMA}}","analysis":"结合你的增肌目标与上周深蹲做满且强度有余量，本周加重并补一个髋部动作。","days":[{"dayOfWeek":1,"focus":"LOWER_BODY","items":[{"exercise":"杠铃深蹲","targetSets":4,"targetReps":8,"targetWeightKg":80.0,"reason":"上周做满且 RPE 6，小幅加重"}]}]}
         """.trimIndent()
     }
 }
