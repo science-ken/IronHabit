@@ -22,8 +22,16 @@ import kotlinx.serialization.json.Json
  */
 internal object RemotePromptBuilder {
 
-    /** 一周计划的 system 段。 */
-    fun buildPlanSystemPrompt(): String = PLAN_SYSTEM_PROMPT
+    /**
+     * 一周计划的 system 段。
+     *
+     * ⚠️ 训练日数**必须来自档案**（[com.ironhabit.app.domain.model.ProfileLimits.coerceTrainingDaysPerWeek]
+     * 之后的值），不能写死：写死成 3 会让"app 内置生成"永远给 3 天，而档案里填 5 天的用户
+     * 自己拿去外部 AI 问回来的是 5 天 —— 两条通道对同一个档案给出不同天数，用户只会把这笔账
+     * 算到导入功能头上。占位符替换而不是字符串插值：让提示词正文仍然是**一处可读的常量**。
+     */
+    fun buildPlanSystemPrompt(trainingDaysPerWeek: Int): String =
+        PLAN_SYSTEM_PROMPT.replace(TRAINING_DAYS_PLACEHOLDER, trainingDaysPerWeek.toString())
 
     /** 补充动作建议的 system 段。 */
     fun buildSuggestSystemPrompt(): String = SUGGEST_SYSTEM_PROMPT
@@ -169,6 +177,9 @@ internal object RemotePromptBuilder {
 
     // ---------------- 提示词常量 ----------------
 
+    /** 提示词里的训练日数占位符（由 [buildPlanSystemPrompt] 替换成档案值）。 */
+    private const val TRAINING_DAYS_PLACEHOLDER: String = "{{TRAINING_DAYS}}"
+
     private const val PLAN_SYSTEM_PROMPT: String = """
 你是一名专业的健身教练，根据用户的身体档案、可用器械、伤病部位与既有动作库，为用户安排一周训练计划。
 
@@ -176,7 +187,7 @@ internal object RemotePromptBuilder {
 1. 只输出一个 JSON 对象（不要使用 Markdown 代码块围栏）；允许在 JSON 顶层附带一个 `analysis` 字段（自然语言分析，见第 8 条）。
 2. exerciseId 只能从"动作库"里给出的 id 中选择，禁止使用列表之外的 id，禁止编造 id。
 3. 用户伤病的部位必须避开其对应肌群（如膝伤避开腿部/臀腿/全身类动作）。
-4. 每周安排 3 个训练日，优先周一(1)、周三(3)、周五(5)；dayOfWeek 取值 1..7（1=周一，7=周日）。
+4. 每周只安排 {{TRAINING_DAYS}} 个训练日（这是硬上限，一条都不要多排），尽量均匀分布在一周里；dayOfWeek 取值 1..7（1=周一，7=周日）。
 5. focus 只能取：FULL_BODY / LOWER_BODY / UPPER_PUSH / UPPER_PULL / CARDIO_CORE。
 6. targetSets 为 1..31 的整数（31 是逐组打卡位图的上限），targetReps 为 1..100 的整数；自重动作 targetWeightKg 填 null。
 7. 优先使用用户做过的动作并参考 history：上次做满且 RPE<=6 可小幅加重（约 +2.5kg），否则维持。

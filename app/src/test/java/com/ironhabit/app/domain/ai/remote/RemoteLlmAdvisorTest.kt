@@ -196,6 +196,48 @@ class RemoteLlmAdvisorTest {
     }
 
     @Test
+    fun planWeek_systemPrompt_takesTrainingDaysFromProfile() {
+        val api = FakeApi { _, _, _ -> """{"days":[]}""" }
+        val advisor = RemoteLlmAdvisor(api, credentials)
+
+        advisor.planWeek(
+            profile = com.ironhabit.app.domain.model.UserProfile(trainingDaysPerWeek = 5),
+            library = library,
+            existing = emptyList(),
+            history = emptyList(),
+            today = kotlinx.datetime.LocalDate(2026, 9, 14),
+        )
+
+        assertTrue(
+            "提示词的训练日数必须来自档案：写死 3 会让内置生成与外部导入对同一档案给出不同天数",
+            api.lastSystem!!.contains("每周只安排 5 个训练日"),
+        )
+        assertTrue(
+            "占位符必须被替换掉（残留 {{...}} 等于模型收到一句没写完的话）",
+            !api.lastSystem!!.contains("{{TRAINING_DAYS}}"),
+        )
+    }
+
+    @Test
+    fun planWeek_systemPrompt_clampsOutOfDomainTrainingDays() {
+        val api = FakeApi { _, _, _ -> """{"days":[]}""" }
+        val advisor = RemoteLlmAdvisor(api, credentials)
+
+        advisor.planWeek(
+            profile = com.ironhabit.app.domain.model.UserProfile(trainingDaysPerWeek = 99),
+            library = library,
+            existing = emptyList(),
+            history = emptyList(),
+            today = kotlinx.datetime.LocalDate(2026, 9, 14),
+        )
+
+        assertTrue(
+            "档案合法域 3..6：越界值必须按 ProfileLimits 钳制后才进提示词",
+            api.lastSystem!!.contains("每周只安排 6 个训练日"),
+        )
+    }
+
+    @Test
     fun planWeek_apiFailure_throwsIdentifiableException() {
         val api = FakeApi { _, _, _ -> throw IOException("DeepSeek HTTP 503") }
         val advisor = RemoteLlmAdvisor(api, credentials)

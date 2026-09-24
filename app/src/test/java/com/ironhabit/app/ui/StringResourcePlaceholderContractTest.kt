@@ -162,6 +162,22 @@ class StringResourcePlaceholderContractTest {
         entry("label_active_days", ArgKind.NUMERIC, ArgKind.NUMERIC) // 有打卡的天数 / 区间天数
         entry("label_peak_count", ArgKind.NUMERIC) // 柱状卡右上角：区间内单日最高次数
 
+        // ---------------- 【外部 AI 文档导入】清单与周标签（实参一律 toString() 成 String） ----------------
+        // 导入弹层的周 chip：AiCoachScreen 的 weekRangeText(...) 产出（区间文本是字符串）
+        entry("ai_import_week_this", ArgKind.STRING)
+        entry("ai_import_week_next", ArgKind.STRING)
+        // 通道：AiCoachUiState.snackbarArgs（List<Any> spread，实参走 toString()）
+        entry("ai_import_nothing_adoptable", ArgKind.STRING)
+        // 预览页的"没导进来"清单：subject 与 args 一律 .toString() 后传 String，
+        // 这样这一组的类型口径只有一种，不会因为 %d 收到 String 而运行时崩。
+        entry("plan_preview_note_unknown_exercise", ArgKind.STRING)
+        entry("plan_preview_note_duplicate", ArgKind.STRING)
+        entry("plan_preview_note_over_limit", ArgKind.STRING, ArgKind.STRING)
+        entry("plan_preview_note_sets_clamped", ArgKind.STRING, ArgKind.STRING)
+        entry("plan_preview_note_reps_clamped", ArgKind.STRING, ArgKind.STRING)
+        entry("plan_preview_note_profile_forbidden", ArgKind.STRING)
+        entry("plan_preview_note_profile_not_applied", ArgKind.STRING)
+
         // ---------------- 【未使用】strings.xml 有占位符、代码暂无引用 ----------------
         entry("label_week_of", ArgKind.STRING)
         entry("title_week_plan_by_day", ArgKind.STRING)

@@ -96,6 +96,8 @@
     <string name="plan_preview_empty">没有待采纳的草案了</string>
     <string name="plan_preview_source_local">本地规则</string>
     <string name="plan_preview_source_ai">AI 生成</string>
+    <!-- 不给「AI 生成」：这三个字在用户那里的意思是"App 替我排的"，而这份是他在别处聊回来的。 -->
+    <string name="plan_preview_source_external">外部 AI 导入</string>
     <string name="plan_preview_footer">已采纳 %1$d / %2$d 天 · 共 %3$d 条</string>
     <string name="plan_preview_footer_none">一天都没采纳 · 现在点「取消」什么都不写</string>
     <string name="action_copy_next_week">复制到下周</string>
@@ -554,6 +556,9 @@
     <string name="ai_source_local">本次结果来自本地规则（未联网）</string>
     <string name="ai_source_remote">本次结果由 AI（DeepSeek）生成</string>
     <string name="ai_source_fallback">联网失败，本次已自动改用本地规则</string>
+    <!-- 「未联网、未生成」是这句的全部价值：用户自己聊回来的东西不能写成「AI 生成」，
+         那会让人以为是 App 替他排的课。 -->
+    <string name="ai_source_external">本次结果来自你问的外部 AI（App 未联网、未生成）</string>
 
     <!-- 设置页「AI 设置」区块 -->
     <string name="settings_section_ai">AI 设置</string>
@@ -610,6 +615,46 @@
     <!-- 这枚只把人送到「训练」页；那一页里还要再点一次「动作库」分段。
          小字必须说实话，否则点下去落在「周计划」就是"点 X 得到 Y"。 -->
     <string name="ai_tool_library_note">训练页 · 再点动作库</string>
+
+    <!-- ===== 外部 AI 文档导入（刀 1：只导训练计划）===== -->
+    <string name="ai_tool_import">导入计划</string>
+    <string name="ai_tool_import_note">带去问你自己的 AI</string>
+    <string name="ai_import_title">导入外部 AI 排的计划</string>
+    <!-- 这句是这条通道全部的前提：App 不联网、不花 token，问 AI 发生在手机外面。 -->
+    <string name="ai_import_intro">这一步 App 不联网，也不消耗 token：模板用的数据都在你手机上，问 AI 和拿到回答都在外面完成，回来只做「读成计划 + 你逐天确认」。</string>
+    <string name="ai_import_week_label">写进哪一周</string>
+    <string name="ai_import_week_this">本周 %1$s</string>
+    <string name="ai_import_week_next">下周 %1$s</string>
+    <string name="ai_import_step_template">① 复制这段提问模板，发给你的 AI</string>
+    <string name="ai_import_step_paste">② 把 AI 回答的那段 JSON 粘回来</string>
+    <string name="ai_import_template_copy">复制提问模板</string>
+    <string name="ai_import_template_copied">模板已复制，拿去问你的 AI</string>
+    <string name="ai_import_template_building">正在整理你的数据…</string>
+    <string name="ai_import_template_failed">整理模板失败，退出这一页再试一次</string>
+    <string name="ai_import_paste_hint">把那段 JSON 整段粘贴到这里（带着 AI 的寒暄也没关系，App 会自己找出 JSON 那一段）</string>
+    <string name="ai_import_read_clipboard">读取剪贴板</string>
+    <string name="ai_import_clipboard_empty">剪贴板里没有文本内容</string>
+    <string name="ai_import_parse">解析并预览</string>
+    <string name="ai_import_parsing">解析中…</string>
+    <!-- 五种整份拒收各说各的下一步，不给一句万能的「格式错误」。 -->
+    <string name="ai_import_refuse_empty">什么都没粘进来。</string>
+    <string name="ai_import_refuse_not_json">这段里找不到能读的 JSON 对象。把模板整段发给 AI，并要求它「只输出 JSON」。</string>
+    <string name="ai_import_refuse_wrong_schema">这段 JSON 没带上本 App 认的合同版本号（顶层那个 schema 字段）。重新复制模板再问一次。</string>
+    <string name="ai_import_refuse_too_large">粘进来的内容太大（上限 512 KB）。只要那段计划 JSON，别把整段聊天记录搬来。</string>
+    <string name="ai_import_refuse_no_items">这段 JSON 读通了，但没有一条能用 —— 多半是动作名和你库里的名字对不上，下面逐条说了原因。</string>
+    <string name="ai_import_nothing_adoptable">这一周能写的槽位都被你自己的改动挡住了（已保留 %1$s 条），这次什么都没导入。</string>
+    <!-- 清单必须摊开：用户看不见动作库 id，也只有列出来他才知道是"库里没有"而不是"App 偷偷少写"。 -->
+    <string name="plan_preview_import_notes_title">这份文档里没导进来的</string>
+    <string name="plan_preview_note_unknown_exercise">%1$s：动作库里找不到这个名字，没导入</string>
+    <string name="plan_preview_note_blank_name">有一条动作名是空的，没导入</string>
+    <string name="plan_preview_note_duplicate">%1$s：这天出现了两次，只留第一条</string>
+    <string name="plan_preview_note_over_limit">%1$s：这天已经有 %2$s 条，超出的没导入</string>
+    <string name="plan_preview_note_sets_clamped">%1$s：组数 %2$s 超出可记录范围，已按上限改过</string>
+    <string name="plan_preview_note_reps_clamped">%1$s：次数 %2$s 超出可记录范围，已按上限改过</string>
+    <string name="plan_preview_note_profile_forbidden">%1$s 是你的实测数据，App 不收 AI 填的这一项</string>
+    <string name="plan_preview_note_profile_not_applied">这份文档还想改你 %1$s 项档案设置 —— 现在只导入计划，那几项没有应用</string>
+    <!-- 不说这句，用户会以为问回来的计划从此归他保管；它其实是「AI 生成的行」，下次重排会被停用。 -->
+    <string name="plan_preview_import_overwrite">导入的这些条算「AI 生成的行」：以后点「生成计划」时，没被再次列出的会被停用。想留住就在计划里手动改那一条。</string>
 
     <!-- ===== 周复盘 + 数据包（P2）===== -->
     <string name="ai_review_title">本周复盘</string>

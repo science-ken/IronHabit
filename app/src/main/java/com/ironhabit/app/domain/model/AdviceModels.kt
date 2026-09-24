@@ -22,6 +22,16 @@ enum class AdviceSource {
 
     /** 将来的联网大模型（本期不实现）。 */
     REMOTE_LLM,
+
+    /**
+     * 用户拿去**外部 AI**（ChatGPT / DeepSeek 网页版…）问出来、再粘回 app 的文档。
+     *
+     * ⚠️ 单独立一个值，不复用 [REMOTE_LLM]：那两条的差别用户看得见也管不着 ——
+     * [REMOTE_LLM] 是 **app 自己发的网络请求**（花用户的钱、受「AI 联网增强」开关与 Key 管），
+     * 而这条路**app 一次网络都没发、一个 token 都没花**。标成"AI 生成"会让人以为
+     * 是 app 排的计划，而它其实是用户在别处聊出来的。
+     */
+    EXTERNAL_AI_IMPORT,
 }
 
 /**

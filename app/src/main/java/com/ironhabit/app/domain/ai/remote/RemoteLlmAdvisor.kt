@@ -12,6 +12,7 @@ import com.ironhabit.app.domain.model.PlanNoteDetail
 import com.ironhabit.app.domain.model.PlanProposal
 import com.ironhabit.app.domain.model.PlanReason
 import com.ironhabit.app.domain.model.PlannedDay
+import com.ironhabit.app.domain.model.ProfileLimits
 import com.ironhabit.app.domain.model.SuggestionReason
 import com.ironhabit.app.domain.model.TrainingFocus
 import com.ironhabit.app.domain.model.UserProfile
@@ -155,8 +156,13 @@ private inline fun <reified T> decodeStrict(raw: String): T {
     }
 }
 
-/** 容忍模型违规包裹 ```json 围栏（system 段已禁止，但双保险）。 */
-private fun stripCodeFence(raw: String): String {
+/**
+ * 容忍模型违规包裹 ```json 围栏（system 段已禁止，但双保险）。
+ *
+ * `internal` 而非 `private`：外部 AI 文档导入那条路粘回来的文本同样常见围栏
+ * （网页里的模型基本都会包一层），这条容忍逻辑不该写两份。
+ */
+internal fun stripCodeFence(raw: String): String {
     var text: String = raw.trim()
     if (text.startsWith("```")) {
         text = text
@@ -202,7 +208,9 @@ class RemoteLlmAdvisor(
         val apiKey: String = credentials.apiKey()
             ?: throw RemoteAdvisorException("API Key 未配置")
         val response: String = completeOrThrow(
-            systemPrompt = RemotePromptBuilder.buildPlanSystemPrompt(),
+            systemPrompt = RemotePromptBuilder.buildPlanSystemPrompt(
+                ProfileLimits.coerceTrainingDaysPerWeek(profile.trainingDaysPerWeek),
+            ),
             userPrompt = RemotePromptBuilder.buildPlanUserPrompt(profile, library, existing, history),
             apiKey = apiKey,
         )

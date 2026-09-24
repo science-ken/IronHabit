@@ -69,14 +69,24 @@ fun AiCoachScreen(
     onOpenExerciseLibrary: () -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: AiCoachViewModel = hiltViewModel(),
+    importViewModel: ExternalImportViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val importState by importViewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     var tab by remember { mutableStateOf(AiCoachTab.REVIEW) }
 
     LaunchedEffect(uiState.previewRequested) {
         if (uiState.previewRequested) {
             viewModel.onPreviewConsumed()
+            onOpenPlanPreview()
+        }
+    }
+
+    // 导入解析成功走的是**同一个**预览页：草案已经躺在 PlanPreviewHolder 里了。
+    LaunchedEffect(importState.previewRequested) {
+        if (importState.previewRequested) {
+            importViewModel.onPreviewConsumed()
             onOpenPlanPreview()
         }
     }
@@ -97,6 +107,33 @@ fun AiCoachScreen(
             snackbarHostState.showSnackbar(snackbarMessage)
             viewModel.onSnackbarShown()
         }
+    }
+
+    // 导入通道的提示走同一个 SnackbarHost，但由它自己的 ViewModel 消费（两个来源各自记账，
+    // 合并成一个字段就会互相盖掉：模板刚复制完的"已复制"会被"槽位都被挡住"顶掉）。
+    val importMessage: String? = importState.snackbarRes?.let { res ->
+        stringResource(res, *importState.snackbarArgs.toTypedArray())
+    }
+    LaunchedEffect(importMessage) {
+        if (importMessage != null) {
+            snackbarHostState.showSnackbar(importMessage)
+            importViewModel.onSnackbarShown()
+        }
+    }
+
+    if (importState.sheetOpen) {
+        ImportPlanSheet(
+            uiState = importState,
+            thisWeekStartEpochDay = importViewModel.weekStartEpochDay(ExternalImportViewModel.WeekChoice.THIS_WEEK),
+            nextWeekStartEpochDay = importViewModel.weekStartEpochDay(ExternalImportViewModel.WeekChoice.NEXT_WEEK),
+            onWeekChange = importViewModel::onWeekChange,
+            onCopyTemplate = { importViewModel.buildTemplate(uiState.weeklyReview) },
+            onTemplateCopied = importViewModel::onTemplateCopied,
+            onTextChange = importViewModel::onTextChange,
+            onReadClipboard = importViewModel::onClipboardRead,
+            onParse = importViewModel::parse,
+            onDismissRequest = importViewModel::dismiss,
+        )
     }
 
     if (uiState.weekPackageJson != null || uiState.isBuildingPackage) {
@@ -177,6 +214,7 @@ fun AiCoachScreen(
                         onGeneratePlan = viewModel::generatePlan,
                         onGenerateDiet = viewModel::generateDiet,
                         onOpenExerciseLibrary = onOpenExerciseLibrary,
+                        onOpenImport = importViewModel::open,
                     )
                     DietResults(uiState = uiState)
                 }
@@ -349,10 +387,17 @@ internal fun SourceLine(
     source: AdviceSource,
     fallback: RemoteFallbackReason?,
 ) {
-    val text = when {
-        fallback != null -> stringResource(R.string.ai_source_fallback)
-        source == AdviceSource.REMOTE_LLM -> stringResource(R.string.ai_source_remote)
-        else -> stringResource(R.string.ai_source_local)
+    // `when (source)` **穷尽匹配、不写 else**：新增来源忘了配文案要编译不过，
+    // 而不是静默落到「本地规则」——把用户从外部 AI 导回来的东西标成规则算出来的，
+    // 是骗人，不是少写一句话。
+    val text: String = if (fallback != null) {
+        stringResource(R.string.ai_source_fallback)
+    } else {
+        when (source) {
+            AdviceSource.LOCAL_RULES -> stringResource(R.string.ai_source_local)
+            AdviceSource.REMOTE_LLM -> stringResource(R.string.ai_source_remote)
+            AdviceSource.EXTERNAL_AI_IMPORT -> stringResource(R.string.ai_source_external)
+        }
     }
     Text(
         text = text,
@@ -508,10 +553,13 @@ private const val TabNoteAlpha: Float = 0.72f
 
 
 /**
- * 问教练屏底部的三枚工具：生成训练计划 / 分析饮食 / 动作库。
+ * 问教练屏底部的工具格：生成训练计划 / 分析饮食 / 动作库 / 导入计划。
  *
  * 原来这两个生成动作各自是一个完整区块（标题 + 说明 + 整宽按钮），
- * 拆两段式之后它们和对话挤在同一屏里，三枚并排才看得完"这一屏能干什么"。
+ * 拆两段式之后它们和对话挤在同一屏里，并排才看得完"这一屏能干什么"。
+ *
+ * ⚠️ 四枚排成 2×2 而不是挤成一行：一行四枚会把每个标签压到折行，
+ * 而这几枚的区别全靠那句小字说清（本地算 / 联网 / 跳去另一页 / 带去问外面的 AI）。
  *
  * ⚠️ 「动作库」只是**跳过去**，不在本页给建议 —— 点「收入」会隐藏地再花一次
  * completion（`SuggestExercisesUseCase.adopt` 要重新问一次顾问确认候选），
@@ -523,41 +571,53 @@ private fun AiCoachToolRow(
     onGeneratePlan: () -> Unit,
     onGenerateDiet: () -> Unit,
     onOpenExerciseLibrary: () -> Unit,
+    onOpenImport: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(
+    Column(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
+        verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
     ) {
-        ToolButton(
-            labelRes = if (uiState.isGenerating) {
-                R.string.ai_tool_plan_busy
-            } else {
-                R.string.ai_tool_plan
-            },
-            noteRes = R.string.ai_tool_plan_note,
-            enabled = !uiState.isGenerating,
-            modifier = Modifier.weight(1f),
-            onClick = onGeneratePlan,
-        )
-        ToolButton(
-            labelRes = if (uiState.dietSummary == null) {
-                R.string.ai_tool_diet
-            } else {
-                R.string.ai_tool_diet_again
-            },
-            noteRes = R.string.ai_tool_diet_note,
-            enabled = !uiState.isGeneratingDiet,
-            modifier = Modifier.weight(1f),
-            onClick = onGenerateDiet,
-        )
-        ToolButton(
-            labelRes = R.string.ai_tool_library,
-            noteRes = R.string.ai_tool_library_note,
-            enabled = true,
-            modifier = Modifier.weight(1f),
-            onClick = onOpenExerciseLibrary,
-        )
+        Row(horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm)) {
+            ToolButton(
+                labelRes = if (uiState.isGenerating) {
+                    R.string.ai_tool_plan_busy
+                } else {
+                    R.string.ai_tool_plan
+                },
+                noteRes = R.string.ai_tool_plan_note,
+                enabled = !uiState.isGenerating,
+                modifier = Modifier.weight(1f),
+                onClick = onGeneratePlan,
+            )
+            ToolButton(
+                labelRes = if (uiState.dietSummary == null) {
+                    R.string.ai_tool_diet
+                } else {
+                    R.string.ai_tool_diet_again
+                },
+                noteRes = R.string.ai_tool_diet_note,
+                enabled = !uiState.isGeneratingDiet,
+                modifier = Modifier.weight(1f),
+                onClick = onGenerateDiet,
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm)) {
+            ToolButton(
+                labelRes = R.string.ai_tool_library,
+                noteRes = R.string.ai_tool_library_note,
+                enabled = true,
+                modifier = Modifier.weight(1f),
+                onClick = onOpenExerciseLibrary,
+            )
+            ToolButton(
+                labelRes = R.string.ai_tool_import,
+                noteRes = R.string.ai_tool_import_note,
+                enabled = true,
+                modifier = Modifier.weight(1f),
+                onClick = onOpenImport,
+            )
+        }
     }
 }
 

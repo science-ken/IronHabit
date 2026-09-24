@@ -97,7 +97,7 @@ data class PlanPreview(
  *    一旦为该天写入专属行，`WeekPlanWeekResolver` 的逐天覆盖规则会让它不再回落模板，
  *    用户的手改（含删掉的动作）就被静默绕过（"删掉的深蹲又回来了"）。
  *    陈旧行回收因此**只看 `weekRows`**：模板行并进回收会把整份「每周相同」停用。
- *    保险做法：规则层已排除这些槽位，写入前**再过滤一次**（双保险，见 [invoke]）。
+ *    保险做法：规则层已排除这些槽位，投影时**再过滤一次**（双保险，见 [PlanDraftProjector]）。
  * 2. **禁用 REPLACE / 禁用"先删再建"**：本用例**没有任何 DELETE 调用**，
  *    写入统一走 `PlanRepository.upsertGenerated`（内部是显式 upsert）。
  * 3. **纯函数外置**：规则判断全在 [PlanAdvisor]，本用例只负责取数与写入。
@@ -176,68 +176,15 @@ class GenerateTrainingPlanUseCase @Inject constructor(
             )
         }
 
-        // 🔒 双保险：即使规则层漏判，写入前也再排除一次手改槽位（"天 × 动作"）。
-        val blockedSlots: Set<Pair<Int, Long>> = existing
-            .filter { it.isUserEdited }
-            .map { plan -> plan.dayOfWeek to plan.exerciseId }
-            .toSet()
-
-        // 🔒 P0-3 日级保护：某天在本周**没有启用专属行**时，本周的生效计划来自「每周相同」那份
-        // （`WeekPlanWeekResolver` 的逐天覆盖规则）。这类天若写入任何专属行，从那一刻起该天
-        // 就不再回落模板 → 用户在模板里手改/删掉的动作在本周被静默绕过（"删掉的深蹲又回来了"）。
-        // 因此：模板里被手改过、且本周没有启用专属行的天，本周**一条都不写**，整体交回模板。
-        val weekActiveDays: Set<Int> = weekRows.filter { plan -> plan.isActive }.map { plan -> plan.dayOfWeek }.toSet()
-        val userOwnedDays: Set<Int> = templateEditedRows
-            .map { plan -> plan.dayOfWeek }
-            .filter { day -> day !in weekActiveDays }
-            .toSet()
-
-        // 「已保留 N 条」只数**用户在界面上找得着**的行。
-        // 模板手改行（`week_start = 0`）与软删行同样受保护（上面两件事照旧），但它们不会
-        // 出现在本周的卡片里 —— 把它们报进数字，就是"提示说保留了 4 条，用户一条都找不到"。
-        val visibleEditedThisWeek: Set<Long> = weekRows
-            .filter { plan -> plan.isActive && plan.isUserEdited }
-            .map { plan -> plan.id }
-            .toSet()
-
-        // ② 只把"可写槽位"收集成待写列表，**整批**交给仓库（内部仍逐条显式 upsert）。
-        val drafts: List<WeekPlan> = proposal.days.flatMap { day ->
-            if (day.dayOfWeek in userOwnedDays) {
-                emptyList() // 该天由模板（含用户手改）负责 → 不写专属行，避免绕过用户改动
-            } else {
-                day.items.mapIndexedNotNull { index, item ->
-                    if (day.dayOfWeek to item.exerciseId in blockedSlots) {
-                        null // 手改槽位：跳过，不覆盖也不复活
-                    } else {
-                        WeekPlan(
-                            exerciseId = item.exerciseId,
-                            dayOfWeek = day.dayOfWeek,
-                            // P3：落到**目标周**（不带这一维就会写进「每周相同」那份）。
-                            weekStartEpochDay = targetWeek,
-                            targetSets = item.targetSets,
-                            targetReps = item.targetReps,
-                            targetWeightKg = item.targetWeightKg,
-                            // 修复 C3：把有氧时长（分钟）一并写入，避免生成链路丢字段。
-                            targetDurationMin = item.targetDurationMin,
-                            sortOrder = index,
-                        )
-                    }
-                }
-            }
-        }
-        return PlanPreview(
-            weekStartEpochDay = targetWeek,
-            draftsByDay = drafts.groupBy { plan -> plan.dayOfWeek },
-            // 回收陈旧行要用到它，但**不在 commit 时回读数据库**：预览期间再读一次会让
-            // `invoke()` 变成两次 `getRowsForWeek`，而"只读一次"是既有单测钉住的口径。
-            weekRowsForRetirement = weekRows,
-            templateOwnedDays = userOwnedDays,
-            preservedCount = proposal.preservedUserEditedIds.count { id -> id in visibleEditedThisWeek },
-            notes = proposal.notes,
-            source = proposal.source,
+        // ② 投影成预览态草案：挡手改槽位、把模板归属的整天交回模板、统一落到 targetWeek。
+        //    这段规则与「外部 AI 文档导入」那条路**共用同一份实现**（[PlanDraftProjector]）——
+        //    来源可以不同，保护用户既有数据的规则不能有两份。
+        return PlanDraftProjector.project(
+            proposal = proposal,
+            targetWeek = targetWeek,
+            weekRows = weekRows,
+            templateEditedRows = templateEditedRows,
             fallbackReason = advisor.lastFallbackReason,
-            analysis = proposal.analysis,
-            basis = proposal.basis,
         )
     }
 

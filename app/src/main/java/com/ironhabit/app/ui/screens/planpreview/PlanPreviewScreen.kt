@@ -25,7 +25,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ironhabit.app.R
+import com.ironhabit.app.domain.model.AdviceSource
 import com.ironhabit.app.ui.components.LocalSnackbarHostState
+import com.ironhabit.app.ui.screens.ai.ImportPlanNoteList
 import com.ironhabit.app.ui.theme.IronHabitSpacing
 
 /** 周一~周日（下标 0 = 周一）。 */
@@ -82,9 +84,15 @@ fun PlanPreviewScreen(
                 modifier = Modifier.weight(1f),
             )
             // 诚实标注：只有真的走了远端才写「AI 生成」，本地规则必须说清是本地规则。
+            // 诚实标注：「AI 生成」只留给 app 真的联网发出去的那一次请求。
+            // `when` 穷尽、不写 else —— 新增来源忘了配文案要编译不过，而不是被静默归进「本地规则」。
             Text(
                 text = stringResource(
-                    if (uiState.sourceIsAi) R.string.plan_preview_source_ai else R.string.plan_preview_source_local,
+                    when (uiState.source) {
+                        AdviceSource.LOCAL_RULES -> R.string.plan_preview_source_local
+                        AdviceSource.REMOTE_LLM -> R.string.plan_preview_source_ai
+                        AdviceSource.EXTERNAL_AI_IMPORT -> R.string.plan_preview_source_external
+                    },
                 ),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -104,6 +112,17 @@ fun PlanPreviewScreen(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        // 外部文档导入的两句话，都必须在**点采纳之前**读到：
+        // 一句是"这些条以后会被重新生成覆盖"（不说=用户以为问回来的计划从此归他保管），
+        // 一句是逐条"什么没导进来"（不列=他只会发现这周莫名少了两条）。
+        if (uiState.source == AdviceSource.EXTERNAL_AI_IMPORT) {
+            Text(
+                text = stringResource(R.string.plan_preview_import_overwrite),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            ImportPlanNoteList(notes = uiState.importNotes)
+        }
         // 模型每次都写好了这段「为什么这么排」，以前这一页 grep analysis 零命中 ——
         // 等于白花钱生成再扔掉。本地规则不产中文（LocalRuleAdvisor 只吐资源名），
         // 所以 analysis 为 null 时整块不显示，不拿规则文案硬凑一段看起来像 AI 写的话。

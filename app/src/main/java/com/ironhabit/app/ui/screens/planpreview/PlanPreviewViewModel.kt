@@ -4,6 +4,7 @@ import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ironhabit.app.R
+import com.ironhabit.app.domain.ai.external.ExternalPlanNote
 import com.ironhabit.app.domain.model.AdviceSource
 import com.ironhabit.app.domain.model.WeekPlan
 import com.ironhabit.app.domain.repository.ExerciseRepository
@@ -60,13 +61,25 @@ class PlanPreviewViewModel @Inject constructor(
 
     data class UiState(
         val weekRange: String = "",
-        val sourceIsAi: Boolean = false,
+        /**
+         * 本次草案的来源，原样带下来给界面做**穷尽**匹配。
+         *
+         * 以前是 `sourceIsAi: Boolean`：布尔只能说"是 AI / 不是 AI"，而「外部 AI 导入」
+         * 既不是 app 联网生成的、也不是本地规则 —— 用布尔它就只能被塞进"本地规则"那一格。
+         */
+        val source: AdviceSource = AdviceSource.LOCAL_RULES,
         /** 本次是"想用 AI 但失败了才落到本地规则"，不是"用户本来就关着 AI"。 */
         val fellBackFromRemote: Boolean = false,
         val days: List<Day> = emptyList(),
+        /**
+         * 外部 AI 文档导入时"哪些条目没进来、为什么"（内置生成恒为空 → 那一块整块不显示）。
+         *
+         * 摊在**采纳之前**而不是之后：用户点"采纳这天"之后才发现少了两条，已经来不及知道少了什么。
+         */
+        val importNotes: List<ExternalPlanNote> = emptyList(),
         val preservedCount: Int = 0,
         /**
-         * 模型这次写好的「为什么这么排」（远端才有；本地规则恒为 `null`，
+         * 这次写好的「为什么这么排」（远端与外部导入都有；本地规则恒为 `null`，
          * 因为 `LocalRuleAdvisor` 只吐资源名、不产中文）。
          */
         val analysis: String? = null,
@@ -100,7 +113,8 @@ class PlanPreviewViewModel @Inject constructor(
             _uiState.update { state ->
                 state.copy(
                     weekRange = weekRangeText(snapshot.weekStartEpochDay),
-                    sourceIsAi = snapshot.source == AdviceSource.REMOTE_LLM,
+                    importNotes = holder.peekImportNotes(),
+                    source = snapshot.source,
                     fellBackFromRemote = snapshot.fallbackReason != null,
                     analysis = snapshot.analysis,
                     preservedCount = snapshot.preservedCount,

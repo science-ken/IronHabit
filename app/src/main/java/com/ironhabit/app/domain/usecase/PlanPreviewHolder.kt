@@ -1,5 +1,6 @@
 package com.ironhabit.app.domain.usecase
 
+import com.ironhabit.app.domain.ai.external.ExternalPlanNote
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -17,15 +18,28 @@ class PlanPreviewHolder @Inject constructor() {
 
     private var current: PlanPreview? = null
 
-    fun set(preview: PlanPreview) {
+    /**
+     * 外部文档导入时的"哪些条目没进来、为什么"清单。
+     *
+     * 跟着草案走同一份生命周期（内存态、清掉就没了），因为它说的就是**这一份**草案：
+     * 分开存会出现"看着上一次的清单采纳这一次的计划"那种错配。
+     */
+    private var importNotes: List<ExternalPlanNote> = emptyList()
+
+    fun set(preview: PlanPreview, importNotes: List<ExternalPlanNote> = emptyList()) {
         current = preview
+        this.importNotes = importNotes
     }
 
     /** 取出当前快照但不消耗它（页面重建、配置变更时还要能再渲染一次）。 */
     fun peek(): PlanPreview? = current
 
+    /** 导入清单（内置生成路恒为空 → 预览页那一块整块不显示）。 */
+    fun peekImportNotes(): List<ExternalPlanNote> = importNotes
+
     /** 采纳完 / 取消完必须清掉，避免下一次进来看到上一次的陈旧草案。 */
     fun clear() {
         current = null
+        importNotes = emptyList()
     }
 }
