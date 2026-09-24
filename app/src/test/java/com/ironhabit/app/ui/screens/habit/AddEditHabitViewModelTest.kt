@@ -372,4 +372,54 @@ class AddEditHabitViewModelTest {
             savedHabit.captured.weeklyDaysMask,
         )
     }
+
+    // ---------------- 台账 D5：目标值的荒谬界 ----------------
+
+    /**
+     * 负数 / `1e18` / `NaN` / `Infinity` 都不许进库（以前只判"能不能 parse"，四个全能存进去
+     * 并原样画到习惯行上）。
+     *
+     * `NaN` 那两个是真会过的：Kotlin 的 `toDoubleOrNull()` 认 `"NaN"` / `"Infinity"` 字面量，
+     * 所以"能 parse"从来不等于"是个数"。
+     */
+    @Test
+    fun absurdHabitTargetsAreRejected() = runTest(mainDispatcherRule.testDispatcher) {
+        listOf("-4", "1e18", "NaN", "Infinity").forEach { input ->
+            val repo = repositoryWith(listOf(checkboxHabit))
+            val vm = viewModel(repo, habitId = 7L)
+            advanceUntilIdle()
+
+            vm.onTargetValueChange(input)
+            vm.onTargetUnitChange("杯")
+            vm.onSave()
+            advanceUntilIdle()
+
+            coVerify(exactly = 0) { repo.upsertHabit(any()) }
+        }
+    }
+
+    /**
+     * 界必须松到锁不死任何合法值 —— 这一栏**没有单位**，「0 支烟」「4 杯」「30 分钟」「1000 步」
+     * 都是真实用法。跨单位的**合理**上界仍归产品判断（D5 剩下的那一半）。
+     */
+    @Test
+    fun legitimateHabitTargetsStillSaveAcrossUnits() = runTest(mainDispatcherRule.testDispatcher) {
+        listOf("0", "4", "30", "1000").forEach { input ->
+            val repo = repositoryWith(listOf(checkboxHabit))
+            val vm = viewModel(repo, habitId = 7L)
+            advanceUntilIdle()
+
+            vm.onTargetValueChange(input)
+            vm.onTargetUnitChange("杯")
+            vm.onSave()
+            advanceUntilIdle()
+
+            assertEquals(
+                "「$input」被荒谬界挡掉了",
+                input.toDouble(),
+                savedHabit.captured.targetValue!!,
+                0.0,
+            )
+        }
+    }
 }

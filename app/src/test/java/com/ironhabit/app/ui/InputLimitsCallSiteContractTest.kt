@@ -41,13 +41,12 @@ class InputLimitsCallSiteContractTest {
      * 带理由的豁免。key 是相对 `src/main/java/com/ironhabit/app/` 的路径。
      *
      * **每条都必须写清是"合法不需要"还是"该修但还没修"** —— 后者是欠账，不是豁免。
+     *
+     * 现在是空的，而且**必须保持空**：2026-09-23 之前挂着的那条欠账（习惯目标值零校验，台账 D5）
+     * 已经还掉了 —— `AddEditHabitViewModel` 现在走 `InputLimits.isValidHabitTarget`。
+     * 加新豁免前先看 [exemptionsAreStillEarned] 的口径：能引用真源的就别写进来。
      */
-    private val exemptions: Map<String, String> = mapOf(
-        "ui/screens/habit/AddEditHabitViewModel.kt" to
-            "欠账：习惯目标值只判了「能不能 parse」（:201），没有任何上下界，负数与 1e18 都能存进库并原样画到" +
-            "习惯行上。补不了是因为它**没有单位**（同一个字段要装「4 杯」「30 分钟」「8 小时」），" +
-            "跨单位的合理上界是产品判断，得用户定，不该由测试或代码悄悄编一个数。",
-    )
+    private val exemptions: Map<String, String> = emptyMap()
 
     @Test
     fun everyFormThatParsesNumbersGoesThroughALimitsSource() {

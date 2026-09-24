@@ -265,6 +265,25 @@ object InputLimits {
     fun coerceBodyMetric(type: BodyMetricType, value: Float): Float =
         rangeFor(type).let { range -> coerceInto(value, range.start, range.endInclusive) }
 
+    // ================= 习惯目标值 =================
+
+    /**
+     * 习惯「目标值」的**荒谬界**，不是合理区间。
+     *
+     * ⚠️ 上界刻意放到 100 万，因为同一个字段要装「4 杯」「30 分钟」「8 小时」「1000 步」——
+     * 跨单位的**合理**上界是产品判断（台账 D5 等用户给），编一个紧的数会把合法值锁死，
+     * 那比不修更糟。这一条只挡在任何单位下都不可能是答案的输入：负数、`1e18`、`NaN`。
+     *
+     * 下界含 `0`：「今天 0 支烟 / 0 次含糖饮料」是这一栏的真实用法（戒除型习惯），
+     * 拒掉 0 会把这类习惯挡在门外。
+     */
+    const val MIN_HABIT_TARGET: Double = 0.0
+    const val MAX_HABIT_TARGET: Double = 1_000_000.0
+
+    /** 习惯目标值是否落在荒谬界内（`NaN` / `±Infinity` 一律非法 —— 它们会一路流进备份 JSON）。 */
+    fun isValidHabitTarget(value: Double): Boolean =
+        value.isFinite() && value >= MIN_HABIT_TARGET && value <= MAX_HABIT_TARGET
+
     /**
      * 浮点钳制（**不抛异常**）。
      *

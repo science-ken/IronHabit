@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.Habit
 import com.ironhabit.app.domain.model.HabitFrequency
+import com.ironhabit.app.domain.model.InputLimits
 import com.ironhabit.app.domain.repository.HabitRepository
 import com.ironhabit.app.domain.repository.ReminderScheduler
 import com.ironhabit.app.ui.navigation.Destinations
@@ -214,6 +215,12 @@ class AddEditHabitViewModel @Inject constructor(
         val targetValue = targetInput.toDoubleOrNull()
         if (targetInput.isNotEmpty() && targetValue == null) {
             _uiState.update { it.copy(snackbarRes = R.string.error_invalid_number) }
+            return
+        }
+        // 只挡**荒谬值**（负数 / 1e18 / NaN 会一路流进习惯行和备份 JSON），不挡"偏大但合法"：
+        // 这个字段没有单位，跨单位的合理区间是产品判断（台账 D5）。判据在 InputLimits 真源里。
+        if (targetValue != null && !InputLimits.isValidHabitTarget(targetValue)) {
+            _uiState.update { it.copy(snackbarRes = R.string.error_habit_target_out_of_range) }
             return
         }
         val targetUnit = state.targetUnit.trim().takeIf { it.isNotEmpty() }

@@ -348,6 +348,7 @@
     <string name="error_name_exists">该名称已存在</string>
     <string name="error_invalid_number">请输入有效的数字</string>
     <string name="error_target_unit_required">填了目标值就要填单位（如 杯 / 分钟 / 步）</string>
+    <string name="error_habit_target_out_of_range">目标值要在 0 到 1000000 之间（这个框不分单位，只挡明显不可能是答案的数）</string>
     <string name="error_weekly_days_required">至少选一天 —— 全不选的话这个习惯哪天都不会排上</string>
     <string name="error_generic">出错了，请稍后再试</string>
 
