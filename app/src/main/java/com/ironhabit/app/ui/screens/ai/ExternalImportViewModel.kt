@@ -15,6 +15,7 @@ import com.ironhabit.app.domain.util.DateUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -73,6 +74,12 @@ class ExternalImportViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
+    /** 拼模板要的复盘（教练页已经算好的一份，绝不自己再算一次）。私有：只影响拼不拼得出。 */
+    private var lastReview: WeeklyReview? = null
+
+    /** 正在跑的拼装任务：换周时取消它，避免迟到的旧结果盖掉新周的那一份。 */
+    private var buildJob: Job? = null
+
     /** 选定那一周的周一 epochDay（界面用它算「本周 9/21–9/27」这类标签）。 */
     fun weekStartEpochDay(choice: WeekChoice = _uiState.value.week): Long {
         val today: LocalDate = clock.now().toLocalDateTime(timeZone).date
@@ -80,12 +87,29 @@ class ExternalImportViewModel @Inject constructor(
         return if (choice == WeekChoice.THIS_WEEK) thisMonday else thisMonday + 7L
     }
 
-    fun open() {
+    /**
+     * 打开时就把手里的复盘存下来并**立刻拼一次模板**。
+     *
+     * ⚠️ 不能等用户点「复制提问模板」才开始拼：真机上第一次点因此毫无反应
+     *（按钮文案还是"复制提问模板"、剪贴板也没动），用户读解成"按钮坏了"再点一次才成功。
+     * 打开弹层这一动作本身就是"我要模板"，拼装在它背后跑掉。
+     */
+    fun open(review: WeeklyReview?) {
+        lastReview = review
         _uiState.update { it.copy(sheetOpen = true) }
+        refreshTemplate()
+    }
+
+    /** 复盘算完得比弹层打开晚时（首帧那一瞬），由界面把新的复盘补进来再拼一次。 */
+    fun onReviewAvailable(review: WeeklyReview) {
+        if (lastReview === review) return
+        lastReview = review
+        if (_uiState.value.sheetOpen) refreshTemplate()
     }
 
     /** 关闭时把模板与拒收说明一起清掉：下次进来不能还挂着上一次的结论。 */
     fun dismiss() {
+        buildJob?.cancel()
         _uiState.update {
             it.copy(
                 sheetOpen = false,
@@ -100,7 +124,8 @@ class ExternalImportViewModel @Inject constructor(
 
     /** 换周 → 模板必须重算：模板里"这一周已经排了什么"那一段是按周拼的。 */
     fun onWeekChange(choice: WeekChoice) {
-        _uiState.update { it.copy(week = choice, template = null, templateFailedRes = null) }
+        _uiState.update { it.copy(week = choice) }
+        refreshTemplate()
     }
 
     fun onTextChange(text: String) {
@@ -117,15 +142,18 @@ class ExternalImportViewModel @Inject constructor(
     }
 
     /**
-     * 拼提问模板（复盘从页面状态传进来：教练页已经算过一份，这里绝不重算一次）。
+     * 拼提问模板（复盘用 [lastReview]：那是页面已经算好的那一份，这里绝不重算）。
      *
-     * 复盘还没算出来时不给结果也不报错 —— 按钮此刻是禁用的，界面上写的是"正在整理你的数据…"。
+     * 复盘还没算出来时不发请求也不报错 —— 此刻按钮上写的是"正在整理你的数据…"。
      */
-    fun buildTemplate(review: WeeklyReview?) {
-        if (review == null || _uiState.value.isBuildingTemplate) return
+    fun refreshTemplate() {
+        val review: WeeklyReview = lastReview ?: return
         val week: Long = weekStartEpochDay()
-        _uiState.update { it.copy(isBuildingTemplate = true, templateFailedRes = null) }
-        viewModelScope.launch {
+        // 换周会取消上一次还在跑的拼装：拼装结果和"哪一周"绑死，迟到的旧结果盖上去
+        // 就是拿本周的现状配下周的模板。
+        buildJob?.cancel()
+        _uiState.update { it.copy(isBuildingTemplate = true, template = null, templateFailedRes = null) }
+        buildJob = viewModelScope.launch {
             val text: String? = try {
                 buildPromptTemplate(review, week)
             } catch (cancellation: CancellationException) {

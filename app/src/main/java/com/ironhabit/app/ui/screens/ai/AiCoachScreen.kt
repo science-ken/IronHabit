@@ -83,6 +83,12 @@ fun AiCoachScreen(
         }
     }
 
+    // 弹层可能在复盘还算完之前就打开了（首帧那一瞬点进来）—— 这时把新算好的那份补交给
+    // 导入 VM，否则模板永远拼不出来，而按钮看起来就像坏的。
+    LaunchedEffect(uiState.weeklyReview) {
+        uiState.weeklyReview?.let { importViewModel.onReviewAvailable(it) }
+    }
+
     // 导入解析成功走的是**同一个**预览页：草案已经躺在 PlanPreviewHolder 里了。
     LaunchedEffect(importState.previewRequested) {
         if (importState.previewRequested) {
@@ -127,7 +133,7 @@ fun AiCoachScreen(
             thisWeekStartEpochDay = importViewModel.weekStartEpochDay(ExternalImportViewModel.WeekChoice.THIS_WEEK),
             nextWeekStartEpochDay = importViewModel.weekStartEpochDay(ExternalImportViewModel.WeekChoice.NEXT_WEEK),
             onWeekChange = importViewModel::onWeekChange,
-            onCopyTemplate = { importViewModel.buildTemplate(uiState.weeklyReview) },
+            onCopyTemplate = importViewModel::refreshTemplate,
             onTemplateCopied = importViewModel::onTemplateCopied,
             onTextChange = importViewModel::onTextChange,
             onReadClipboard = importViewModel::onClipboardRead,
@@ -214,7 +220,7 @@ fun AiCoachScreen(
                         onGeneratePlan = viewModel::generatePlan,
                         onGenerateDiet = viewModel::generateDiet,
                         onOpenExerciseLibrary = onOpenExerciseLibrary,
-                        onOpenImport = importViewModel::open,
+                        onOpenImport = { importViewModel.open(uiState.weeklyReview) },
                     )
                     DietResults(uiState = uiState)
                 }

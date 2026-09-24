@@ -103,31 +103,58 @@ class ExternalImportViewModelTest {
     }
 
     @Test
-    fun onWeekChange_dropsTheBuiltTemplateSoItIsRebuiltForThatWeek() = runTest {
+    fun open_buildsTheTemplateRightAwaySoTheFirstTapActuallyCopies() = runTest {
+        // 真机上踩过的：点第一次「复制提问模板」只是开始拼装、什么都没复制，
+        // 用户读解成"按钮坏了"。打开弹层本身就是"我要模板"，拼装必须在它背后跑完。
+        coEvery { buildPromptTemplate(any(), thisMonday) } returns "T-this"
         val vm = viewModel()
-        vm.open()
-        vm.onTextChange("已经粘好的东西")
 
-        vm.buildTemplate(review)
+        vm.open(review)
         advanceUntilIdle()
-        assertNotNull("模板已拼好（relaxed fake 返回空串，非 null）", vm.uiState.value.template)
 
-        vm.onWeekChange(ExternalImportViewModel.WeekChoice.NEXT_WEEK)
-
-        // 模板里"这一周已经排了什么"是按周拼的：留着旧模板 = 拿本周现状去问下周的课。
-        assertNull(vm.uiState.value.template)
-        assertEquals("粘贴框不该跟着清空", "已经粘好的东西", vm.uiState.value.text)
+        assertEquals("T-this", vm.uiState.value.template)
+        assertFalse(vm.uiState.value.isBuildingTemplate)
     }
 
     @Test
-    fun buildTemplate_withoutReviewSendsNothing() = runTest {
+    fun open_withoutReviewYet_sendsNothingButTheLaterReviewRebuildsIt() = runTest {
+        coEvery { buildPromptTemplate(any(), thisMonday) } returns "T-this"
         val vm = viewModel()
 
-        vm.buildTemplate(null)
+        vm.open(null)
         advanceUntilIdle()
-
         coVerify(exactly = 0) { buildPromptTemplate(any(), any()) }
         assertNull(vm.uiState.value.template)
+
+        vm.onReviewAvailable(review)
+        advanceUntilIdle()
+
+        assertEquals(
+            "复盘比弹层打开更晚算完时，模板必须自己补上，否则按钮永远是死的",
+            "T-this",
+            vm.uiState.value.template,
+        )
+    }
+
+    @Test
+    fun onWeekChange_rebuildsForTheNewWeek_notJustClearsTheOldOne() = runTest {
+        coEvery { buildPromptTemplate(any(), thisMonday) } returns "T-this"
+        coEvery { buildPromptTemplate(any(), thisMonday + 7) } returns "T-next"
+        val vm = viewModel()
+        vm.open(review)
+        advanceUntilIdle()
+        assertEquals("T-this", vm.uiState.value.template)
+
+        vm.onTextChange("已经粘好的东西")
+        vm.onWeekChange(ExternalImportViewModel.WeekChoice.NEXT_WEEK)
+        advanceUntilIdle()
+
+        assertEquals(
+            "模板里「这一周已经排了什么」是按周拼的：换周必须重拼，不能只清空等用户再点",
+            "T-next",
+            vm.uiState.value.template,
+        )
+        assertEquals("粘贴框不该跟着清空", "已经粘好的东西", vm.uiState.value.text)
     }
 
     // ---------------- 三态分派 ----------------
@@ -261,7 +288,7 @@ class ExternalImportViewModelTest {
     fun dismiss_clearsVerdictsButKeepsThePasteForTheNextTry() = runTest {
         val vm = viewModel()
         coEvery { importPlan(any(), any()) } returns ExternalPlanImport.Refused(ExternalDocRefusal.WRONG_SCHEMA)
-        vm.open()
+        vm.open(review)
         vm.onTextChange("doc")
         vm.parse()
         advanceUntilIdle()
