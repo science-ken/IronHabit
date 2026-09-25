@@ -138,6 +138,8 @@ fun AiCoachScreen(
             onTextChange = importViewModel::onTextChange,
             onReadClipboard = importViewModel::onClipboardRead,
             onParse = importViewModel::parse,
+            onToggleNewExercise = importViewModel::onToggleNewExercise,
+            onCreateSelected = importViewModel::createSelectedAndReparse,
             onDismissRequest = importViewModel::dismiss,
         )
     }

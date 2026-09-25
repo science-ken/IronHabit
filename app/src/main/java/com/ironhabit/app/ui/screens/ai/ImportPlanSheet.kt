@@ -10,6 +10,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -24,6 +25,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.stringResource
@@ -32,6 +34,7 @@ import androidx.compose.ui.text.style.TextAlign
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.ai.external.ExternalPlanDocumentParser
 import com.ironhabit.app.domain.ai.external.ExternalPlanNote
+import com.ironhabit.app.domain.ai.external.NewExerciseCandidate
 import com.ironhabit.app.ui.components.weekRangeText
 import com.ironhabit.app.ui.theme.IronHabitSpacing
 
@@ -54,6 +57,8 @@ internal fun ImportPlanSheet(
     onTextChange: (String) -> Unit,
     onReadClipboard: (String?) -> Unit,
     onParse: () -> Unit,
+    onToggleNewExercise: (Int) -> Unit,
+    onCreateSelected: () -> Unit,
     onDismissRequest: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -196,6 +201,17 @@ internal fun ImportPlanSheet(
                 }
             }
 
+            // 库里没有、但文档声明过的动作：勾选才建。建动作是往用户库里**永久加一行**，
+            // 一个错别字（"杠铃深蹲 "）就该被这一勾挡住，所以不给默认全选。
+            if (uiState.newExercises.isNotEmpty()) {
+                NewExerciseBlock(
+                    rows = uiState.newExercises,
+                    enabled = !uiState.isCreating,
+                    onToggle = onToggleNewExercise,
+                    onCreate = onCreateSelected,
+                )
+            }
+
             Button(
                 onClick = onParse,
                 enabled = !uiState.isParsing && uiState.text.isNotBlank(),
@@ -208,6 +224,56 @@ internal fun ImportPlanSheet(
                     textAlign = TextAlign.Center,
                 )
             }
+        }
+    }
+}
+
+/**
+ * 待确认的新动作清单。
+ *
+ * 只念名字 + 肌群：肌群本身就是中文数据（`MuscleGroup` 词表），而分类的中文映射现在
+ * 在 4 个文件里各有一份私有副本，这里不再加第 5 份 —— 用户真要核对分类，
+ * 建完在「训练 → 动作库」那条详情页看得到、也改得动。
+ */
+@Composable
+private fun NewExerciseBlock(
+    rows: List<NewExerciseCandidate>,
+    enabled: Boolean,
+    onToggle: (Int) -> Unit,
+    onCreate: () -> Unit,
+) {
+    val checkedCount: Int = rows.count { row -> row.checked }
+    Column(verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.xs)) {
+        Text(
+            text = stringResource(R.string.ai_import_new_exercise_title),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        rows.forEachIndexed { index, row ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(
+                    checked = row.checked,
+                    onCheckedChange = { onToggle(index) },
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = row.exercise.name,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = row.exercise.muscleGroups.joinToString("/").ifEmpty {
+                            stringResource(R.string.ai_import_new_exercise_no_muscle)
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+        Button(onClick = onCreate, enabled = enabled && checkedCount > 0) {
+            val count: Int = checkedCount
+            Text(text = stringResource(R.string.ai_import_new_exercise_create, count))
         }
     }
 }
@@ -247,6 +313,8 @@ private fun ImportPlanNoteLine(note: ExternalPlanNote) {
     // 把资源名换行写就会读成"实参个数为 0"，带参文案当场红灯。
     val text: String = when (note.kind) {
         ExternalPlanNote.Kind.UNKNOWN_EXERCISE -> stringResource(R.string.plan_preview_note_unknown_exercise, subject)
+        ExternalPlanNote.Kind.EXERCISE_CREATABLE -> stringResource(R.string.plan_preview_note_exercise_creatable, subject)
+        ExternalPlanNote.Kind.NEW_EXERCISE_REJECTED -> stringResource(R.string.plan_preview_note_new_exercise_rejected, subject)
         ExternalPlanNote.Kind.BLANK_EXERCISE_NAME -> stringResource(R.string.plan_preview_note_blank_name)
         ExternalPlanNote.Kind.DUPLICATE_EXERCISE -> stringResource(R.string.plan_preview_note_duplicate, subject)
         ExternalPlanNote.Kind.OVER_DAILY_LIMIT -> stringResource(R.string.plan_preview_note_over_limit, subject, dailyLimit)

@@ -221,6 +221,22 @@ class BuildExternalCoachPromptUseCaseTest {
     }
 
     @Test
+    fun template_tellsTheModelHowToDeclareANewExercise_withVocabularyGeneratedFromCode() = runTest {
+        stub()
+
+        val text = useCase()(review, weekStart)
+
+        assertTrue(text.contains("newExercises"))
+        // 分类与肌群清单都从代码现生成：手抄的话，加一个成员就会出现
+        // "模型写了个合法值、App 说认不出"那种查不出头的分歧。
+        assertTrue(text.contains("BODYWEIGHT/STRENGTH/CARDIO/CUSTOM"))
+        assertTrue(text.contains("腿部"))
+        assertTrue(text.contains("臀腿"))
+        assertTrue("不声明就丢这条，必须写在模板里", text.contains("会被 App 直接丢掉"))
+        assertFalse("占位符一个都不许残留", text.contains("{{"))
+    }
+
+    @Test
     fun template_tellsTheModelNotToTouchMeasurements() = runTest {
         stub()
 

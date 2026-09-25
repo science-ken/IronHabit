@@ -5,6 +5,7 @@ import com.ironhabit.app.domain.ai.external.ExternalDocOutcome
 import com.ironhabit.app.domain.ai.external.ExternalDocRefusal
 import com.ironhabit.app.domain.ai.external.ExternalPlanDocumentParser
 import com.ironhabit.app.domain.ai.external.ExternalPlanNote
+import com.ironhabit.app.domain.ai.external.ImportedNewExercise
 import com.ironhabit.app.domain.ai.external.ProfileFieldDiff
 import com.ironhabit.app.domain.repository.ExerciseRepository
 import com.ironhabit.app.domain.repository.PlanRepository
@@ -49,8 +50,13 @@ class ImportExternalPlanUseCase @Inject constructor(
             val parsed = ExternalPlanDocumentParser.parse(text, library)
 
             when (parsed) {
-                is ExternalDocOutcome.Refused ->
-                    ExternalPlanImport.Refused(parsed.reason, parsed.notes, parsed.analysis)
+                is ExternalDocOutcome.Refused -> ExternalPlanImport.Refused(
+                    reason = parsed.reason,
+                    notes = parsed.notes,
+                    analysis = parsed.analysis,
+                    // 一份"全是新动作"的文档要能救回来：先让用户确认建库，再重解析一次。
+                    newExercises = parsed.newExercises,
+                )
 
                 is ExternalDocOutcome.Parsed -> {
                     // 🔒 必须拿**该周全量**（含软删除行）：投影器靠它挡手改/软删槽位。
@@ -95,6 +101,7 @@ class ImportExternalPlanUseCase @Inject constructor(
                                     }
                                 }
                                 .toMap(),
+                            newExercises = parsed.draft.newExercises,
                         )
                     }
                 }
@@ -115,6 +122,8 @@ sealed interface ExternalPlanImport {
         val reason: ExternalDocRefusal,
         val notes: List<ExternalPlanNote> = emptyList(),
         val analysis: String? = null,
+        /** 全是新动作的文档不是废文档：先让用户确认建库，再重解析一次就救得回来。 */
+        val newExercises: List<ImportedNewExercise> = emptyList(),
     ) : ExternalPlanImport
 
     /**
@@ -139,5 +148,7 @@ sealed interface ExternalPlanImport {
         val profileDiffs: List<ProfileFieldDiff> = emptyList(),
         /** 「天 × 动作」→ 模型写的那句为什么。只在预览页折叠显示，**不落库**。 */
         val reasons: Map<Pair<Int, Long>, String> = emptyMap(),
+        /** 库里没有、文档声明过的动作：等用户在弹层里勾选确认才建进库。 */
+        val newExercises: List<ImportedNewExercise> = emptyList(),
     ) : ExternalPlanImport
 }

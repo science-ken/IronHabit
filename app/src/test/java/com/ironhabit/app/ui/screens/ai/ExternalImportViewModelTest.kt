@@ -3,13 +3,17 @@ package com.ironhabit.app.ui.screens.ai
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.ai.external.ExternalDocRefusal
 import com.ironhabit.app.domain.ai.external.ExternalPlanNote
+import com.ironhabit.app.domain.ai.external.ImportedNewExercise
 import com.ironhabit.app.domain.model.AdviceSource
 import com.ironhabit.app.domain.model.BodyReview
 import com.ironhabit.app.domain.model.DietReview
+import com.ironhabit.app.domain.model.Equipment
+import com.ironhabit.app.domain.model.ExerciseCategory
 import com.ironhabit.app.domain.model.TrainingReview
 import com.ironhabit.app.domain.model.WeekPlan
 import com.ironhabit.app.domain.model.WeeklyReview
 import com.ironhabit.app.domain.usecase.BuildExternalCoachPromptUseCase
+import com.ironhabit.app.domain.usecase.CreateImportedExercisesUseCase
 import com.ironhabit.app.domain.usecase.ExternalPlanImport
 import com.ironhabit.app.domain.usecase.ImportExternalPlanUseCase
 import com.ironhabit.app.domain.usecase.PlanPreview
@@ -48,6 +52,7 @@ class ExternalImportViewModelTest {
 
     private val importPlan = mockk<ImportExternalPlanUseCase>()
     private val buildPromptTemplate = mockk<BuildExternalCoachPromptUseCase>(relaxed = true)
+    private val createExercises = mockk<CreateImportedExercisesUseCase>()
     private val holder = PlanPreviewHolder()
     private val utc = TimeZone.UTC
 
@@ -61,6 +66,7 @@ class ExternalImportViewModelTest {
     private fun viewModel(): ExternalImportViewModel = ExternalImportViewModel(
         buildPromptTemplate = buildPromptTemplate,
         importPlan = importPlan,
+        createExercises = createExercises,
         planPreviewHolder = holder,
         clock = clock,
         timeZone = utc,
@@ -261,6 +267,77 @@ class ExternalImportViewModelTest {
         vm.parse()
         advanceUntilIdle()
 
+        coVerify(exactly = 1) { importPlan(any(), any()) }
+    }
+
+    // ---------------- 新动作待确认（刀 4）----------------
+
+    private fun candidate(name: String) = ImportedNewExercise(
+        name = name,
+        category = ExerciseCategory.STRENGTH,
+        muscleGroups = listOf("腿部"),
+        equipment = setOf(Equipment.DUMBBELL),
+    )
+
+    @Test
+    fun parse_withCandidates_showsThemUnchecked() = runTest {
+        val vm = viewModel()
+        coEvery { importPlan(any(), any()) } returns ExternalPlanImport.Refused(
+            reason = ExternalDocRefusal.NO_USABLE_ITEMS,
+            newExercises = listOf(candidate("动作甲"), candidate("动作乙")),
+        )
+        vm.onTextChange("doc")
+
+        vm.parse()
+        advanceUntilIdle()
+
+        val rows = vm.uiState.value.newExercises
+        assertEquals(2, rows.size)
+        assertTrue(
+            "默认一行都不勾：建动作是往用户库里永久加一行，文档「想要」不等于用户「同意」",
+            rows.none { row -> row.checked },
+        )
+    }
+
+    @Test
+    fun createSelected_createsOnlyTheCheckedOnes_andReparsesRightAway() = runTest {
+        val vm = viewModel()
+        val first = candidate("动作甲")
+        val second = candidate("动作乙")
+        coEvery { importPlan(any(), any()) } returns ExternalPlanImport.Refused(
+            reason = ExternalDocRefusal.NO_USABLE_ITEMS,
+            newExercises = listOf(first, second),
+        )
+        coEvery { createExercises(any()) } returns 1
+        vm.onTextChange("doc")
+        vm.parse()
+        advanceUntilIdle()
+
+        vm.onToggleNewExercise(1)
+        vm.createSelectedAndReparse()
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { createExercises(listOf(second)) }
+        assertEquals(R.string.ai_import_exercises_created, vm.uiState.value.snackbarRes)
+        assertEquals(listOf("1"), vm.uiState.value.snackbarArgs)
+        coVerify(exactly = 2) { importPlan(any(), any()) }
+    }
+
+    @Test
+    fun createSelected_withNothingChecked_createsNothingAndDoesNotReparse() = runTest {
+        val vm = viewModel()
+        coEvery { importPlan(any(), any()) } returns ExternalPlanImport.Refused(
+            reason = ExternalDocRefusal.NO_USABLE_ITEMS,
+            newExercises = listOf(candidate("动作甲")),
+        )
+        vm.onTextChange("doc")
+        vm.parse()
+        advanceUntilIdle()
+
+        vm.createSelectedAndReparse()
+        advanceUntilIdle()
+
+        coVerify(exactly = 0) { createExercises(any()) }
         coVerify(exactly = 1) { importPlan(any(), any()) }
     }
 

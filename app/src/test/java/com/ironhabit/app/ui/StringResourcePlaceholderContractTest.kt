@@ -183,6 +183,11 @@ class StringResourcePlaceholderContractTest {
         entry("plan_preview_profile_applied", ArgKind.STRING)
         // 刀 3：每条动作"为什么"的展开按钮（计数是 Int，走 %d）。
         entry("plan_preview_reasons_show", ArgKind.NUMERIC)
+        // 刀 4：新动作待确认。计数走 %d；snackbar 那条经 snackbarArgs（String 通道）走 %s。
+        entry("ai_import_new_exercise_create", ArgKind.NUMERIC)
+        entry("ai_import_exercises_created", ArgKind.STRING)
+        entry("plan_preview_note_exercise_creatable", ArgKind.STRING)
+        entry("plan_preview_note_new_exercise_rejected", ArgKind.STRING)
 
         // ---------------- 【未使用】strings.xml 有占位符、代码暂无引用 ----------------
         entry("label_week_of", ArgKind.STRING)

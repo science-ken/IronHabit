@@ -206,6 +206,115 @@ class ExternalPlanDocumentParserTest {
         )
     }
 
+    // ---------------- 新动作声明（刀 4）----------------
+
+    private val newExercise: String =
+        """{"name":"保加利亚分腿蹲","category":"STRENGTH","muscleGroups":["腿部","臀部"]}"""
+
+    /** 一条库里已有的 + 一条要新建的：这样文档整体仍然可解析（全未知会整份拒收）。 */
+    private val mixedItems: String =
+        """{"exercise":"杠铃深蹲","targetSets":3,"targetReps":12},""" +
+            """{"exercise":"保加利亚分腿蹲","targetSets":3,"targetReps":12}"""
+
+    @Test
+    fun parse_declaredNewExercise_becomesACandidate_andTheItemIsMarkedCreatable() {
+        val draft = parsed(
+            doc(mixedItems, ""","newExercises":[$newExercise]"""),
+        )
+
+        val candidate = draft.newExercises.single()
+        assertEquals("保加利亚分腿蹲", candidate.name)
+        assertEquals(ExerciseCategory.STRENGTH, candidate.category)
+        assertEquals(listOf("腿部", "臀部"), candidate.muscleGroups)
+        assertEquals(
+            "条目本身不进草案（库里还没有它的 id），但要说清「勾一下就能导进来」",
+            listOf(ExternalPlanNote.Kind.EXERCISE_CREATABLE),
+            draft.notes.map { it.kind },
+        )
+        assertEquals(
+            "库里已有的那条照常进草案",
+            listOf(1L),
+            draft.proposal.days.single().items.map { it.exerciseId },
+        )
+    }
+
+    @Test
+    fun parse_undeclaredUnknownName_staysPlainUnknown() {
+        val draft = parsed(doc(mixedItems))
+
+        assertTrue(draft.newExercises.isEmpty())
+        assertEquals(ExternalPlanNote.Kind.UNKNOWN_EXERCISE, draft.notes.single().kind)
+    }
+
+    @Test
+    fun parse_newExerciseWithUnknownCategory_isRejectedEntirely() {
+        val draft = parsed(
+            doc(
+                mixedItems,
+                ""","newExercises":[{"name":"保加利亚分腿蹲","category":"FLEXIBILITY","muscleGroups":["腿部"]}]""",
+            ),
+        )
+
+        assertTrue("分类不认识 → 整条不进候选", draft.newExercises.isEmpty())
+        val rejected = draft.notes.filter { it.kind == ExternalPlanNote.Kind.NEW_EXERCISE_REJECTED }
+        assertEquals(1, rejected.size)
+        assertTrue(rejected.single().subject!!.contains("category"))
+        // 条目本身仍是"库里找不到"，不是"待新建"——声明失效了就不该给它这个资格。
+        assertEquals(ExternalPlanNote.Kind.UNKNOWN_EXERCISE, draft.notes.first { it.dayOfWeek != null }.kind)
+    }
+
+    @Test
+    fun parse_newExerciseWithInventedMuscleLabel_isRejectedNotHalfAccepted() {
+        // "有分类没肌群"的动作看起来正常，实际永远躲不开伤病避让 —— 半收比不收更坏。
+        val draft = parsed(
+            doc(
+                mixedItems,
+                ""","newExercises":[{"name":"保加利亚分腿蹲","category":"STRENGTH","muscleGroups":["股四头肌"]}]""",
+            ),
+        )
+
+        assertTrue(draft.newExercises.isEmpty())
+        val rejected = draft.notes.filter { it.kind == ExternalPlanNote.Kind.NEW_EXERCISE_REJECTED }
+        assertTrue(
+            "要点名是哪个标签不在词表里",
+            rejected.single().subject!!.contains("股四头肌"),
+        )
+    }
+
+    @Test
+    fun parse_newExerciseAlreadyInLibrary_isSilentlyIgnored_andTheItemStillResolves() {
+        val outcome = ExternalPlanDocumentParser.parse(
+            doc(
+                """{"exercise":"杠铃深蹲","targetSets":3,"targetReps":12}""",
+                ""","newExercises":[{"name":"杠铃深蹲","category":"STRENGTH","muscleGroups":["腿部"]}]""",
+            ),
+            library,
+        ) as ExternalDocOutcome.Parsed
+
+        assertEquals("库里已有 → 不进候选", emptyList<ImportedNewExercise>(), outcome.draft.newExercises)
+        assertEquals(listOf(1L), outcome.draft.proposal.days.single().items.map { it.exerciseId })
+        assertTrue(
+            "一条提示都不给：它不是错误，而「建完库自动重解析」必然走到这里 —— " +
+                "报出来等于指着用户刚照我们说的做的那一步说「这不合法」（真机抓到的原话）",
+            outcome.draft.notes.isEmpty(),
+        )
+    }
+
+    @Test
+    fun parse_allItemsAreNewExercises_stillHandsBackTheCandidates() {
+        // 一份"全是新动作"的文档不是废文档：先加库、再重解析，就导得进来。
+        val outcome = ExternalPlanDocumentParser.parse(
+            doc(
+                """{"exercise":"保加利亚分腿蹲","targetSets":3,"targetReps":12}""",
+                ""","newExercises":[$newExercise]""",
+            ),
+            library,
+        ) as ExternalDocOutcome.Refused
+
+        assertEquals(ExternalDocRefusal.NO_USABLE_ITEMS, outcome.reason)
+        assertEquals(1, outcome.newExercises.size)
+    }
+
     // ---------------- 整份拒收的五种原因 ----------------
 
     @Test

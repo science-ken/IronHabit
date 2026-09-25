@@ -4,9 +4,11 @@ import com.ironhabit.app.domain.ai.remote.stripCodeFence
 import com.ironhabit.app.domain.model.AdviceSource
 import com.ironhabit.app.domain.model.Equipment
 import com.ironhabit.app.domain.model.Exercise
+import com.ironhabit.app.domain.model.ExerciseCategory
 import com.ironhabit.app.domain.model.Goal
 import com.ironhabit.app.domain.model.InjuryArea
 import com.ironhabit.app.domain.model.InputLimits
+import com.ironhabit.app.domain.model.MuscleGroup
 import com.ironhabit.app.domain.model.PlanItemDraft
 import com.ironhabit.app.domain.model.PlanProposal
 import com.ironhabit.app.domain.model.PlanReason
@@ -90,10 +92,20 @@ object ExternalPlanDocumentParser {
             .toMap()
 
         val notes = mutableListOf<ExternalPlanNote>()
+
+        val (profilePatch, profileNotes) = resolveProfile(document.profile)
+        notes += profileNotes
+
+        // 先挑新动作候选，再解析条目：不认识的名字只有**声明过且合法**的那些才有资格，
+        // 其余照旧按"库里找不到"丢弃 —— 建库是往用户库里永久加一行，不该由一个错别字触发。
+        val (candidates, newExerciseNotes) = resolveNewExercises(document.newExercises, library)
+        notes += newExerciseNotes
+        val declaredNewNames: Set<String> = candidates.map { entry -> entry.name.lowercase() }.toSet()
+
         val days: List<PlannedDay> = document.days
             .map { day -> day.dayOfWeek.coerceIn(MIN_DAY_OF_WEEK, MAX_DAY_OF_WEEK) to day }
             .mapNotNull { (dayOfWeek, day) ->
-                val items = resolveItems(dayOfWeek, day.items, byName, notes)
+                val items = resolveItems(dayOfWeek, day.items, byName, declaredNewNames, notes)
                 if (items.isEmpty()) null
                 else PlannedDay(
                     dayOfWeek = dayOfWeek,
@@ -102,9 +114,6 @@ object ExternalPlanDocumentParser {
                     items = items,
                 )
             }
-
-        val (profilePatch, profileNotes) = resolveProfile(document.profile)
-        notes += profileNotes
 
         if (days.isEmpty()) {
             // 和内置 B-3 同口径：一条都不剩 ≠ "这周什么都不练"。当成有效结果送去采纳会把整周清空。
@@ -118,6 +127,8 @@ object ExternalPlanDocumentParser {
                 reason = if (hadAnyItem) ExternalDocRefusal.NO_USABLE_ITEMS else ExternalDocRefusal.EMPTY_PLAN,
                 notes = notes.toList(),
                 analysis = document.analysis?.trim()?.takeIf { it.isNotEmpty() },
+                // 候选照样带回去：一份"全是新动作"的文档不是废文档，它是"先加库再导入"。
+                newExercises = candidates,
             )
         }
 
@@ -131,8 +142,56 @@ object ExternalPlanDocumentParser {
                 ),
                 notes = notes.toList(),
                 profile = profilePatch,
+                newExercises = candidates,
             ),
         )
+    }
+
+    /**
+     * 校验文档声明的新动作，并挑出"库里没有但已声明"的那些作为待确认候选。
+     *
+     * @return 候选列表 + 逐条说明（不合法的整条拒收并点名）
+     */
+    private fun resolveNewExercises(
+        declared: List<ExternalNewExercise>,
+        library: List<Exercise>,
+    ): Pair<List<ImportedNewExercise>, List<ExternalPlanNote>> {
+        if (declared.isEmpty()) return emptyList<ImportedNewExercise>() to emptyList()
+
+        val notes = mutableListOf<ExternalPlanNote>()
+        val valid = mutableListOf<ImportedNewExercise>()
+
+        for (raw: ExternalNewExercise in declared) {
+            val name: String = raw.name.trim()
+            val category: ExerciseCategory? = raw.category?.let { enumNameOrNull<ExerciseCategory>(it) }
+            val badMuscles: List<String> = raw.muscleGroups.map { it.trim() }
+                .filter { it.isNotEmpty() && it !in MuscleGroup.formOptions }
+
+            when {
+                name.isEmpty() -> notes += rejectedNewExercise("newExercises（名字为空）")
+                category == null -> notes += rejectedNewExercise("newExercises[$name].category")
+                // 一个标签不认识就整条拒收：半收的条目最坏 —— "有分类没肌群"的动作看起来正常，
+                // 实际永远躲不开伤病避让，而那正是它被建进来的理由之一。
+                badMuscles.isNotEmpty() -> notes += rejectedNewExercise(
+                    "newExercises[$name].muscleGroups: " + badMuscles.joinToString(" / "),
+                )
+
+                else -> valid += ImportedNewExercise(
+                    name = name,
+                    category = category,
+                    muscleGroups = raw.muscleGroups.map { it.trim() }.filter { it.isNotEmpty() }.distinct(),
+                    equipment = raw.equipment?.mapNotNull { enumNameOrNull<Equipment>(it) }?.toSet() ?: emptySet(),
+                )
+            }
+        }
+
+        // 只有"库里确实没有"的才需要用户确认要新建；已有的那条名字会被正常解析成草案。
+        //
+        // 库里已有却仍声明成新动作 → **不给任何提示**。它不是错误：条目照常按名字解析成功，
+        // 用户看不到任何后果。而"建完库自动重解析"这一趟必然走到这里，
+        // 报出来就等于指着用户刚照我们说的做的那一步说"这不合法"。
+        val known: Set<String> = library.map { existing -> existing.name.trim() }.toSet()
+        return valid.filter { it.name !in known } to notes
     }
 
     /** 一天内的条目：名字反查 → 去重 → 单日上限 → 数值钳制（顺序即丢弃原因优先级）。 */
@@ -140,6 +199,7 @@ object ExternalPlanDocumentParser {
         dayOfWeek: Int,
         rawItems: List<ExternalItem>,
         byName: Map<String, Exercise>,
+        declaredNewNames: Set<String>,
         notes: MutableList<ExternalPlanNote>,
     ): List<PlanItemDraft> {
         val seen = mutableSetOf<Long>()
@@ -153,8 +213,17 @@ object ExternalPlanDocumentParser {
             }
             val exercise: Exercise? = byName[name.lowercase()]
             if (exercise == null) {
-                // 幻觉名 / 已停用 / 用户改了名 —— 一律"库里找不到"，不猜、不新建（建库外动作是另一刀）。
-                notes += ExternalPlanNote(ExternalPlanNote.Kind.UNKNOWN_EXERCISE, dayOfWeek, name)
+                // 幻觉名 / 已停用 / 用户改了名 —— 一律"库里找不到"，不猜、不新建。
+                // 唯一例外：文档在 newExercises 里点名声明过它，那就变成"待用户确认新建"的候选。
+                notes += ExternalPlanNote(
+                    if (name.lowercase() in declaredNewNames) {
+                        ExternalPlanNote.Kind.EXERCISE_CREATABLE
+                    } else {
+                        ExternalPlanNote.Kind.UNKNOWN_EXERCISE
+                    },
+                    dayOfWeek,
+                    name,
+                )
                 continue
             }
             if (!seen.add(exercise.id)) {
@@ -215,16 +284,16 @@ object ExternalPlanDocumentParser {
         }
 
         val goal: Goal? = profile.goal?.let { raw -> enumNameOrNull<Goal>(raw) }
-            .also { if (it == null && !profile.goal.isNullOrBlank()) notes += rejected("goal") }
+            .also { if (it == null && !profile.goal.isNullOrBlank()) notes += rejectedProfile("goal") }
 
         val equipment: Set<Equipment>? = profile.equipment?.let { names ->
             resolveNames(names) { raw -> enumNameOrNull<Equipment>(raw) }
-                .also { it.second.forEach { name -> notes += rejected("equipment[$name]") } }
+                .also { it.second.forEach { name -> notes += rejectedProfile("equipment[$name]") } }
                 .first
         }
         val injuryAreas: Set<InjuryArea>? = profile.injuryAreas?.let { names ->
             resolveNames(names) { raw -> enumNameOrNull<InjuryArea>(raw) }
-                .also { it.second.forEach { name -> notes += rejected("injuryAreas[$name]") } }
+                .also { it.second.forEach { name -> notes += rejectedProfile("injuryAreas[$name]") } }
                 .first
         }
 
@@ -259,8 +328,11 @@ object ExternalPlanDocumentParser {
     private inline fun <reified T : Enum<T>> enumNameOrNull(raw: String): T? =
         enumValues<T>().firstOrNull { it.name == raw.trim().uppercase() }
 
-    private fun rejected(field: String) =
+    private fun rejectedProfile(field: String) =
         ExternalPlanNote(ExternalPlanNote.Kind.PROFILE_VALUE_REJECTED, null, field)
+
+    private fun rejectedNewExercise(what: String) =
+        ExternalPlanNote(ExternalPlanNote.Kind.NEW_EXERCISE_REJECTED, null, what)
 
     /** 去围栏 → 抽出 JSON 子串 → 宽松反序列化；任何失败都返回 `null`（调用方转成可识别拒收原因）。 */
     private fun decode(raw: String): ExternalDocument? {
@@ -319,6 +391,8 @@ sealed interface ExternalDocOutcome {
         val notes: List<ExternalPlanNote> = emptyList(),
         /** 模型自己在 `analysis` 里写的话。拒收时尤其要看它 —— 它常常直接说了为什么没排。 */
         val analysis: String? = null,
+        /** 一份"全是新动作"的文档不是废文档：候选照样带回去，让用户先加库再导入。 */
+        val newExercises: List<ImportedNewExercise> = emptyList(),
     ) : ExternalDocOutcome
 }
 
@@ -350,6 +424,8 @@ data class ExternalPlanDraft(
     val notes: List<ExternalPlanNote>,
     /** 档案段（已过滤 + 已钳制前的原值）。空补丁 = 文档没提档案。 */
     val profile: ExternalProfilePatch = ExternalProfilePatch(),
+    /** 待用户确认的新动作（库里没有且文档声明过）。空表 = 不需要建任何东西。 */
+    val newExercises: List<ImportedNewExercise> = emptyList(),
 )
 
 /**
@@ -371,6 +447,12 @@ data class ExternalPlanNote(
     enum class Kind {
         /** 名字在动作库里找不到（幻觉名 / 已停用 / 改名）。 */
         UNKNOWN_EXERCISE,
+
+        /** 库里没有，但文档在 `newExercises` 里声明过 → 等用户勾选确认后才建进库。 */
+        EXERCISE_CREATABLE,
+
+        /** 声明的新动作本身不合法（分类不认识 / 肌群标签不在词表 / 库里已有同名），整条拒收。 */
+        NEW_EXERCISE_REJECTED,
 
         /** 空动作名。 */
         BLANK_EXERCISE_NAME,
@@ -404,8 +486,10 @@ private data class ExternalDocument(
     val days: List<ExternalDay>,
     /** 可选：外部 AI 的"为什么这么排"，原样透传给预览页显示。 */
     val analysis: String? = null,
-    /** 可选：档案改动（本版只登记、不应用）。 */
+    /** 可选：档案改动（逐字段勾选后才写）。 */
     val profile: ExternalProfile? = null,
+    /** 可选：文档声明的新动作（用户确认后才建进库）。 */
+    val newExercises: List<ExternalNewExercise> = emptyList(),
 )
 
 @Serializable
@@ -424,6 +508,18 @@ private data class ExternalItem(
     val targetWeightKg: Float? = null,
     /** 可选：这一条为什么排进来（自由文本，只在预览页折叠显示，不落库）。 */
     val reason: String? = null,
+)
+
+/**
+ * 文档声明的新动作。`category` **不带默认值**：
+ * 没有分类的行在规则引擎里等于"哪块肌群都不算"，伤病避让会静默失效，所以宁可整条拒收。
+ */
+@Serializable
+private data class ExternalNewExercise(
+    val name: String,
+    val category: String? = null,
+    val muscleGroups: List<String> = emptyList(),
+    val equipment: List<String>? = null,
 )
 
 /**

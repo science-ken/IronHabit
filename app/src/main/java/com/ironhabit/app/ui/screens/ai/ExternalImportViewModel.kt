@@ -6,8 +6,11 @@ import androidx.lifecycle.viewModelScope
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.ai.external.ExternalDocRefusal
 import com.ironhabit.app.domain.ai.external.ExternalPlanNote
+import com.ironhabit.app.domain.ai.external.ImportedNewExercise
+import com.ironhabit.app.domain.ai.external.NewExerciseCandidate
 import com.ironhabit.app.domain.model.WeeklyReview
 import com.ironhabit.app.domain.usecase.BuildExternalCoachPromptUseCase
+import com.ironhabit.app.domain.usecase.CreateImportedExercisesUseCase
 import com.ironhabit.app.domain.usecase.ExternalPlanImport
 import com.ironhabit.app.domain.usecase.ImportExternalPlanUseCase
 import com.ironhabit.app.domain.usecase.PlanPreviewHolder
@@ -43,6 +46,7 @@ import kotlinx.datetime.toLocalDateTime
 class ExternalImportViewModel @Inject constructor(
     private val buildPromptTemplate: BuildExternalCoachPromptUseCase,
     private val importPlan: ImportExternalPlanUseCase,
+    private val createExercises: CreateImportedExercisesUseCase,
     private val planPreviewHolder: PlanPreviewHolder,
     private val clock: Clock,
     private val timeZone: TimeZone,
@@ -67,6 +71,13 @@ class ExternalImportViewModel @Inject constructor(
         val refusalAnalysis: String? = null,
         /** 逐条"什么没进来 / 什么被动过"。拒收时也可能非空（全被挡掉那一种）。 */
         val notes: List<ExternalPlanNote> = emptyList(),
+        /**
+         * 库里没有、但文档在 `newExercises` 里声明过的动作。
+         *
+         * 默认一行都不勾：建动作是往用户库里**永久加一行**，文档"想要"不等于用户"同意"。
+         */
+        val newExercises: List<NewExerciseCandidate> = emptyList(),
+        val isCreating: Boolean = false,
         @StringRes val snackbarRes: Int? = null,
         val snackbarArgs: List<Any> = emptyList(),
         /** 草案已放进 holder → 界面跳一次预览页。 */
@@ -121,6 +132,7 @@ class ExternalImportViewModel @Inject constructor(
                 refusalRes = null,
                 refusalAnalysis = null,
                 notes = emptyList(),
+                newExercises = emptyList(),
             )
         }
     }
@@ -133,7 +145,13 @@ class ExternalImportViewModel @Inject constructor(
 
     fun onTextChange(text: String) {
         _uiState.update {
-            it.copy(text = text, refusalRes = null, refusalAnalysis = null, notes = emptyList())
+            it.copy(
+                text = text,
+                refusalRes = null,
+                refusalAnalysis = null,
+                notes = emptyList(),
+                newExercises = emptyList(),
+            )
         }
     }
 
@@ -144,7 +162,13 @@ class ExternalImportViewModel @Inject constructor(
             return
         }
         _uiState.update {
-            it.copy(text = clipboardText, refusalRes = null, refusalAnalysis = null, notes = emptyList())
+            it.copy(
+                text = clipboardText,
+                refusalRes = null,
+                refusalAnalysis = null,
+                notes = emptyList(),
+                newExercises = emptyList(),
+            )
         }
     }
 
@@ -205,6 +229,7 @@ class ExternalImportViewModel @Inject constructor(
                         // 模型自己那句话是原因本体（"没收到动作库"之类），比我们能猜的诊断准。
                         refusalAnalysis = result.analysis,
                         notes = result.notes,
+                        newExercises = result.newExercises.map { entry -> NewExerciseCandidate(entry) },
                     )
                 }
 
@@ -228,11 +253,49 @@ class ExternalImportViewModel @Inject constructor(
                             refusalRes = null,
                             refusalAnalysis = null,
                             notes = emptyList(),
+                            newExercises = emptyList(),
                             previewRequested = true,
                         )
                     }
                 }
             }
+        }
+    }
+
+    /** 勾一个待新建的动作。 */
+    fun onToggleNewExercise(index: Int) {
+        _uiState.update { state ->
+            val rows = state.newExercises.toMutableList()
+            if (index in rows.indices) rows[index] = rows[index].copy(checked = !rows[index].checked)
+            state.copy(newExercises = rows)
+        }
+    }
+
+    /**
+     * 把勾了的新动作建进库，然后**自动重解析一次**。
+     *
+     * 一个意图不该让用户点两次：建这些动作的目的就是让那些条目能导进来，
+     * 停在"已加入，请再点一次解析"等于把半成品状态甩回给用户。
+     */
+    fun createSelectedAndReparse() {
+        if (_uiState.value.isCreating) return
+        val chosen: List<ImportedNewExercise> = _uiState.value.newExercises
+            .filter { row -> row.checked }
+            .map { row -> row.exercise }
+        if (chosen.isEmpty()) return
+
+        _uiState.update { it.copy(isCreating = true) }
+        viewModelScope.launch {
+            val created: Int = createExercises(chosen)
+            _uiState.update { state ->
+                state.copy(
+                    isCreating = false,
+                    newExercises = emptyList(),
+                    snackbarRes = if (created > 0) R.string.ai_import_exercises_created else null,
+                    snackbarArgs = listOf(created.toString()),
+                )
+            }
+            parse()
         }
     }
 

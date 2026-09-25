@@ -2,8 +2,10 @@ package com.ironhabit.app.domain.usecase
 
 import com.ironhabit.app.domain.ai.external.ExternalPlanSchema
 import com.ironhabit.app.domain.model.Equipment
+import com.ironhabit.app.domain.model.ExerciseCategory
 import com.ironhabit.app.domain.model.Goal
 import com.ironhabit.app.domain.model.InjuryArea
+import com.ironhabit.app.domain.model.MuscleGroup
 import com.ironhabit.app.domain.model.ProfileLimits
 import com.ironhabit.app.domain.model.WeekPlan
 import com.ironhabit.app.domain.model.WeeklyReview
@@ -65,6 +67,10 @@ class BuildExternalCoachPromptUseCase @Inject constructor(
             .replace(PLACEHOLDER_GOALS, enumNames<Goal>())
             .replace(PLACEHOLDER_EQUIPMENTS, enumNames<Equipment>())
             .replace(PLACEHOLDER_INJURIES, enumNames<InjuryArea>())
+            .replace(PLACEHOLDER_CATEGORIES, enumNames<ExerciseCategory>())
+            // 肌群标签的唯一真源是 MuscleGroup 词表（中文数据，不是文案）；
+            // 把清单发给模型，比让它自己造一个"股四头肌"再被整条拒收省事。
+            .replace(PLACEHOLDER_MUSCLES, MuscleGroup.formOptions.joinToString("/"))
     }
 
     private inline fun <reified T : Enum<T>> enumNames(): String =
@@ -125,6 +131,8 @@ class BuildExternalCoachPromptUseCase @Inject constructor(
         const val PLACEHOLDER_GOALS = "{{GOALS}}"
         const val PLACEHOLDER_EQUIPMENTS = "{{EQUIPMENTS}}"
         const val PLACEHOLDER_INJURIES = "{{INJURIES}}"
+        const val PLACEHOLDER_CATEGORIES = "{{CATEGORIES}}"
+        const val PLACEHOLDER_MUSCLES = "{{MUSCLES}}"
 
         val TEMPLATE: String = """
 帮我为下一周安排训练计划。**只输出一个 JSON 对象**，我要把它原样粘回我的健身 App 导入。
@@ -149,7 +157,13 @@ class BuildExternalCoachPromptUseCase @Inject constructor(
    • injuryAreas：数组，元素只能取自 {{INJURIES}}；确认用户没有伤病时才给空数组 []
    • injuryNote：一句话（不超过 200 字）
    身高、体重、体脂、年龄、性别**一律不要写**：那是你的实测数据，App 不收 AI 填的这一项，写了会被逐条退回。
-7. 如果你在上面【我的数据】里找不到 library 数组（那是我能用的动作清单），**不要**只回一个空壳计划：请在 analysis 里直接说"没收到 library"，并告诉用户重新复制模板整段再发一次。
+7. 如果你要用我库里**没有**的动作，必须同时在顶层加一个 "newExercises" 数组声明它，否则那一条会被 App 直接丢掉：
+   {"name":"保加利亚分腿蹲","category":"STRENGTH","muscleGroups":["腿部","臀部"],"equipment":["DUMBBELL"]}
+   • category 只能取 {{CATEGORIES}}
+   • muscleGroups 只能取这些已有标签：{{MUSCLES}}。**不要造新词** —— 词表是固定的，造了新词这一条会被整条拒收。
+   • equipment 可选，元素只能取自 {{EQUIPMENTS}}
+   能用我库里已有的动作就别加新的：加进去的行会永久留在我的动作库里。
+8. 如果你在上面【我的数据】里找不到 library 数组（那是我能用的动作清单），**不要**只回一个空壳计划：请在 analysis 里直接说"没收到 library"，并告诉用户重新复制模板整段再发一次。
 
 【我的数据】下面这段 JSON 里有三样你要用到的东西：**library**（我能用的动作清单，只能逐字用里面的 name）、**profile**（目标 / 器械 / 伤病）、**week 与 summary**（这一周实际练了什么、哪些动作在进步、哪些卡住了）。
 {{PACKAGE}}
