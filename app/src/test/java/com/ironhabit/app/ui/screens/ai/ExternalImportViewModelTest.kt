@@ -341,6 +341,66 @@ class ExternalImportViewModelTest {
         coVerify(exactly = 1) { importPlan(any(), any()) }
     }
 
+    @Test
+    fun parse_readyWithNewExerciseCandidates_staysInSheetInsteadOfNavigating() = runTest {
+        // 真机自测抓到的：以前这条路照样跳预览页，而预览页写着"勾上面「加入动作库」"——
+        // 那块按钮在已经关掉的弹层里，界面指着一块不在屏幕上的 UI。
+        val vm = viewModel()
+        val pending = ExternalPlanImport.Ready(
+            preview = draftPreview,
+            notes = listOf(ExternalPlanNote(ExternalPlanNote.Kind.EXERCISE_CREATABLE, 1, "动作乙")),
+            newExercises = listOf(candidate("动作乙")),
+        )
+        coEvery { importPlan(any(), any()) } returns pending
+        vm.open(review)
+        vm.onTextChange("doc")
+
+        vm.parse()
+        advanceUntilIdle()
+
+        assertTrue("不跳页", vm.uiState.value.sheetOpen)
+        assertFalse(vm.uiState.value.previewRequested)
+        assertTrue(vm.uiState.value.canProceedWithoutThem)
+        assertNull("草案还没交给预览页", holder.peek())
+    }
+
+    @Test
+    fun proceedWithoutNewExercises_handsTheDraftOverAndNavigates() = runTest {
+        val vm = viewModel()
+        val notes = listOf(ExternalPlanNote(ExternalPlanNote.Kind.EXERCISE_CREATABLE, 1, "动作乙"))
+        coEvery { importPlan(any(), any()) } returns ExternalPlanImport.Ready(
+            preview = draftPreview,
+            notes = notes,
+            newExercises = listOf(candidate("动作乙")),
+        )
+        vm.onTextChange("doc")
+        vm.parse()
+        advanceUntilIdle()
+
+        vm.proceedWithoutNewExercises()
+        advanceUntilIdle()
+
+        assertEquals(draftPreview, holder.peek())
+        assertEquals(notes, holder.peekImportNotes())
+        assertTrue(vm.uiState.value.previewRequested)
+        assertFalse(vm.uiState.value.sheetOpen)
+        assertTrue(vm.uiState.value.newExercises.isEmpty())
+        assertFalse(vm.uiState.value.canProceedWithoutThem)
+    }
+
+    @Test
+    fun parse_readyWithoutCandidates_navigatesStraightAway() = runTest {
+        val vm = viewModel()
+        coEvery { importPlan(any(), any()) } returns ExternalPlanImport.Ready(draftPreview, emptyList())
+        vm.onTextChange("doc")
+
+        vm.parse()
+        advanceUntilIdle()
+
+        assertTrue(vm.uiState.value.previewRequested)
+        assertFalse(vm.uiState.value.sheetOpen)
+    }
+
     // ---------------- 剪贴板与关闭 ----------------
 
     @Test

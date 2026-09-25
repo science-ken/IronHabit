@@ -59,6 +59,7 @@ internal fun ImportPlanSheet(
     onParse: () -> Unit,
     onToggleNewExercise: (Int) -> Unit,
     onCreateSelected: () -> Unit,
+    onProceedWithoutThem: () -> Unit,
     onDismissRequest: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -210,6 +211,15 @@ internal fun ImportPlanSheet(
                     onToggle = onToggleNewExercise,
                     onCreate = onCreateSelected,
                 )
+                // 退路：不想建这些动作时也得能走。没有这一条，"有候选"就把用户锁在弹层里了。
+                if (uiState.canProceedWithoutThem) {
+                    TextButton(
+                        onClick = onProceedWithoutThem,
+                        enabled = !uiState.isCreating,
+                    ) {
+                        Text(text = stringResource(R.string.ai_import_proceed_without))
+                    }
+                }
             }
 
             Button(

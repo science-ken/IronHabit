@@ -77,6 +77,8 @@ class ExternalImportViewModel @Inject constructor(
          * 默认一行都不勾：建动作是往用户库里**永久加一行**，文档"想要"不等于用户"同意"。
          */
         val newExercises: List<NewExerciseCandidate> = emptyList(),
+        /** 有没建的动作、但剩下的已经可以导 → 给一条"先只导入能导的"退路。 */
+        val canProceedWithoutThem: Boolean = false,
         val isCreating: Boolean = false,
         @StringRes val snackbarRes: Int? = null,
         val snackbarArgs: List<Any> = emptyList(),
@@ -92,6 +94,13 @@ class ExternalImportViewModel @Inject constructor(
 
     /** 正在跑的拼装任务：换周时取消它，避免迟到的旧结果盖掉新周的那一份。 */
     private var buildJob: Job? = null
+
+    /**
+     * 解析成功、但文档里还有没建的动作时暂存的结果。
+     *
+     * 用户可以在弹层里直接选"先只导入能导的"，不必为了跳页再解析一次。
+     */
+    private var pending: ExternalPlanImport.Ready? = null
 
     /** 选定那一周的周一 epochDay（界面用它算「本周 9/21–9/27」这类标签）。 */
     fun weekStartEpochDay(choice: WeekChoice = _uiState.value.week): Long {
@@ -123,6 +132,7 @@ class ExternalImportViewModel @Inject constructor(
     /** 关闭时把模板与拒收说明一起清掉：下次进来不能还挂着上一次的结论。 */
     fun dismiss() {
         buildJob?.cancel()
+        pending = null
         _uiState.update {
             it.copy(
                 sheetOpen = false,
@@ -133,6 +143,7 @@ class ExternalImportViewModel @Inject constructor(
                 refusalAnalysis = null,
                 notes = emptyList(),
                 newExercises = emptyList(),
+                canProceedWithoutThem = false,
             )
         }
     }
@@ -214,8 +225,17 @@ class ExternalImportViewModel @Inject constructor(
         if (_uiState.value.isParsing) return
         val text: String = _uiState.value.text
         val weekStart: Long = weekStartEpochDay()
+        // 上一轮的结论全部作废（包括攒着没跳的草案）：改了粘贴框就该重新判定。
+        pending = null
         _uiState.update {
-            it.copy(isParsing = true, refusalRes = null, refusalAnalysis = null, notes = emptyList())
+            it.copy(
+                isParsing = true,
+                refusalRes = null,
+                refusalAnalysis = null,
+                notes = emptyList(),
+                newExercises = emptyList(),
+                canProceedWithoutThem = false,
+            )
         }
 
         viewModelScope.launch {
@@ -244,22 +264,51 @@ class ExternalImportViewModel @Inject constructor(
                 }
 
                 is ExternalPlanImport.Ready -> {
-                    planPreviewHolder.set(result.preview, result.notes, result.profileDiffs, result.reasons)
-                    _uiState.update { state ->
-                        state.copy(
-                            isParsing = false,
-                            sheetOpen = false,
-                            text = "",
-                            refusalRes = null,
-                            refusalAnalysis = null,
-                            notes = emptyList(),
-                            newExercises = emptyList(),
-                            previewRequested = true,
-                        )
+                    if (result.newExercises.isEmpty()) {
+                        handToPreview(result)
+                    } else {
+                        // ⚠️ 有没建的动作时**不跳页**：跳过去就把用户留在预览页，
+                        // 而那块「加入动作库」在已经关掉的弹层里 —— 界面会指着一块不在屏幕上的 UI。
+                        // 留在弹层里让他选：建完自动重解析，或者"先只导入能导的"。
+                        pending = result
+                        _uiState.update { state ->
+                            state.copy(
+                                isParsing = false,
+                                refusalRes = null,
+                                refusalAnalysis = null,
+                                notes = result.notes,
+                                newExercises = result.newExercises.map { entry -> NewExerciseCandidate(entry) },
+                                canProceedWithoutThem = true,
+                            )
+                        }
                     }
                 }
             }
         }
+    }
+
+    /** 把解析好的草案交给预览页（两条路共用：无候选时直接跳，"先只导入能导的"也走这里）。 */
+    private fun handToPreview(result: ExternalPlanImport.Ready) {
+        planPreviewHolder.set(result.preview, result.notes, result.profileDiffs, result.reasons)
+        pending = null
+        _uiState.update { state ->
+            state.copy(
+                isParsing = false,
+                sheetOpen = false,
+                text = "",
+                refusalRes = null,
+                refusalAnalysis = null,
+                notes = emptyList(),
+                newExercises = emptyList(),
+                canProceedWithoutThem = false,
+                previewRequested = true,
+            )
+        }
+    }
+
+    /** 「先只导入能导的」：不建那些新动作，直接带着能导的部分去预览页。 */
+    fun proceedWithoutNewExercises() {
+        pending?.let(::handToPreview)
     }
 
     /** 勾一个待新建的动作。 */

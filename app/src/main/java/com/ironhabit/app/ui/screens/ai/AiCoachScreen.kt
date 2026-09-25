@@ -140,6 +140,7 @@ fun AiCoachScreen(
             onParse = importViewModel::parse,
             onToggleNewExercise = importViewModel::onToggleNewExercise,
             onCreateSelected = importViewModel::createSelectedAndReparse,
+            onProceedWithoutThem = importViewModel::proceedWithoutNewExercises,
             onDismissRequest = importViewModel::dismiss,
         )
     }
