@@ -61,6 +61,7 @@ import com.ironhabit.app.domain.model.WeekPlan
 import com.ironhabit.app.ui.components.EmptyState
 import com.ironhabit.app.ui.components.LoadingSkeleton
 import com.ironhabit.app.ui.components.LocalSnackbarHostState
+import com.ironhabit.app.ui.components.categoryLabelRes
 import com.ironhabit.app.ui.components.planGoalText
 import com.ironhabit.app.ui.components.weekRangeText
 import com.ironhabit.app.ui.screens.ai.SourceLine
@@ -755,14 +756,6 @@ private fun HistorySection(
 }
 
 // ---------------- 工具 ----------------
-
-@StringRes
-private fun categoryLabelRes(category: ExerciseCategory): Int = when (category) {
-    ExerciseCategory.BODYWEIGHT -> R.string.category_bodyweight
-    ExerciseCategory.STRENGTH -> R.string.category_strength
-    ExerciseCategory.CARDIO -> R.string.category_cardio
-    ExerciseCategory.CUSTOM -> R.string.category_custom
-}
 
 private val WEEKDAY_SHORT_RES = listOf(
     R.string.weekday_short_mon,

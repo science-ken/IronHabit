@@ -24,7 +24,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.CategoryShare
-import com.ironhabit.app.domain.model.ExerciseCategory
 import com.ironhabit.app.ui.theme.IronHabitSpacing
 import com.ironhabit.app.ui.theme.pieSliceLevels
 import kotlin.math.roundToInt
@@ -119,7 +118,7 @@ fun CategoryPieChart(
             nonEmpty.forEach { share ->
                 LegendRow(
                     color = colorOf(share),
-                    label = categoryLabel(share.category),
+                    label = stringResource(categoryLabelRes(share.category)),
                     count = share.count,
                     ratio = share.ratio,
                 )
@@ -153,17 +152,6 @@ private fun LegendRow(
         )
     }
 }
-
-/** `category_*` 资源映射（分类 → 中文文案）。 */
-@Composable
-private fun categoryLabel(category: ExerciseCategory): String = stringResource(
-    when (category) {
-        ExerciseCategory.BODYWEIGHT -> R.string.category_bodyweight
-        ExerciseCategory.STRENGTH -> R.string.category_strength
-        ExerciseCategory.CARDIO -> R.string.category_cardio
-        ExerciseCategory.CUSTOM -> R.string.category_custom
-    },
-)
 
 /**
  * 分类色住在 `ui/theme/Color.kt` 的 `pieSliceLevels()` —— 与热力图密度表共用同一批

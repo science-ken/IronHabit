@@ -31,6 +31,7 @@ import com.ironhabit.app.domain.model.MuscleGroup
 import com.ironhabit.app.ui.components.EmptyState
 import com.ironhabit.app.ui.components.LoadingSkeleton
 import com.ironhabit.app.ui.components.LocalSnackbarHostState
+import com.ironhabit.app.ui.components.categoryLabelRes
 import com.ironhabit.app.ui.theme.IronHabitSpacing
 
 /**
@@ -247,12 +248,4 @@ private fun FieldError(text: String) {
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.error,
     )
-}
-
-/** 分类 → 文案资源。 */
-private fun categoryLabelRes(category: ExerciseCategory): Int = when (category) {
-    ExerciseCategory.BODYWEIGHT -> R.string.category_bodyweight
-    ExerciseCategory.STRENGTH -> R.string.category_strength
-    ExerciseCategory.CARDIO -> R.string.category_cardio
-    ExerciseCategory.CUSTOM -> R.string.category_custom
 }

@@ -21,9 +21,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.CheckIn
-import com.ironhabit.app.domain.model.ExerciseCategory
 import com.ironhabit.app.ui.components.EmptyState
 import com.ironhabit.app.ui.components.LoadingSkeleton
+import com.ironhabit.app.ui.components.categoryLabelRes
 import com.ironhabit.app.ui.formatMonthDay
 import com.ironhabit.app.ui.theme.IronHabitSpacing
 
@@ -133,12 +133,4 @@ private fun CheckInHistoryRow(checkIn: CheckIn) {
             color = MaterialTheme.colorScheme.primary,
         )
     }
-}
-
-/** 分类 → 文案资源。 */
-private fun categoryLabelRes(category: ExerciseCategory): Int = when (category) {
-    ExerciseCategory.BODYWEIGHT -> R.string.category_bodyweight
-    ExerciseCategory.STRENGTH -> R.string.category_strength
-    ExerciseCategory.CARDIO -> R.string.category_cardio
-    ExerciseCategory.CUSTOM -> R.string.category_custom
 }
