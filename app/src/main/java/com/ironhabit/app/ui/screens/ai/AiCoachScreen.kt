@@ -141,8 +141,13 @@ fun AiCoachScreen(
             onReadClipboard = importViewModel::onClipboardRead,
             onParse = importViewModel::parse,
             onToggleNewExercise = importViewModel::onToggleNewExercise,
-            onCreateSelected = importViewModel::createSelectedAndReparse,
-            onProceedWithoutThem = importViewModel::proceedWithoutNewExercises,
+            onCreateSelected = importViewModel::createSelectedExercisesAndReparse,
+            onToggleNewFood = importViewModel::onToggleNewFood,
+            onNewFoodValueChange = importViewModel::onNewFoodFieldChange,
+            onToggleNewFoodEditing = importViewModel::onToggleNewFoodEditing,
+            onToggleNewFoodTag = importViewModel::onToggleNewFoodTag,
+            onCreateSelectedFoods = importViewModel::createSelectedFoodsAndReparse,
+            onProceedWithoutThem = importViewModel::proceedWithoutCandidates,
             onDismissRequest = importViewModel::dismiss,
         )
     }

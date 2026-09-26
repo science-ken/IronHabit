@@ -5,9 +5,11 @@ import com.ironhabit.app.domain.ai.external.ExternalDocRefusal
 import com.ironhabit.app.domain.ai.external.ExternalPlanNote
 import com.ironhabit.app.domain.ai.external.ExternalPlanSchema
 import com.ironhabit.app.domain.ai.external.ImportedNewExercise
+import com.ironhabit.app.domain.ai.external.ImportedNewFood
 import com.ironhabit.app.domain.model.AdviceSource
 import com.ironhabit.app.domain.model.BodyReview
 import com.ironhabit.app.domain.model.DietReview
+import com.ironhabit.app.domain.model.DietRestriction
 import com.ironhabit.app.domain.model.Equipment
 import com.ironhabit.app.domain.model.ExerciseCategory
 import com.ironhabit.app.domain.model.TrainingReview
@@ -16,6 +18,7 @@ import com.ironhabit.app.domain.model.WeeklyReview
 import com.ironhabit.app.domain.usecase.BuildExternalCoachPromptUseCase
 import com.ironhabit.app.domain.usecase.BuildExternalDietPromptUseCase
 import com.ironhabit.app.domain.usecase.CreateImportedExercisesUseCase
+import com.ironhabit.app.domain.usecase.CreateImportedFoodsUseCase
 import com.ironhabit.app.domain.usecase.ExternalPlanImport
 import com.ironhabit.app.domain.usecase.ImportExternalPlanUseCase
 import com.ironhabit.app.domain.usecase.PlanPreview
@@ -56,6 +59,7 @@ class ExternalImportViewModelTest {
     private val buildPromptTemplate = mockk<BuildExternalCoachPromptUseCase>(relaxed = true)
     private val buildDietPrompt = mockk<BuildExternalDietPromptUseCase>(relaxed = true)
     private val createExercises = mockk<CreateImportedExercisesUseCase>()
+    private val createFoods = mockk<CreateImportedFoodsUseCase>()
     private val holder = PlanPreviewHolder()
     private val utc = TimeZone.UTC
 
@@ -71,6 +75,7 @@ class ExternalImportViewModelTest {
         buildDietPrompt = buildDietPrompt,
         importPlan = importPlan,
         createExercises = createExercises,
+        createFoods = createFoods,
         planPreviewHolder = holder,
         clock = clock,
         timeZone = utc,
@@ -318,7 +323,7 @@ class ExternalImportViewModelTest {
         advanceUntilIdle()
 
         vm.onToggleNewExercise(1)
-        vm.createSelectedAndReparse()
+        vm.createSelectedExercisesAndReparse()
         advanceUntilIdle()
 
         coVerify(exactly = 1) { createExercises(listOf(second)) }
@@ -338,7 +343,7 @@ class ExternalImportViewModelTest {
         vm.parse()
         advanceUntilIdle()
 
-        vm.createSelectedAndReparse()
+        vm.createSelectedExercisesAndReparse()
         advanceUntilIdle()
 
         coVerify(exactly = 0) { createExercises(any()) }
@@ -369,7 +374,7 @@ class ExternalImportViewModelTest {
     }
 
     @Test
-    fun proceedWithoutNewExercises_handsTheDraftOverAndNavigates() = runTest {
+    fun proceedWithoutCandidates_handsTheDraftOverAndNavigates() = runTest {
         val vm = viewModel()
         val notes = listOf(ExternalPlanNote(ExternalPlanNote.Kind.EXERCISE_CREATABLE, 1, "动作乙"))
         coEvery { importPlan(any(), any()) } returns ExternalPlanImport.Ready(
@@ -381,7 +386,7 @@ class ExternalImportViewModelTest {
         vm.parse()
         advanceUntilIdle()
 
-        vm.proceedWithoutNewExercises()
+        vm.proceedWithoutCandidates()
         advanceUntilIdle()
 
         assertEquals(draftPreview, holder.peek())
@@ -403,6 +408,202 @@ class ExternalImportViewModelTest {
 
         assertTrue(vm.uiState.value.previewRequested)
         assertFalse(vm.uiState.value.sheetOpen)
+    }
+
+    // ---------------- 新食物待确认（刀 4：弹层内建库）----------------
+
+    private fun newFood(
+        name: String,
+        kcal: Int? = 60,
+        protein: Double? = 1.6,
+        carbs: Double? = 13.0,
+        fat: Double? = 0.1,
+    ) = ImportedNewFood(
+        name = name,
+        kcalPer100g = kcal,
+        proteinPer100g = protein,
+        carbsPer100g = carbs,
+        fatPer100g = fat,
+    )
+
+    @Test
+    fun parse_withUnknownFoods_prefilledRowsAreCheckedAndOthersAreNot() = runTest {
+        // 预填齐了 → 默认勾上（用户就是为"库里没有也要能加"才走到这一步的）；
+        // 缺一格 → 不勾、也勾不动，因为那一格的空白是"还不知道"，不是 0。
+        val vm = viewModel()
+        coEvery { importPlan(any(), any()) } returns ExternalPlanImport.Refused(
+            reason = ExternalDocRefusal.NO_USABLE_ITEMS,
+            newFoods = listOf(newFood("紫薯"), newFood("秋葵", kcal = null, protein = null, carbs = null, fat = null)),
+        )
+        vm.onTextChange("doc")
+
+        vm.parse()
+        advanceUntilIdle()
+
+        val rows = vm.uiState.value.newFoods
+        assertEquals(listOf("紫薯", "秋葵"), rows.map { row -> row.name })
+        assertTrue("四项都有值 → 默认勾上", rows[0].checked && rows[0].canBuild)
+        assertTrue("缺数值 → 不给勾", rows[1].canBuild.not())
+        assertTrue(rows[1].checked.not())
+        assertEquals("预填要看得见，用户才知道自己认的是哪个数", "60", rows[0].kcal)
+        assertEquals("1.6", rows[0].protein)
+    }
+
+    @Test
+    fun parse_readyWithNewFoodCandidates_staysInSheetInsteadOfNavigating() = runTest {
+        // 动作侧踩过的同一个坑，食物侧必须一起挡：跳了预览页，那块「加入食物库」就在已经关掉的弹层里，
+        // 而预览页那句「少算了 N 条」会指着屏幕外的一颗按钮。
+        val vm = viewModel()
+        coEvery { importPlan(any(), any()) } returns ExternalPlanImport.Ready(
+            preview = draftPreview,
+            notes = listOf(ExternalPlanNote(ExternalPlanNote.Kind.FOOD_CREATABLE, 1, "紫薯")),
+            newFoods = listOf(newFood("紫薯")),
+        )
+        vm.open(review)
+        vm.onTextChange("doc")
+
+        vm.parse()
+        advanceUntilIdle()
+
+        assertTrue("不跳页", vm.uiState.value.sheetOpen)
+        assertFalse(vm.uiState.value.previewRequested)
+        assertTrue(vm.uiState.value.canProceedWithoutThem)
+        assertEquals("紫薯", vm.uiState.value.newFoods.single().name)
+        assertNull("草案还没交给预览页", holder.peek())
+    }
+
+    @Test
+    fun fillingTheFourBoxes_thenChecking_buildsWithTheTypedValuesAndTags() = runTest {
+        val vm = viewModel()
+        coEvery { importPlan(any(), any()) } returns ExternalPlanImport.Refused(
+            reason = ExternalDocRefusal.NO_USABLE_ITEMS,
+            newFoods = listOf(newFood("秋葵", kcal = null, protein = null, carbs = null, fat = null)),
+        )
+        coEvery { createFoods(any()) } returns 1
+        vm.onTextChange("doc")
+        vm.parse()
+        advanceUntilIdle()
+
+        vm.onNewFoodFieldChange(0, ExternalImportViewModel.NewFoodField.KCAL, "33")
+        vm.onNewFoodFieldChange(0, ExternalImportViewModel.NewFoodField.PROTEIN, "1.9")
+        vm.onNewFoodFieldChange(0, ExternalImportViewModel.NewFoodField.CARBS, "7.0")
+        vm.onNewFoodFieldChange(0, ExternalImportViewModel.NewFoodField.FAT, "0.2")
+        vm.onToggleNewFood(0)
+        vm.onToggleNewFoodTag(0, DietRestriction.SPICY)
+
+        assertTrue(vm.uiState.value.newFoods.single().canBuild)
+        vm.createSelectedFoodsAndReparse()
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) {
+            createFoods(
+                listOf(
+                    ImportedNewFood(
+                        name = "秋葵",
+                        kcalPer100g = 33,
+                        proteinPer100g = 1.9,
+                        carbsPer100g = 7.0,
+                        fatPer100g = 0.2,
+                        dietaryTags = setOf(DietRestriction.SPICY),
+                    ),
+                ),
+            )
+        }
+        assertEquals(R.string.ai_import_foods_created, vm.uiState.value.snackbarRes)
+        assertEquals(listOf("1"), vm.uiState.value.snackbarArgs)
+        coVerify(exactly = 2) { importPlan(any(), any()) }
+    }
+
+    @Test
+    fun createSelectedFoods_skipsUncheckedAndIncompleteRows_andDoesNotReparse() = runTest {
+        // 一行都没勾 → 一次都不该建，也不该白跑一次解析（"什么都不建"是合法选择，不是半成品）。
+        val vm = viewModel()
+        coEvery { importPlan(any(), any()) } returns ExternalPlanImport.Refused(
+            reason = ExternalDocRefusal.NO_USABLE_ITEMS,
+            newFoods = listOf(newFood("紫薯"), newFood("秋葵", kcal = null, protein = null, carbs = null, fat = null)),
+        )
+        vm.onTextChange("doc")
+        vm.parse()
+        advanceUntilIdle()
+
+        vm.onToggleNewFood(0)   // 把预填好的那条勾掉 —— 用户有权不建
+        vm.onToggleNewFood(1)   // 没填齐的那条即使被勾上也不建（置灰是界面的事，这里再挡一道）
+
+        vm.createSelectedFoodsAndReparse()
+        advanceUntilIdle()
+
+        coVerify(exactly = 0) { createFoods(any()) }
+        coVerify(exactly = 1) { importPlan(any(), any()) }
+    }
+
+    @Test
+    fun editingARowDownToIncompleteNumbers_takesItsCheckBackOff() = runTest {
+        // 用户把已经预填好的数字清掉：这一行必须从"要建"里退出，否则建出一条 0 kcal/100g 的食物，
+        // 而那一餐的合计会跟着一起偏小。
+        val vm = viewModel()
+        coEvery { importPlan(any(), any()) } returns ExternalPlanImport.Refused(
+            reason = ExternalDocRefusal.NO_USABLE_ITEMS,
+            newFoods = listOf(newFood("紫薯")),
+        )
+        coEvery { createFoods(any()) } returns 0
+        vm.onTextChange("doc")
+        vm.parse()
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.newFoods.single().checked)
+
+        vm.onNewFoodFieldChange(0, ExternalImportViewModel.NewFoodField.KCAL, "")
+
+        assertTrue(vm.uiState.value.newFoods.single().canBuild.not())
+        vm.createSelectedFoodsAndReparse()
+        advanceUntilIdle()
+        coVerify(exactly = 0) { createFoods(any()) }
+    }
+
+    @Test
+    fun outOfRangeNumbers_areNotBuildable_evenThoughTheyParse() = runTest {
+        // 校验沿用食物库表单同一口径：热量 0..900、宏量 0..100。
+        // 900 是纯脂肪的物理上限，超了就是漏打小数点 —— 建进库会长期算错每一餐。
+        val vm = viewModel()
+        coEvery { importPlan(any(), any()) } returns ExternalPlanImport.Refused(
+            reason = ExternalDocRefusal.NO_USABLE_ITEMS,
+            newFoods = listOf(newFood("紫薯")),
+        )
+        vm.onTextChange("doc")
+        vm.parse()
+        advanceUntilIdle()
+
+        vm.onNewFoodFieldChange(0, ExternalImportViewModel.NewFoodField.KCAL, "901")
+        assertTrue(vm.uiState.value.newFoods.single().canBuild.not())
+
+        vm.onNewFoodFieldChange(0, ExternalImportViewModel.NewFoodField.KCAL, "abc")
+        assertTrue(vm.uiState.value.newFoods.single().canBuild.not())
+
+        vm.onNewFoodFieldChange(0, ExternalImportViewModel.NewFoodField.KCAL, "60")
+        assertTrue(vm.uiState.value.newFoods.single().canBuild)
+    }
+
+    @Test
+    fun dismiss_andChangingTheText_dropTheWholeBuildForm() = runTest {
+        // 建库表单里的半成品数值不能留到下一次解析：换了文档就是另一批食物。
+        val vm = viewModel()
+        coEvery { importPlan(any(), any()) } returns ExternalPlanImport.Refused(
+            reason = ExternalDocRefusal.NO_USABLE_ITEMS,
+            newFoods = listOf(newFood("紫薯")),
+        )
+        vm.open(review)
+        vm.onTextChange("doc")
+        vm.parse()
+        advanceUntilIdle()
+        assertEquals(1, vm.uiState.value.newFoods.size)
+
+        vm.onTextChange("换一份文档")
+        assertTrue(vm.uiState.value.newFoods.isEmpty())
+
+        vm.parse()
+        advanceUntilIdle()
+        assertEquals(1, vm.uiState.value.newFoods.size)
+        vm.dismiss()
+        assertTrue(vm.uiState.value.newFoods.isEmpty())
     }
 
     // ---------------- 剪贴板与关闭 ----------------

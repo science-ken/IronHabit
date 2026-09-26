@@ -661,6 +661,25 @@
     <!-- 退路：不想建这些动作时也得走得了，否则"有候选"就把人锁在弹层里。 -->
     <string name="ai_import_proceed_without">先只导入能导的（不建这些动作）</string>
     <string name="ai_import_exercises_created">已加入 %1$s 个动作</string>
+    <!-- ===== 新食物待确认（刀 4：在导入弹层里就地建库）===== -->
+    <!-- 表单必须内嵌在这张弹层里，跳不出去：AI 教练页没有任何到食物库的路由，
+         而切 Tab 会销毁这个 ViewModel、粘贴框里的原文随之没掉。 -->
+    <string name="ai_import_new_food_title">食物库里没有这几样（勾哪些就加哪些 · 数值要你当场认）</string>
+    <!-- 数值一律显示**表单里此刻的字符串**，不是模型那份：用户改过之后这一行必须跟着变，
+         否则"我认的是哪个数"就只对了一次。 -->
+    <string name="ai_import_new_food_summary">%1$s kcal · 蛋白 %2$s g · 碳水 %3$s g · 脂肪 %4$s g（每 100g）</string>
+    <!-- 这句话是整个红线在界面上的落点：留空 ≠ 0。写成 0 会让这一餐合计系统性偏小。 -->
+    <string name="ai_import_new_food_missing">它没给数值 —— 点「改」把热量 / 蛋白 / 碳水 / 脂肪 四项填上才能勾（留空不是 0）</string>
+    <string name="ai_import_new_food_edit">改数值</string>
+    <string name="ai_import_new_food_done">收起</string>
+    <string name="ai_import_new_food_tags">它含哪些忌口成分（勾上后这一餐遇到它就整条挡）</string>
+    <string name="ai_import_new_food_create">加入食物库并重新解析（%1$d）</string>
+    <string name="ai_import_foods_created">已加入 %1$s 个食物</string>
+    <string name="ai_import_proceed_without_foods">先只导入能导的（这几样食物不建库，那一餐会少算）</string>
+    <!-- 这三句与食物库表单那三条只差"可留空"：那一格留空是 0，这一格留空是"还没填"，不给勾。 -->
+    <string name="hint_food_import_protein">每 100g 蛋白质（g）</string>
+    <string name="hint_food_import_carbs">每 100g 碳水（g）</string>
+    <string name="hint_food_import_fat">每 100g 脂肪（g）</string>
     <!-- 不写"勾上面那个按钮"：这句话也会出现在预览页，那块按钮并不在那一屏。 -->
     <string name="plan_preview_note_exercise_creatable">%1$s：动作库里没有这个名字，加进动作库后才能导进来</string>
     <string name="plan_preview_note_new_exercise_rejected">想新建的 %1$s 连名字都没有，没有采纳</string>
@@ -869,6 +888,9 @@
     <string name="empty_food_library">还没有食物，点「新建食物」加一条</string>
     <string name="empty_food_search_no_match">没有匹配的食物</string>
     <string name="label_food_built_in">内置</string>
+    <!-- 外部 AI 提到、库里没有、用户在导入弹层里当场确认数值才建进来的那几条：
+         成分没有第二份来源可核对，所以必须看得见"这不是内置那 127 条"。 -->
+    <string name="label_food_ai_suggested">外部 AI 估</string>
     <string name="label_food_per_100g_summary">每 100g 约 %1$d kcal</string>
     <string name="label_food_serving_summary">1%1$s = %2$d g</string>
     <string name="title_add_food">新建食物</string>

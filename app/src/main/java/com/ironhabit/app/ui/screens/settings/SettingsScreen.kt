@@ -72,6 +72,7 @@ import com.ironhabit.app.ui.components.LoadingSkeleton
 import com.ironhabit.app.ui.components.LocalSnackbarHostState
 import com.ironhabit.app.ui.toDisplayNumber
 import com.ironhabit.app.ui.components.equipmentLabelRes
+import com.ironhabit.app.ui.components.dietRestrictionLabelRes
 import com.ironhabit.app.ui.components.injuryLabelRes
 import com.ironhabit.app.ui.theme.IronHabitSpacing
 
@@ -592,7 +593,7 @@ private fun ProfileSection(
     ChipGroup(
         options = DietRestriction.entries,
         isSelected = { it in profile.dietaryAvoid },
-        labelOf = { stringResource(restrictionLabelRes(it)) },
+        labelOf = { stringResource(dietRestrictionLabelRes(it)) },
         onClick = viewModel::onProfileDietAvoidToggle,
     )
 }
@@ -776,17 +777,6 @@ private fun goalLabelRes(goal: Goal): Int = when (goal) {
     Goal.RECOMP -> R.string.label_profile_goal_recomp
     Goal.SHAPE -> R.string.label_profile_goal_shape
     Goal.MAINTAIN -> R.string.label_profile_goal_maintain
-}
-
-/** 饮食忌口 → 文案资源。 */
-@StringRes
-private fun restrictionLabelRes(restriction: DietRestriction): Int = when (restriction) {
-    DietRestriction.PEANUT -> R.string.restriction_peanut
-    DietRestriction.SEAFOOD -> R.string.restriction_seafood
-    DietRestriction.DAIRY -> R.string.restriction_dairy
-    DietRestriction.GLUTEN -> R.string.restriction_gluten
-    DietRestriction.SPICY -> R.string.restriction_spicy
-    DietRestriction.ALCOHOL -> R.string.restriction_alcohol
 }
 
 /** 分区标题。 */

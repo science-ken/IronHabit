@@ -95,6 +95,10 @@ object FoodMapper {
      *
      * 方向要选对：`CUSTOM` = "这是用户自己的东西"，播种不会碰它、也不会把它当内置覆盖；
      * 若回落到 `BUILT_IN`，一个读坏的字符串就会让用户自建食物**被播种改写**。
+     *
+     * ⚠️ 这一条同时是"旧 APK 读新行"的实际行为：[FoodSource.AI_SUGGESTED] 落地之前打包的版本
+     * 认不出这个串，会把外部 AI 建的那几条显示成"自建"（`foods.source` 无 CHECK，装得下任何串）。
+     * 本刀接受这个后果、不加校验 —— 但它不是"看不见就没事"，见 `.scratch/ironhabit-external-diet-import/spec.md` §5.3。
      */
     private fun decodeSource(value: String?): FoodSource =
         value?.let { raw -> FoodSource.entries.firstOrNull { it.name == raw } } ?: FoodSource.CUSTOM

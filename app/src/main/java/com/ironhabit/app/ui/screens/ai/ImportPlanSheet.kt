@@ -2,10 +2,13 @@ package com.ironhabit.app.ui.screens.ai
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -30,13 +33,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.ai.external.ExternalPlanDocumentParser
 import com.ironhabit.app.domain.ai.external.ExternalPlanNote
 import com.ironhabit.app.domain.ai.external.ImportSection
 import com.ironhabit.app.domain.ai.external.NewExerciseCandidate
+import com.ironhabit.app.domain.ai.external.NewFoodCandidate
+import com.ironhabit.app.domain.model.DietRestriction
 import com.ironhabit.app.domain.model.MealType
+import com.ironhabit.app.ui.components.dietRestrictionLabelRes
 import com.ironhabit.app.ui.components.mealTypeLabelRes
 import com.ironhabit.app.ui.components.weekRangeText
 import com.ironhabit.app.ui.theme.IronHabitSpacing
@@ -62,6 +69,11 @@ internal fun ImportPlanSheet(
     onParse: () -> Unit,
     onToggleNewExercise: (Int) -> Unit,
     onCreateSelected: () -> Unit,
+    onToggleNewFood: (Int) -> Unit,
+    onNewFoodValueChange: (Int, ExternalImportViewModel.NewFoodField, String) -> Unit,
+    onToggleNewFoodEditing: (Int) -> Unit,
+    onToggleNewFoodTag: (Int, DietRestriction) -> Unit,
+    onCreateSelectedFoods: () -> Unit,
     onProceedWithoutThem: () -> Unit,
     onDismissRequest: () -> Unit,
 ) {
@@ -231,6 +243,30 @@ internal fun ImportPlanSheet(
                 }
             }
 
+            // 食物库里没有的那几样：建库表单**内嵌在这里**，不跳去食物库 ——
+            // AI 教练页没有到食物库的路由，而切 Tab 会销毁这个弹层所属的 ViewModel、粘贴框里的原文随之没掉。
+            // 模型给的数值只是**预填**，用户当场认过才落库（红线：一餐的数字由这张表现算）。
+            if (uiState.newFoods.isNotEmpty()) {
+                NewFoodBlock(
+                    rows = uiState.newFoods,
+                    enabled = !uiState.isCreating,
+                    onToggle = onToggleNewFood,
+                    onValueChange = onNewFoodValueChange,
+                    onToggleEditing = onToggleNewFoodEditing,
+                    onToggleTag = onToggleNewFoodTag,
+                    onCreate = onCreateSelectedFoods,
+                )
+                // 退路与动作侧同形：不想建这几样食物时也得走得了，只是那一餐会少算它们。
+                if (uiState.canProceedWithoutThem) {
+                    TextButton(
+                        onClick = onProceedWithoutThem,
+                        enabled = !uiState.isCreating,
+                    ) {
+                        Text(text = stringResource(R.string.ai_import_proceed_without_foods))
+                    }
+                }
+            }
+
             Button(
                 onClick = onParse,
                 enabled = !uiState.isParsing && uiState.text.isNotBlank(),
@@ -295,6 +331,184 @@ private fun NewExerciseBlock(
             Text(text = stringResource(R.string.ai_import_new_exercise_create, count))
         }
     }
+}
+
+/**
+ * 食物库里没有的那几样 —— **建库表单内嵌在弹层里**（刀 4）。
+ *
+ * ## 为什么不是"跳去食物库填了再回来"
+ * 两条实测硬约束：AI 教练页没有任何到食物库的路由（食物库是挂在 今日 / 我的 两处 `remember`
+ * 标志上的弹层），而粘贴的原文活在 `ExternalImportViewModel.UiState.text` 里 ——
+ * 切 Tab 会连 ViewModel 一起销毁。跳出去一次，用户粘的东西就没了。
+ *
+ * ## 这一勾为什么必须存在
+ * 建食物是往库里永久加一行，而**这一行的数值就是那一餐的热量**（一餐的 kcal 由每 100g × 克数现算）。
+ * 模型给的数只能预填，所以：数值没填齐的那一行勾选框是**灰的**，界面上也直说"留空不是 0"。
+ */
+@Composable
+private fun NewFoodBlock(
+    rows: List<NewFoodCandidate>,
+    enabled: Boolean,
+    onToggle: (Int) -> Unit,
+    onValueChange: (Int, ExternalImportViewModel.NewFoodField, String) -> Unit,
+    onToggleEditing: (Int) -> Unit,
+    onToggleTag: (Int, DietRestriction) -> Unit,
+    onCreate: () -> Unit,
+) {
+    val buildableCount: Int = rows.count { row -> row.checked && row.canBuild }
+    Column(verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm)) {
+        Text(
+            text = stringResource(R.string.ai_import_new_food_title),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        rows.forEachIndexed { index, row ->
+            NewFoodRow(
+                index = index,
+                row = row,
+                onToggle = onToggle,
+                onValueChange = onValueChange,
+                onToggleEditing = onToggleEditing,
+                onToggleTag = onToggleTag,
+            )
+        }
+        Button(onClick = onCreate, enabled = enabled && buildableCount > 0) {
+            val count: Int = buildableCount
+            Text(text = stringResource(R.string.ai_import_new_food_create, count))
+        }
+    }
+}
+
+/**
+ * 一行 = 名字 + 四项数值（此刻表单里的字，不是模型那份）+「改」。
+ *
+ * 数值显示的是**字符串原值**：用户改过之后这一行必须跟着变，否则"我认的是哪个数"只对了一次。
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun NewFoodRow(
+    index: Int,
+    row: NewFoodCandidate,
+    onToggle: (Int) -> Unit,
+    onValueChange: (Int, ExternalImportViewModel.NewFoodField, String) -> Unit,
+    onToggleEditing: (Int) -> Unit,
+    onToggleTag: (Int, DietRestriction) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.xs)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(
+                checked = row.checked && row.canBuild,
+                // 没填齐 = 不给勾：让"建库"这一按钮的分母只数真正有数值的行。
+                enabled = row.canBuild,
+                onCheckedChange = { onToggle(index) },
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = row.name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                if (row.canBuild) {
+                    Text(
+                        text = stringResource(R.string.ai_import_new_food_summary, row.kcal, row.protein, row.carbs, row.fat),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    Text(
+                        text = stringResource(R.string.ai_import_new_food_missing),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+            TextButton(onClick = { onToggleEditing(index) }) {
+                Text(
+                    text = stringResource(
+                        if (row.isEditing) R.string.ai_import_new_food_done else R.string.ai_import_new_food_edit,
+                    ),
+                )
+            }
+        }
+
+        if (!row.isEditing) return
+
+        OutlinedTextField(
+            value = row.name,
+            onValueChange = { onValueChange(index, ExternalImportViewModel.NewFoodField.NAME, it) },
+            label = { Text(text = stringResource(R.string.hint_food_name)) },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        // 四格两两并排：一餐常有六七样陌生食物，五行竖排会把「加入食物库」那颗按钮顶出屏幕。
+        Row(horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm)) {
+            FoodNumberField(
+                labelRes = R.string.hint_food_kcal,
+                value = row.kcal,
+                keyboardType = KeyboardType.Number,
+                modifier = Modifier.weight(1f),
+                onChange = { onValueChange(index, ExternalImportViewModel.NewFoodField.KCAL, it) },
+            )
+            FoodNumberField(
+                labelRes = R.string.hint_food_import_protein,
+                value = row.protein,
+                keyboardType = KeyboardType.Decimal,
+                modifier = Modifier.weight(1f),
+                onChange = { onValueChange(index, ExternalImportViewModel.NewFoodField.PROTEIN, it) },
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm)) {
+            FoodNumberField(
+                labelRes = R.string.hint_food_import_carbs,
+                value = row.carbs,
+                keyboardType = KeyboardType.Decimal,
+                modifier = Modifier.weight(1f),
+                onChange = { onValueChange(index, ExternalImportViewModel.NewFoodField.CARBS, it) },
+            )
+            FoodNumberField(
+                labelRes = R.string.hint_food_import_fat,
+                value = row.fat,
+                keyboardType = KeyboardType.Decimal,
+                modifier = Modifier.weight(1f),
+                onChange = { onValueChange(index, ExternalImportViewModel.NewFoodField.FAT, it) },
+            )
+        }
+
+        // 忌口标签在建库这一格就开放：AI 建进来的这几样恰恰最可能是虾 / 花生 / 含麸质的东西，
+        // 等用户之后自己去标，等于这段时间里一条都不挡（覆盖率本来就只有三成）。
+        Text(
+            text = stringResource(R.string.ai_import_new_food_tags),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm)) {
+            DietRestriction.entries.forEach { tag ->
+                FilterChip(
+                    selected = tag in row.dietaryTags,
+                    onClick = { onToggleTag(index, tag) },
+                    label = { Text(text = stringResource(dietRestrictionLabelRes(tag))) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FoodNumberField(
+    labelRes: Int,
+    value: String,
+    keyboardType: KeyboardType,
+    modifier: Modifier = Modifier,
+    onChange: (String) -> Unit,
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onChange,
+        label = { Text(text = stringResource(labelRes)) },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+        modifier = modifier,
+    )
 }
 
 /**

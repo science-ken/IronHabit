@@ -8,11 +8,16 @@ import com.ironhabit.app.domain.ai.external.ExternalDocRefusal
 import com.ironhabit.app.domain.ai.external.ExternalPlanNote
 import com.ironhabit.app.domain.ai.external.ImportSection
 import com.ironhabit.app.domain.ai.external.ImportedNewExercise
+import com.ironhabit.app.domain.ai.external.ImportedNewFood
 import com.ironhabit.app.domain.ai.external.NewExerciseCandidate
+import com.ironhabit.app.domain.ai.external.NewFoodCandidate
+import com.ironhabit.app.domain.ai.external.toCandidate
+import com.ironhabit.app.domain.model.DietRestriction
 import com.ironhabit.app.domain.model.WeeklyReview
 import com.ironhabit.app.domain.usecase.BuildExternalCoachPromptUseCase
 import com.ironhabit.app.domain.usecase.BuildExternalDietPromptUseCase
 import com.ironhabit.app.domain.usecase.CreateImportedExercisesUseCase
+import com.ironhabit.app.domain.usecase.CreateImportedFoodsUseCase
 import com.ironhabit.app.domain.usecase.ExternalPlanImport
 import com.ironhabit.app.domain.usecase.ImportExternalPlanUseCase
 import com.ironhabit.app.domain.usecase.PlanPreviewHolder
@@ -39,10 +44,12 @@ import kotlinx.datetime.toLocalDateTime
  * 加载标志互相踩。两者唯一的交接点是 [PlanPreviewHolder] —— 解析成功后把草案交给它，
  * 再走**同一个**「本周计划预览」页逐天采纳。
  *
- * ## 三条诚实约束（每条都对应界面上一句话）
+ * ## 四条诚实约束（每条都对应界面上一句话）
  * 1. 模板由本地数据拼出来，不谎称"AI 已经帮你排好"；
  * 2. 解析丢掉的每一条都要摊在预览页上（[ExternalPlanNote]），不许静默少写；
- * 3. 导入的行算「AI 生成的行」，预览页必须写明"以后重新生成会被覆盖"。
+ * 3. 导入的行算「AI 生成的行」，预览页必须写明"以后重新生成会被覆盖"；
+ * 4. 模型给的食物营养数值只是**预填**（[NewFoodCandidate]），用户当场认过才落库 ——
+ *    一餐的 kcal / 蛋白永远由食物库每 100g × 克数现算。
  */
 @HiltViewModel
 class ExternalImportViewModel @Inject constructor(
@@ -50,6 +57,7 @@ class ExternalImportViewModel @Inject constructor(
     private val buildDietPrompt: BuildExternalDietPromptUseCase,
     private val importPlan: ImportExternalPlanUseCase,
     private val createExercises: CreateImportedExercisesUseCase,
+    private val createFoods: CreateImportedFoodsUseCase,
     private val planPreviewHolder: PlanPreviewHolder,
     private val clock: Clock,
     private val timeZone: TimeZone,
@@ -57,6 +65,9 @@ class ExternalImportViewModel @Inject constructor(
 
     /** 只给两个选项：「每周相同」模板（`week_start = 0`）和已经过完的周都不作为落点。 */
     enum class WeekChoice { THIS_WEEK, NEXT_WEEK }
+
+    /** 建食物库表单里正在改的那一格（界面上是 5 个输入框，值一律先当字符串收）。 */
+    enum class NewFoodField { NAME, KCAL, PROTEIN, CARBS, FAT }
 
     data class UiState(
         val sheetOpen: Boolean = false,
@@ -87,7 +98,14 @@ class ExternalImportViewModel @Inject constructor(
          * 默认一行都不勾：建动作是往用户库里**永久加一行**，文档"想要"不等于用户"同意"。
          */
         val newExercises: List<NewExerciseCandidate> = emptyList(),
-        /** 有没建的动作、但剩下的已经可以导 → 给一条"先只导入能导的"退路。 */
+        /**
+         * 食物库里没有的那些食物，连同**建库表单**（预填 / 可改 / 勾选 / 忌口标签）。
+         *
+         * 表单必须内嵌在这张弹层里，跳不出去：AI 教练页没有任何到食物库的路由，
+         * 而切 Tab 会销毁这个 VM、粘贴框里的原文随之没掉。
+         */
+        val newFoods: List<NewFoodCandidate> = emptyList(),
+        /** 有没建的动作/食物、但剩下的已经可以导 → 给一条"先只导入能导的"退路。 */
         val canProceedWithoutThem: Boolean = false,
         val isCreating: Boolean = false,
         @StringRes val snackbarRes: Int? = null,
@@ -153,6 +171,7 @@ class ExternalImportViewModel @Inject constructor(
                 refusalAnalysis = null,
                 notes = emptyList(),
                 newExercises = emptyList(),
+                newFoods = emptyList(),
                 canProceedWithoutThem = false,
             )
         }
@@ -172,6 +191,7 @@ class ExternalImportViewModel @Inject constructor(
                 refusalAnalysis = null,
                 notes = emptyList(),
                 newExercises = emptyList(),
+                newFoods = emptyList(),
             )
         }
     }
@@ -189,6 +209,7 @@ class ExternalImportViewModel @Inject constructor(
                 refusalAnalysis = null,
                 notes = emptyList(),
                 newExercises = emptyList(),
+                newFoods = emptyList(),
             )
         }
     }
@@ -250,6 +271,7 @@ class ExternalImportViewModel @Inject constructor(
                 refusalAnalysis = null,
                 notes = emptyList(),
                 newExercises = emptyList(),
+                newFoods = emptyList(),
                 canProceedWithoutThem = false,
             )
         }
@@ -266,6 +288,7 @@ class ExternalImportViewModel @Inject constructor(
                         refusalAnalysis = result.analysis,
                         notes = result.notes,
                         newExercises = result.newExercises.map { entry -> NewExerciseCandidate(entry) },
+                        newFoods = result.newFoods.map { entry -> entry.toCandidate() },
                     )
                 }
 
@@ -280,11 +303,11 @@ class ExternalImportViewModel @Inject constructor(
                 }
 
                 is ExternalPlanImport.Ready -> {
-                    if (result.newExercises.isEmpty()) {
+                    if (result.newExercises.isEmpty() && result.newFoods.isEmpty()) {
                         handToPreview(result)
                     } else {
-                        // ⚠️ 有没建的动作时**不跳页**：跳过去就把用户留在预览页，
-                        // 而那块「加入动作库」在已经关掉的弹层里 —— 界面会指着一块不在屏幕上的 UI。
+                        // ⚠️ 有没建的动作/食物时**不跳页**：跳过去就把用户留在预览页，
+                        // 而那块「加入动作库 / 加入食物库」在已经关掉的弹层里 —— 界面会指着一块不在屏幕上的 UI。
                         // 留在弹层里让他选：建完自动重解析，或者"先只导入能导的"。
                         pending = result
                         _uiState.update { state ->
@@ -294,6 +317,7 @@ class ExternalImportViewModel @Inject constructor(
                                 refusalAnalysis = null,
                                 notes = result.notes,
                                 newExercises = result.newExercises.map { entry -> NewExerciseCandidate(entry) },
+                                newFoods = result.newFoods.map { entry -> entry.toCandidate() },
                                 canProceedWithoutThem = true,
                             )
                         }
@@ -323,14 +347,15 @@ class ExternalImportViewModel @Inject constructor(
                 refusalAnalysis = null,
                 notes = emptyList(),
                 newExercises = emptyList(),
+                newFoods = emptyList(),
                 canProceedWithoutThem = false,
                 previewRequested = true,
             )
         }
     }
 
-    /** 「先只导入能导的」：不建那些新动作，直接带着能导的部分去预览页。 */
-    fun proceedWithoutNewExercises() {
+    /** 「先只导入能导的」：不建那些新动作 / 新食物，直接带着能导的部分去预览页。 */
+    fun proceedWithoutCandidates() {
         pending?.let(::handToPreview)
     }
 
@@ -349,7 +374,7 @@ class ExternalImportViewModel @Inject constructor(
      * 一个意图不该让用户点两次：建这些动作的目的就是让那些条目能导进来，
      * 停在"已加入，请再点一次解析"等于把半成品状态甩回给用户。
      */
-    fun createSelectedAndReparse() {
+    fun createSelectedExercisesAndReparse() {
         if (_uiState.value.isCreating) return
         val chosen: List<ImportedNewExercise> = _uiState.value.newExercises
             .filter { row -> row.checked }
@@ -364,6 +389,81 @@ class ExternalImportViewModel @Inject constructor(
                     isCreating = false,
                     newExercises = emptyList(),
                     snackbarRes = if (created > 0) R.string.ai_import_exercises_created else null,
+                    snackbarArgs = listOf(created.toString()),
+                )
+            }
+            parse()
+        }
+    }
+
+    /** 勾一格待新建的食物（数值没填齐的行不给勾，见 [NewFoodCandidate.canBuild]）。 */
+    fun onToggleNewFood(index: Int) {
+        _uiState.update { state ->
+            val rows = state.newFoods.toMutableList()
+            if (index in rows.indices) rows[index] = rows[index].copy(checked = !rows[index].checked)
+            state.copy(newFoods = rows)
+        }
+    }
+
+    /** 「改」展开 / 收起。 */
+    fun onToggleNewFoodEditing(index: Int) {
+        _uiState.update { state ->
+            val rows = state.newFoods.toMutableList()
+            if (index in rows.indices) rows[index] = rows[index].copy(isEditing = !rows[index].isEditing)
+            state.copy(newFoods = rows)
+        }
+    }
+
+    /** 建库表单里某一格改了字。 */
+    fun onNewFoodFieldChange(index: Int, field: ExternalImportViewModel.NewFoodField, value: String) {
+        _uiState.update { state ->
+            val rows = state.newFoods.toMutableList()
+            if (index in rows.indices) {
+                rows[index] = when (field) {
+                    ExternalImportViewModel.NewFoodField.NAME -> rows[index].copy(name = value)
+                    ExternalImportViewModel.NewFoodField.KCAL -> rows[index].copy(kcal = value)
+                    ExternalImportViewModel.NewFoodField.PROTEIN -> rows[index].copy(protein = value)
+                    ExternalImportViewModel.NewFoodField.CARBS -> rows[index].copy(carbs = value)
+                    ExternalImportViewModel.NewFoodField.FAT -> rows[index].copy(fat = value)
+                }
+            }
+            state.copy(newFoods = rows)
+        }
+    }
+
+    /** 忌口标签勾 / 取消（非内置条目才有这一格 —— 内置的标签在食物库里也不给改）。 */
+    fun onToggleNewFoodTag(index: Int, tag: DietRestriction) {
+        _uiState.update { state ->
+            val rows = state.newFoods.toMutableList()
+            if (index in rows.indices) {
+                val tags = rows[index].dietaryTags.toMutableSet()
+                if (!tags.add(tag)) tags.remove(tag)
+                rows[index] = rows[index].copy(dietaryTags = tags)
+            }
+            state.copy(newFoods = rows)
+        }
+    }
+
+    /**
+     * 把勾了、也填齐了的食物建进食物库，然后**自动重解析一次**（与动作侧同一套机制）。
+     *
+     * 重解析是这一步的一部分而不是"下一步"：用户建这些食物的目的就是让那一餐算得出来，
+     * 停在"已加入，请再点一次解析"等于把半成品甩回给他。第二次解析时这些名字"库里已有"，
+     * **必须静默通过**（刀 4 从真机学来的教训）。
+     */
+    fun createSelectedFoodsAndReparse() {
+        if (_uiState.value.isCreating) return
+        val chosen: List<ImportedNewFood> = _uiState.value.newFoods.mapNotNull { row -> row.toNewFood() }
+        if (chosen.isEmpty()) return
+
+        _uiState.update { it.copy(isCreating = true) }
+        viewModelScope.launch {
+            val created: Int = createFoods(chosen)
+            _uiState.update { state ->
+                state.copy(
+                    isCreating = false,
+                    newFoods = emptyList(),
+                    snackbarRes = if (created > 0) R.string.ai_import_foods_created else null,
                     snackbarArgs = listOf(created.toString()),
                 )
             }

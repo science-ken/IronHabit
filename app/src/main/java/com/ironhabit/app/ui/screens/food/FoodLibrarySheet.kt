@@ -431,9 +431,16 @@ private fun FoodCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        if (food.source == FoodSource.BUILT_IN) {
+        // 只有"需要分辨的那两种"才打标：自建是用户自己的东西、不需要角标，
+        // 而「外部 AI 估」这一条必须显出来 —— 那四项数值没有第二份来源可核对，是用户当场填/认的。
+        val sourceLabelRes: Int? = when (food.source) {
+            FoodSource.BUILT_IN -> R.string.label_food_built_in
+            FoodSource.AI_SUGGESTED -> R.string.label_food_ai_suggested
+            FoodSource.CUSTOM -> null
+        }
+        sourceLabelRes?.let {
             Text(
-                text = stringResource(R.string.label_food_built_in),
+                text = stringResource(it),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

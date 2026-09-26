@@ -208,6 +208,11 @@ class StringResourcePlaceholderContractTest {
         // 刀 5：门票取消后不合法的字段从"整条拒收"变成"降级 + 点名"，所以两句新的。
         entry("plan_preview_note_exercise_category_defaulted", ArgKind.STRING, ArgKind.STRING)
         entry("plan_preview_note_exercise_muscles_dropped", ArgKind.STRING, ArgKind.STRING)
+        // 刀 4（食物侧）：建库表单那一行的四项数值一律传**表单里此刻的字符串** → 四个 %s；
+        // 按钮计数是 Int 走 %d；snackbar 那条经 snackbarArgs（String 通道）走 %s。
+        entry("ai_import_new_food_summary", ArgKind.STRING, ArgKind.STRING, ArgKind.STRING, ArgKind.STRING)
+        entry("ai_import_new_food_create", ArgKind.NUMERIC)
+        entry("ai_import_foods_created", ArgKind.STRING)
 
         // ---------------- 【未使用】strings.xml 有占位符、代码暂无引用 ----------------
         entry("label_week_of", ArgKind.STRING)
