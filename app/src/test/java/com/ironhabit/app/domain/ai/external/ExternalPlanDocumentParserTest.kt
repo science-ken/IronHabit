@@ -118,6 +118,31 @@ class ExternalPlanDocumentParserTest {
     }
 
     @Test
+    fun parse_sameUnknownExerciseTwiceInADay_saysMissingOnceAndCallsTheSecondDuplicate() {
+        // 真机跑出来的缺陷⑧（动作侧同构）：去重原先只做在"对上了库"那条分支，
+        // 于是同一个陌生名的两条各发一句一模一样的"库里没有"，用户看不出它俩是同一个东西。
+        val outcome = ExternalPlanDocumentParser.parse(
+            doc(
+                """
+                {"exercise":"波比跳","targetSets":3,"targetReps":12},
+                {"exercise":"波比跳","targetSets":4,"targetReps":15}
+                """.trimIndent(),
+            ),
+            library,
+        ) as ExternalDocOutcome.Refused
+
+        assertEquals(
+            listOf(ExternalPlanNote.Kind.EXERCISE_CREATABLE, ExternalPlanNote.Kind.DUPLICATE_EXERCISE),
+            outcome.notes.map { note -> note.kind },
+        )
+        assertEquals(
+            "候选仍然只有一条 —— 建库是往库里加一行，不是加两行",
+            "波比跳",
+            outcome.newExercises.single().name,
+        )
+    }
+
+    @Test
     fun parse_deactivatedExercise_isListedAsInactive_andNeverOfferedAsANewExercise() {
         // 停用行若算"库里没有"：建库撞 exercises.name UNIQUE → 被跳过 → 重解析还是"库里没有" → 死循环。
         val withInactive: List<Exercise> = library + exercise(9L, "杠铃硬举").copy(isActive = false)
@@ -829,6 +854,46 @@ class ExternalPlanDocumentParserTest {
         // 合并份量等于 App 替用户改数量，所以只留第一条、另一条点名说明。
         assertEquals(232, draft.meals.single().kcal)
         assertEquals(ExternalPlanNote.Kind.DUPLICATE_FOOD, draft.notes.single().kind)
+    }
+
+    @Test
+    fun parse_sameUnknownFoodTwiceInAMeal_saysMissingOnceAndCallsTheSecondDuplicate() {
+        // 真机 `shots/17-notes.png` 那一种：一餐里出现两次的陌生食物，清单把同一句话原样重复两遍。
+        val outcome = ExternalPlanDocumentParser.parse(
+            mealDoc(mealEntry("LUNCH", """{"food":"紫薯","grams":200},{"food":"紫薯","grams":300}""")),
+            library,
+            foodLibrary,
+            emptySet(),
+            ImportSection.DIET,
+        ) as ExternalDocOutcome.Refused
+
+        assertEquals(
+            listOf(ExternalPlanNote.Kind.FOOD_CREATABLE, ExternalPlanNote.Kind.DUPLICATE_FOOD),
+            outcome.notes.map { note -> note.kind },
+        )
+        assertEquals("紫薯", outcome.newFoods.single().name)
+    }
+
+    @Test
+    fun parse_sameUnknownFoodBesideKnownOnes_countsOnlyTheMissingOneAsNotImported() {
+        // 「这餐少算了 N 条」数的是**没入库的东西**，不是"没进草案的行"：
+        // 同名陌生食物的第二条本来就按重复丢掉，把它也算进 N 会让那句提示虚高。
+        val draft = parsedDiet(
+            mealDoc(
+                mealEntry(
+                    "LUNCH",
+                    """{"food":"米饭（蒸）","grams":200},{"food":"紫薯","grams":150},{"food":"紫薯","grams":150}""",
+                ),
+            ),
+        )
+
+        val lunch: ImportedMealDraft = draft.meals.single()
+        assertEquals(232, lunch.kcal)
+        assertEquals(1, lunch.unresolvedCount)
+        assertEquals(
+            listOf(ExternalPlanNote.Kind.FOOD_CREATABLE, ExternalPlanNote.Kind.DUPLICATE_FOOD),
+            draft.notes.map { note -> note.kind },
+        )
     }
 
     @Test

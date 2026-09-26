@@ -228,7 +228,7 @@ object ExternalPlanDocumentParser {
      * 文档的 `meals` 段 → 一餐草案。数字一律**本地算**（见 [ImportedMealDraft]）。
      *
      * 一条食物内部的顺序即丢弃原因的优先级（和 [resolveItems] 同构）：
-     * 空名 → 库里没有（变成待建候选）→ 停用行 → 撞忌口 → 同餐重复 → 超上限 → 克数钳制。
+     * 空名 → 库里没有（首条变待建候选、同名后续按重复报）→ 停用行 → 撞忌口 → 同餐重复 → 超上限 → 克数钳制。
      *
      * @param newFoods 出参：待用户确认的新食物（按名字去重后追加）。
      */
@@ -308,6 +308,10 @@ object ExternalPlanDocumentParser {
         newFoods: MutableList<ImportedNewFood>,
     ): ImportedMealDraft {
         val seenFoodIds = mutableSetOf<Long>()
+        // 真机跑出来的缺陷⑧：去重原先只做在"对上了库"那条分支（`seenFoodIds`），
+        // 于是同一餐里出现两次的陌生名会各发一条 `FOOD_CREATABLE`，而候选列表自己去了重 ——
+        // 用户看见两行一模一样的抱怨，既不知道它俩是同一个东西，也看不出"只留第一条"。
+        val seenUnknownNames = mutableSetOf<String>()
         val resolved = mutableListOf<ImportedFoodEntry>()
         var unresolvedCount = 0
 
@@ -326,6 +330,12 @@ object ExternalPlanDocumentParser {
             }
             val food: Food? = exact ?: aliased
             if (food == null) {
+                if (!seenUnknownNames.add(name.lowercase())) {
+                    // 同一个陌生名的第二条：说它是重复的那条，不再把"库里没有"原样念第二遍。
+                    // 也**不计进** `unresolvedCount` —— 那一餐按设计只留第一条，缺的东西是 1 样而不是 2 样。
+                    notes += ExternalPlanNote(ExternalPlanNote.Kind.DUPLICATE_FOOD, dayOfWeek, name)
+                    continue
+                }
                 // 库里没有 → 待用户确认建库（刀 4）。这一餐**不含**它，所以那句"少算了 N 条"要计数。
                 notes += ExternalPlanNote(ExternalPlanNote.Kind.FOOD_CREATABLE, dayOfWeek, name)
                 unresolvedCount++
@@ -506,6 +516,9 @@ object ExternalPlanDocumentParser {
         newExercises: MutableList<ImportedNewExercise>,
     ): List<PlanItemDraft> {
         val seen = mutableSetOf<Long>()
+        // 与食物侧同构的缺陷⑧：陌生名原先各发一条 `EXERCISE_CREATABLE`，候选列表却自己去重，
+        // 于是清单里出现两行一模一样的话。后续那一条改说"重复"。
+        val seenUnknownNames = mutableSetOf<String>()
         val resolved = mutableListOf<PlanItemDraft>()
 
         for (raw: ExternalItem in rawItems) {
@@ -516,6 +529,10 @@ object ExternalPlanDocumentParser {
             }
             val exercise: Exercise? = byName[name.lowercase()]
             if (exercise == null) {
+                if (!seenUnknownNames.add(name.lowercase())) {
+                    notes += ExternalPlanNote(ExternalPlanNote.Kind.DUPLICATE_EXERCISE, dayOfWeek, name)
+                    continue
+                }
                 // 建库门票取消（刀 5）：库里没有就是"待你确认新建"，不再问文档有没有声明过。
                 // 幻觉名 / 改名 也走这里 —— 用户看一眼就能不勾，比静默丢掉一条好。
                 notes += ExternalPlanNote(ExternalPlanNote.Kind.EXERCISE_CREATABLE, dayOfWeek, name)
