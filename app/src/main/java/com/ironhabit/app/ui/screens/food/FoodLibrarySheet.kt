@@ -39,9 +39,11 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ironhabit.app.R
+import com.ironhabit.app.domain.model.DietRestriction
 import com.ironhabit.app.domain.model.Food
 import com.ironhabit.app.domain.model.FoodServing
 import com.ironhabit.app.domain.model.FoodSource
+import com.ironhabit.app.ui.components.dietRestrictionLabelRes
 import com.ironhabit.app.ui.theme.IronHabitShapes
 import com.ironhabit.app.ui.theme.IronHabitSpacing
 import kotlinx.coroutines.launch
@@ -456,6 +458,7 @@ private fun FoodCard(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun FoodFormSection(
     formState: FoodFormState,
@@ -512,6 +515,26 @@ private fun FoodFormSection(
     )
     if (formState.numberErrorRes != 0) {
         FormError(formState.numberErrorRes)
+    }
+
+    // 忌口标签只对**非内置**开放：内置那 127 条的标签是随数据抄进来的，而"我这条自建的花生酱
+    // 到底含不含 PEANUT"只有用户自己知道 —— 不开放，外部 AI 导入和挑菜那两处忌口判断
+    // 对所有新条目就等于零保护。
+    if (!formState.isBuiltIn) {
+        Text(
+            text = stringResource(R.string.label_food_contains_avoid),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm)) {
+            DietRestriction.entries.forEach { tag ->
+                FilterChip(
+                    selected = tag in formState.dietaryTags,
+                    onClick = { viewModel.onTagToggle(tag) },
+                    label = { Text(text = stringResource(dietRestrictionLabelRes(tag))) },
+                )
+            }
+        }
     }
 
     Text(

@@ -201,6 +201,51 @@ class FoodLibraryViewModelTest {
         assertTrue("必须置用户已改标记", saved.isUserEdited)
     }
 
+    /**
+     * 非内置条目（自建 + 外部 AI 建的）**开放忌口标签编辑**（刀 4，R6）。
+     *
+     * 两个方向都要钉：打开时必须把已有的标签带进表单（否则"改个克数"把 SPICY 洗掉），
+     * 保存时必须把用户勾的写回去（否则忌口对新条目永远为零保护）。
+     */
+    @Test
+    fun editingANonBuiltInRow_seedsItsTagsAndWritesBackWhatTheUserTicked() = runTest(mainDispatcherRule.testDispatcher) {
+        val okra = Food(
+            id = 8L,
+            name = "秋葵",
+            kcalPer100g = 33,
+            proteinPer100g = 1.9,
+            carbsPer100g = 7.0,
+            fatPer100g = 0.2,
+            dietaryTags = setOf(DietRestriction.SPICY),
+            source = FoodSource.AI_SUGGESTED,
+        )
+        val repo = mockk<FoodRepository>(relaxed = true)
+        every { repo.observeAll() } returns flowOf(listOf(okra))
+        coEvery { repo.getFood(8L) } returns okra
+        coEvery { repo.upsert(capture(savedFood)) } returns 8L
+        val vm = FoodLibraryViewModel(repo, settingsRepository, clock)
+        mainDispatcherRule.testDispatcher.scheduler.advanceUntilIdle()
+
+        vm.onOpenEdit(okra)
+        assertEquals(
+            "打开表单就要看见已有的标签，否则一次无关编辑会把它清空",
+            setOf(DietRestriction.SPICY),
+            vm.formState.value.dietaryTags,
+        )
+
+        vm.onTagToggle(DietRestriction.GLUTEN)
+        vm.onTagToggle(DietRestriction.SPICY)
+        vm.onKcalChange("35")
+
+        assertEquals("秋葵", vm.onSave())
+        assertEquals(setOf(DietRestriction.GLUTEN), savedFood.captured.dietaryTags)
+        assertEquals(
+            "非内置条目被编辑不改变来源身份（与内置同一条规矩）",
+            FoodSource.AI_SUGGESTED,
+            savedFood.captured.source,
+        )
+    }
+
     @Test
     fun savingFlagResetsEvenWhenRepositoryThrows() = runTest(mainDispatcherRule.testDispatcher) {
         val repo = mockk<FoodRepository>(relaxed = true)

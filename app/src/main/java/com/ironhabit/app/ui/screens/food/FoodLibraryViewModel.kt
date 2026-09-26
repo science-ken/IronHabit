@@ -3,6 +3,7 @@ package com.ironhabit.app.ui.screens.food
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ironhabit.app.R
+import com.ironhabit.app.domain.model.DietRestriction
 import com.ironhabit.app.domain.model.Food
 import com.ironhabit.app.domain.model.FoodServing
 import com.ironhabit.app.domain.model.FoodSource
@@ -43,6 +44,13 @@ data class FoodFormState(
     val carbs: String = "",
     val fat: String = "",
     val servings: List<ServingForm> = listOf(ServingForm()),
+    /**
+     * 这条食物**含有**哪些忌口成分（与档案里的「饮食忌口」共用一套词表）。
+     *
+     * 只对**非内置**条目开放编辑：内置那 127 条的标签是随数据抄进来的，改它等于改数据源，
+     * 而"我这条自建的花生酱含 PEANUT"只有用户自己知道 —— 不开放就等于忌口对新条目零保护。
+     */
+    val dietaryTags: Set<DietRestriction> = emptySet(),
     val isBuiltIn: Boolean = false,
     val nameErrorRes: Int = 0,
     val numberErrorRes: Int = 0,
@@ -129,6 +137,7 @@ class FoodLibraryViewModel @Inject constructor(
             servings = food.servings
                 .map { serving -> ServingForm(unit = serving.unit, grams = serving.grams.toString()) }
                 .ifEmpty { listOf(ServingForm()) },
+            dietaryTags = food.dietaryTags,
             isBuiltIn = food.source == FoodSource.BUILT_IN,
         )
         _uiState.update { it.copy(editingFoodId = food.id) }
@@ -143,6 +152,13 @@ class FoodLibraryViewModel @Inject constructor(
     fun onProteinChange(value: String) = _formState.update { it.copy(protein = value, numberErrorRes = 0) }
     fun onCarbsChange(value: String) = _formState.update { it.copy(carbs = value, numberErrorRes = 0) }
     fun onFatChange(value: String) = _formState.update { it.copy(fat = value, numberErrorRes = 0) }
+
+    /** 勾 / 取消一条忌口成分（内置条目不给勾，界面那一格根本不显示）。 */
+    fun onTagToggle(tag: DietRestriction) = _formState.update { state ->
+        val tags = state.dietaryTags.toMutableSet()
+        if (!tags.add(tag)) tags.remove(tag)
+        state.copy(dietaryTags = tags)
+    }
 
     fun onServingChange(index: Int, unit: String, grams: String) = _formState.update { state ->
         if (index !in state.servings.indices) {
@@ -209,9 +225,10 @@ class FoodLibraryViewModel @Inject constructor(
                     carbsPer100g = parsed.carbs,
                     fatPer100g = parsed.fat,
                     servings = parsed.servings,
-                    // 忌口标签本期不在表单里编辑：改一条既有食物时**原样带过去**，
-                    // 否则"改个克数"会把内置的 PEANUT 标签静默清空 —— 那是安全字段。
-                    dietaryTags = existing?.dietaryTags ?: emptySet(),
+                    // 内置条目的标签**不在表单里改**（那 127 条的标签是随数据抄进来的）：
+                    // 改个克数就把 PEANUT 清空是安全字段的事故，所以原样带过去。
+                    // 非内置（自建 + 外部 AI 建的）走表单里那组 chip —— 只有用户知道这条到底含不含。
+                    dietaryTags = if (state.isBuiltIn) existing?.dietaryTags ?: emptySet() else state.dietaryTags,
                     // 内置食物被编辑后**仍是内置**（Q20=B），只置 isUserEdited。
                     source = existing?.source ?: FoodSource.CUSTOM,
                     note = existing?.note,

@@ -900,6 +900,8 @@
     <string name="hint_food_protein">每 100g 蛋白质（g，可留空）</string>
     <string name="hint_food_carbs">每 100g 碳水（g，可留空）</string>
     <string name="hint_food_fat">每 100g 脂肪（g，可留空）</string>
+    <!-- 非内置条目才给这一格：忌口是安全字段，而"我这条自建的花生酱含 PEANUT"只有用户自己知道。 -->
+    <string name="label_food_contains_avoid">它含哪些忌口成分（档案里忌这几类的，遇到这一条会被挡）</string>
     <string name="label_food_servings">家用份量（可留空，可加多套）</string>
     <string name="hint_food_serving_unit">单位（碗 / 个 / 勺）</string>
     <string name="hint_food_serving_grams">等于多少克</string>
