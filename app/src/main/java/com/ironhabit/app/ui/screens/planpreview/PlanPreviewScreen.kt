@@ -346,11 +346,14 @@ private fun DayCard(day: PlanPreviewViewModel.Day, weekday: Int, onAdopt: () -> 
                         style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
-                    Text(
-                        text = stringResource(R.string.plan_preview_day_meta, day.items.size, day.sets),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    // 只排了吃、没排练的那天：「0 个动作 · 0 组」是噪音，整行不显示。
+                    if (day.items.isNotEmpty()) {
+                        Text(
+                            text = stringResource(R.string.plan_preview_day_meta, day.items.size, day.sets),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
                 when {
                     day.adopted -> Text(

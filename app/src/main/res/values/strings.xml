@@ -680,6 +680,7 @@
     <!-- 建库是往食物库永久加一行，而且数值得用户自己认，所以陌生名一律先摊出来、不静默排进那一餐。 -->
     <string name="plan_preview_note_food_creatable">%1$s：食物库里没有这个名字，加进食物库后才能算进这一餐</string>
     <!-- 停用行绝不能算"库里没有"：建库会撞重名再绕回来，所以这里单独一句、也不给新建候选。 -->
+    <string name="plan_preview_note_food_alias">%1$s：按名字对上了库里的「%2$s」，这一餐按它算</string>
     <string name="plan_preview_note_food_inactive">%1$s：这条你在食物库里停用过，没导入（要去食物库重新启用）</string>
     <!-- 忌口是安全字段：命中即挡，界面不给"我知道，仍要"的出口。 -->
     <string name="plan_preview_note_food_restricted">%1$s：这条在食物库里标了你的忌口，没导入</string>

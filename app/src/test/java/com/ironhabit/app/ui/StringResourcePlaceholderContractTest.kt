@@ -180,6 +180,7 @@ class StringResourcePlaceholderContractTest {
         // 饮食段（v2）：同一条口径 —— subject / args 一律 toString() 后传 String。
         entry("plan_preview_note_food_creatable", ArgKind.STRING)
         entry("plan_preview_note_food_inactive", ArgKind.STRING)
+        entry("plan_preview_note_food_alias", ArgKind.STRING, ArgKind.STRING)
         entry("plan_preview_note_food_restricted", ArgKind.STRING)
         entry("plan_preview_note_duplicate_food", ArgKind.STRING)
         entry("plan_preview_note_over_meal_limit", ArgKind.STRING, ArgKind.STRING)

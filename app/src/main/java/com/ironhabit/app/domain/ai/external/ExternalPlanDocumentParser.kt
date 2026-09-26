@@ -135,6 +135,14 @@ object ExternalPlanDocumentParser {
             .mapNotNull { food -> food.name.trim().takeIf { it.isNotEmpty() }?.let { it.lowercase() to food } }
             .toMap()
 
+        // 库里大量名字是「鸡蛋（煮）」「米饭（蒸）」「豆浆（无糖）」这种带状态后缀的形式，
+        // 而模型按日常说法写裸名 —— 真机上那一屏"库里没有"有六条是这个原因。
+        // 只在"去掉后缀后**唯一**命中"时才认；两个候选仍然按"库里没有"交给用户确认，
+        // 因为猜错一餐（把「牛奶（脱脂）」当成「牛奶（全脂）」记进去）比少算一餐坏得多。
+        val foodStems: Map<String, List<Food>> = foods
+            .mapNotNull { food -> stemOf(food.name)?.let { stem -> stem to food } }
+            .groupBy({ (stem, _) -> stem.lowercase() }, { (_, food) -> food })
+
         val notes = mutableListOf<ExternalPlanNote>()
 
         // 真机撞到的那一种：模型把吃写在顶层 `nutrition` 里（`days` 那半却完全照合同）。
@@ -173,6 +181,7 @@ object ExternalPlanDocumentParser {
         val mealDrafts: List<ImportedMealDraft> = resolveMeals(
             declared = document.meals,
             foodsByName = foodsByName,
+            foodStems = foodStems,
             dietaryAvoid = dietaryAvoid,
             declaredNewFoods = document.newFoods,
             notes = notes,
@@ -226,6 +235,7 @@ object ExternalPlanDocumentParser {
     private fun resolveMeals(
         declared: List<ExternalMealDay>,
         foodsByName: Map<String, Food>,
+        foodStems: Map<String, List<Food>>,
         dietaryAvoid: Set<DietRestriction>,
         declaredNewFoods: List<ExternalNewFood>,
         notes: MutableList<ExternalPlanNote>,
@@ -277,7 +287,7 @@ object ExternalPlanDocumentParser {
                     )
                     continue
                 }
-                drafts += resolveMeal(dayOfWeek, mealType, entry, foodsByName, dietaryAvoid, declaredByName, notes, newFoods)
+                drafts += resolveMeal(dayOfWeek, mealType, entry, foodsByName, foodStems, dietaryAvoid, declaredByName, notes, newFoods)
             }
         }
 
@@ -291,6 +301,7 @@ object ExternalPlanDocumentParser {
         mealType: MealType,
         entry: ExternalMealEntry,
         foodsByName: Map<String, Food>,
+        foodStems: Map<String, List<Food>>,
         dietaryAvoid: Set<DietRestriction>,
         declaredByName: Map<String, ExternalNewFood>,
         notes: MutableList<ExternalPlanNote>,
@@ -306,7 +317,14 @@ object ExternalPlanDocumentParser {
                 notes += ExternalPlanNote(ExternalPlanNote.Kind.BLANK_FOOD_NAME, dayOfWeek)
                 continue
             }
-            val food: Food? = foodsByName[name.lowercase()]
+            val exact: Food? = foodsByName[name.lowercase()]
+            // 唯一命中才认，并且当场点名"按哪个名字对上了哪条" —— 这句说明不能省：
+            // 计划行里会写库里的名字，而文档里写的是裸名，不说明就像对错了。
+            val aliased: Food? = if (exact == null) foodStems[name.lowercase()]?.singleOrNull() else null
+            if (aliased != null) {
+                notes += ExternalPlanNote(ExternalPlanNote.Kind.FOOD_ALIAS, dayOfWeek, name, listOf(aliased.name.trim()))
+            }
+            val food: Food? = exact ?: aliased
             if (food == null) {
                 // 库里没有 → 待用户确认建库（刀 4）。这一餐**不含**它，所以那句"少算了 N 条"要计数。
                 notes += ExternalPlanNote(ExternalPlanNote.Kind.FOOD_CREATABLE, dayOfWeek, name)
@@ -403,6 +421,13 @@ object ExternalPlanDocumentParser {
                     .also { if (it == null && raw.fatPer100g != null) notes += rejectedNewFood(name, "fatPer100g", dayOfWeek) }
             },
         )
+    }
+
+    /** 「鸡蛋（煮）」→「鸡蛋」；本来就没有后缀的名字返回 `null`（精确匹配那条路已经覆盖）。 */
+    private fun stemOf(name: String): String? {
+        val trimmed: String = name.trim()
+        val stem: String = trimmed.substringBefore('（').trim()
+        return stem.takeIf { it.isNotEmpty() && it != trimmed }
     }
 
     private fun rejectedNewFood(name: String, field: String, dayOfWeek: Int) =
@@ -815,6 +840,9 @@ data class ExternalPlanNote(
         // ---------------- 饮食段（v2 新增；界面一律要摊开，一条都不许静默） ----------------
         /** 库里没有的食物 → 进"待确认建库"清单，这一餐**不含**它（subject = 食物名）。 */
         FOOD_CREATABLE,
+
+        /** 去掉括号后缀之后**唯一**对上了库里某条（subject = 文档里写的名，args = 库里那条的名）。 */
+        FOOD_ALIAS,
 
         /** 库里**有但已停用**的食物：不导入、也不提示新建（新建会撞 UNIQUE 再绕回来）。 */
         FOOD_INACTIVE,

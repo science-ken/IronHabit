@@ -359,6 +359,7 @@ private fun ImportPlanNoteLine(note: ExternalPlanNote) {
         ExternalPlanNote.Kind.PROFILE_FIELD_FORBIDDEN -> stringResource(R.string.plan_preview_note_profile_forbidden, subject)
         ExternalPlanNote.Kind.PROFILE_VALUE_REJECTED -> stringResource(R.string.plan_preview_note_profile_value_rejected, subject)
         ExternalPlanNote.Kind.FOOD_CREATABLE -> stringResource(R.string.plan_preview_note_food_creatable, subject)
+        ExternalPlanNote.Kind.FOOD_ALIAS -> stringResource(R.string.plan_preview_note_food_alias, subject, firstArg)
         ExternalPlanNote.Kind.FOOD_INACTIVE -> stringResource(R.string.plan_preview_note_food_inactive, subject)
         ExternalPlanNote.Kind.FOOD_RESTRICTED -> stringResource(R.string.plan_preview_note_food_restricted, subject)
         ExternalPlanNote.Kind.BLANK_FOOD_NAME -> stringResource(R.string.plan_preview_note_blank_food_name)

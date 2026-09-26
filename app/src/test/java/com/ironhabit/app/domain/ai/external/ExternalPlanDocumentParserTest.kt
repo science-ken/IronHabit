@@ -913,6 +913,46 @@ class ExternalPlanDocumentParserTest {
     }
 
     @Test
+    fun parse_bareNameMatchesTheBracketedLibraryEntry_andSaysSo() {
+        // 库里的真名是「米饭（蒸）」，模型按日常说法写「米饭」。
+        // 去后缀**唯一**命中 → 认，但必须在清单里点名对上了哪条：
+        // 计划行里写的是库里的名字，不说明就像对错了。
+        val draft = parsedDiet(mealDoc(mealEntry("LUNCH", """{"food":"米饭","grams":200}""")))
+
+        val lunch = draft.meals.single()
+        assertEquals(11L, lunch.entries.single().foodId)
+        assertEquals(232, lunch.kcal)
+        val note = draft.notes.single { n -> n.kind == ExternalPlanNote.Kind.FOOD_ALIAS }
+        assertEquals("米饭", note.subject)
+        assertEquals(listOf("米饭（蒸）"), note.args)
+    }
+
+    @Test
+    fun parse_exactName_neverClaimsAnAlias() {
+        val draft = parsedDiet(mealDoc(mealEntry("LUNCH", """{"food":"鸡胸肉","grams":150}""")))
+
+        assertTrue(draft.notes.isEmpty())
+    }
+
+    @Test
+    fun parse_ambiguousStem_isNotGuessed() {
+        // 两条只差后缀的牛奶：去后缀后命中两条，猜哪个都会把一餐记成另一种东西。
+        // 这时宁可按"库里没有"交给用户确认，也不自己选。
+        val ambiguous = foodLibrary + food(30L, "牛奶（全脂）", 65) + food(31L, "牛奶（脱脂）", 33)
+        val text = mealDoc(mealEntry("LUNCH", """{"food":"牛奶","grams":250}"""))
+
+        val outcome = ExternalPlanDocumentParser.parse(
+            text, library, ambiguous, emptySet(), ImportSection.DIET,
+        ) as ExternalDocOutcome.Refused
+
+        assertTrue(
+            "只能是不确定，不能是随便挑一条",
+            outcome.notes.any { n -> n.kind == ExternalPlanNote.Kind.FOOD_CREATABLE },
+        )
+        assertTrue(outcome.notes.none { n -> n.kind == ExternalPlanNote.Kind.FOOD_ALIAS })
+    }
+
+    @Test
     fun parse_trainingOnlyDocument_keepsTheNotesClean() {
         // 只导训练是**合法**用法（v1 时代一直如此）。"它没给吃"不能塞进"这份文档里没导进来的"
         // 那份清单 —— 那会让每次正常导入都凭空多一条抱怨，而清单的可信度就是它的用处。
