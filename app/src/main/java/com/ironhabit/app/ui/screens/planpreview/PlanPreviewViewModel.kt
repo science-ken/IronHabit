@@ -5,10 +5,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.ai.external.ExternalPlanNote
+import com.ironhabit.app.domain.ai.external.ImportedMealDraft
+import com.ironhabit.app.domain.ai.external.MealSlotSnapshot
 import com.ironhabit.app.domain.ai.external.ProfileFieldDiff
 import com.ironhabit.app.domain.model.AdviceSource
+import com.ironhabit.app.domain.model.MealType
 import com.ironhabit.app.domain.model.WeekPlan
 import com.ironhabit.app.domain.repository.ExerciseRepository
+import com.ironhabit.app.domain.usecase.AdoptImportedMealsUseCase
 import com.ironhabit.app.domain.usecase.ApplyExternalProfileUseCase
 import com.ironhabit.app.domain.usecase.GenerateTrainingPlanUseCase
 import com.ironhabit.app.domain.usecase.PlanPreview
@@ -17,6 +21,7 @@ import com.ironhabit.app.ui.components.monthDayText
 import com.ironhabit.app.ui.components.weekRangeText
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -33,6 +38,7 @@ import kotlinx.coroutines.launch
 @HiltViewModel
 class PlanPreviewViewModel @Inject constructor(
     private val generateTrainingPlan: GenerateTrainingPlanUseCase,
+    private val adoptMeals: AdoptImportedMealsUseCase,
     private val holder: PlanPreviewHolder,
     private val exerciseRepository: ExerciseRepository,
     private val applyProfile: ApplyExternalProfileUseCase,
@@ -53,6 +59,31 @@ class PlanPreviewViewModel @Inject constructor(
      */
     data class ProfileRow(val diff: ProfileFieldDiff, val checked: Boolean = false)
 
+    /**
+     * 一餐在预览页的样子。
+     *
+     * [blocked] 非空 = 这一格**这次不会写入**（用户改过 / 标过「不吃」），
+     * 必须在采纳之前就在行上说出来 —— 事后发现"排了却没变"是这条通道最难查的一类反馈。
+     */
+    data class DietRow(
+        val mealType: MealType,
+        val lines: List<String>,
+        val kcal: Int,
+        val proteinG: Int,
+        /** 库里没有、因而没算进这餐的条数（界面那句「这餐少算了 N 条」）。 */
+        val missingCount: Int,
+        val blocked: DietBlock? = null,
+    )
+
+    /** 一餐为什么被留着不动。两种原因的文案不一样，不能合成一句。 */
+    enum class DietBlock {
+        /** 用户手改过这一餐。 */
+        EDITED,
+
+        /** 用户把这餐标成了「不吃」（软删行仍占槽位）。 */
+        DECLINED,
+    }
+
     /** 这一天在预览里的身份。 */
     enum class Kind {
         /** 有草案，可以采纳。 */
@@ -72,7 +103,19 @@ class PlanPreviewViewModel @Inject constructor(
         val sets: Int,
         val kind: Kind,
         val adopted: Boolean = false,
-    )
+        /** 这份文档要排的这一天的餐次（内置生成路恒为空 → 那一块整块不显示）。 */
+        val diet: List<DietRow> = emptyList(),
+        /**
+         * 这天已经有勾了「吃了这餐」的餐次。
+         *
+         * 那一餐贡献的摄入量**就是计划行里的 kcal**（没逐样记时只能用它），
+         * 所以改这餐会连带改本周的平均摄入 —— 界面前必须先说，不能让周卡自己变。
+         */
+        val touchesLoggedHistory: Boolean = false,
+    ) {
+        /** 这天有没有可写的东西（训练或饮食任一边）—— 决定「采纳这天」按钮。 */
+        val adoptable: Boolean get() = kind == Kind.DRAFT && (items.isNotEmpty() || diet.any { row -> row.blocked == null })
+    }
 
     data class UiState(
         val weekRange: String = "",
@@ -106,10 +149,18 @@ class PlanPreviewViewModel @Inject constructor(
         /** 采纳完 / 取消完 → 界面收到该信号就返回上一页。 */
         val finished: Boolean = false,
     ) {
-        val draftDays: List<Day> get() = days.filter { day -> day.kind == Kind.DRAFT }
-        val adoptedDays: Int get() = draftDays.count { day -> day.adopted }
-        val pendingDays: Int get() = draftDays.size - adoptedDays
-        val adoptedItemCount: Int get() = draftDays.filter { day -> day.adopted }.sumOf { day -> day.items.size }
+        /**
+         * 有草案、且**这次真写得进去**的那些天。
+         *
+         * 四餐全被保护规则挡住、又没排训练动作的那天要排除在外 —— 把它算进"已采纳 N / M 天"
+         * 的分母，等于给用户一个永远到不了 100% 的进度。
+         */
+        val adoptableDays: List<Day> get() = days.filter { day -> day.adoptable }
+        val adoptedDays: Int get() = adoptableDays.count { day -> day.adopted }
+        val pendingDays: Int get() = adoptableDays.size - adoptedDays
+        val adoptedItemCount: Int get() = adoptableDays.filter { day -> day.adopted }.sumOf { day -> day.items.size }
+        /** 有任何饮食行的那天要不要显示饮食块（内置生成路整块不显示）。 */
+        val hasDiet: Boolean get() = days.any { day -> day.diet.isNotEmpty() }
     }
 
     private val _uiState = MutableStateFlow(UiState())
@@ -124,10 +175,23 @@ class PlanPreviewViewModel @Inject constructor(
     private fun load() {
         val snapshot: PlanPreview = holder.peek() ?: return
         preview = snapshot
+        val dietDrafts: List<ImportedMealDraft> = holder.peekDietDrafts()
+        val mealSlots: List<MealSlotSnapshot> = holder.peekMealSlots()
         viewModelScope.launch {
             val names: Map<Long, String> = exerciseRepository.observeActive().first()
                 .associate { exercise -> exercise.id to exercise.name }
             val reasons: Map<Pair<Int, Long>, String> = holder.peekReasons()
+            // 顺序有讲究：软删行一定同时 `isUserEdited = true`，所以「不吃」要先判，
+            // 否则那一格会被说成"你改过"，而用户真正的意思是这餐我不吃。
+            val blocked: Map<Pair<Int, MealType>, DietBlock> = mealSlots
+                .filter { slot -> slot.isUserEdited || !slot.isActive }
+                .associate { slot ->
+                    (slot.dayOfWeek to slot.mealType) to
+                        if (!slot.isActive) DietBlock.DECLINED else DietBlock.EDITED
+                }
+            val touchedDays: Set<Int> = mealSlots.filter { slot -> slot.isCompleted }
+                .map { slot -> slot.dayOfWeek }
+                .toSet()
             _uiState.update { state ->
                 state.copy(
                     weekRange = weekRangeText(snapshot.weekStartEpochDay),
@@ -139,19 +203,34 @@ class PlanPreviewViewModel @Inject constructor(
                     preservedCount = snapshot.preservedCount,
                     days = (MIN_DAY..MAX_DAY).map { day ->
                         val rows: List<WeekPlan>? = snapshot.draftsByDay[day]
+                        val diet: List<DietRow> = dietDrafts.filter { draft -> draft.dayOfWeek == day }
+                            .map { draft ->
+                                DietRow(
+                                    mealType = draft.mealType,
+                                    lines = draft.entries.map { entry -> "${entry.name} ${entry.grams}g" },
+                                    kcal = draft.kcal,
+                                    proteinG = draft.proteinG.roundToInt(),
+                                    missingCount = draft.unresolvedCount,
+                                    blocked = blocked[day to draft.mealType],
+                                )
+                            }
                         when {
-                            rows != null -> Day(
+                            rows != null || diet.isNotEmpty() -> Day(
                                 dayOfWeek = day,
                                 dateLabel = monthDayText(snapshot.weekStartEpochDay + day - 1),
-                                sets = rows.sumOf { row -> row.targetSets },
-                                items = rows.map { row ->
+                                sets = rows.orEmpty().sumOf { row -> row.targetSets },
+                                items = rows.orEmpty().map { row ->
                                     Item(
                                         name = names[row.exerciseId] ?: "-",
                                         goal = goalOf(row),
                                         explanation = reasons[day to row.exerciseId],
                                     )
                                 },
+                                // 只排了吃、没排练的那天也是可采纳的一天 —— 以前 `rows == null` 直接落 REST，
+                                // 那样那一天的餐次会连"采纳"这个入口都没有。
                                 kind = Kind.DRAFT,
+                                diet = diet,
+                                touchesLoggedHistory = day in touchedDays,
                             )
 
                             day in snapshot.templateOwnedDays -> restDay(snapshot, day, Kind.TEMPLATE_OWNED)
@@ -174,8 +253,8 @@ class PlanPreviewViewModel @Inject constructor(
     fun onAdoptDay(day: Int) = commit(setOf(day))
 
     fun onAdoptAll() {
-        val pending: Set<Int> = _uiState.value.days
-            .filter { day -> day.kind == Kind.DRAFT && !day.adopted }
+        val pending: Set<Int> = _uiState.value.adoptableDays
+            .filter { day -> !day.adopted }
             .map { day -> day.dayOfWeek }
             .toSet()
         if (pending.isEmpty()) return
@@ -189,25 +268,35 @@ class PlanPreviewViewModel @Inject constructor(
 
     fun onConsumeSnackbar() = _uiState.update { state -> state.copy(snackbarRes = null, snackbarArg = null) }
 
+    /**
+     * 一次点击同时写训练与饮食 —— 用户的意图是"这一天的安排我要了"，不是一表一次确认。
+     *
+     * ⚠️ 两条写入**不是**一个事务，这是刻意的：两边的 upsert 都是幂等槽位写
+     * （命中同一 `(day, exercise)` / `(date, meal_type)` 就是 UPDATE），
+     * 所以中途失败的后果是"这一天再点一次采纳"，不是数据坏。
+     * 为这一点点窗口去加一个跨 Repository 的事务端口，换来的是整层架构多一个概念。
+     */
     private fun commit(days: Set<Int>) {
         val snapshot: PlanPreview = preview ?: return
         if (_uiState.value.busy) return
         _uiState.update { state -> state.copy(busy = true) }
         viewModelScope.launch {
             val summary = generateTrainingPlan.commit(snapshot, days)
-            if (summary.writtenCount == 0) {
+            val diet = adoptMeals(snapshot.weekStartEpochDay, holder.peekDietDrafts(), days)
+            val written: Int = summary.writtenCount + diet.writtenCount
+            if (written == 0) {
                 _uiState.update { state -> state.copy(busy = false, snackbarRes = R.string.msg_plan_nothing_adoptable) }
                 return@launch
             }
             _uiState.update { state ->
                 val next = state.days.map { day ->
-                    if (day.dayOfWeek in days && day.kind == Kind.DRAFT) day.copy(adopted = true) else day
+                    if (day.dayOfWeek in days && day.adoptable) day.copy(adopted = true) else day
                 }
                 state.copy(
                     busy = false,
                     days = next,
                     snackbarRes = R.string.msg_plan_adopted_count,
-                    snackbarArg = summary.writtenCount.toString(),
+                    snackbarArg = written.toString(),
                 )
             }
             // 草案全部采纳完就把快照丢掉，避免下次进来看到上一轮的陈旧内容。

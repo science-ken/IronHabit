@@ -703,6 +703,17 @@
     <string name="plan_preview_field_injury_note">伤病备注</string>
     <string name="plan_preview_profile_empty">（不设）</string>
     <string name="plan_preview_profile_days_value">%1$d 天</string>
+    <!-- ===== 预览页的饮食节（刀 3）===== -->
+    <string name="plan_preview_diet_title">这份文档要排的吃</string>
+    <string name="plan_preview_diet_line">%1$s · %2$s kcal · 蛋白 %3$sg</string>
+    <!-- 库里没有的食物不计入这一餐，热量就会偏小 —— 不说这一句，用户会以为这餐就这么多。 -->
+    <string name="plan_preview_diet_missing">少算了 %1$d 条（食物库里没有，勾了建库才会算进来）</string>
+    <string name="plan_preview_diet_preserved">这餐你改过，保留不动</string>
+    <string name="plan_preview_diet_declined">这餐你标过「不吃」，这次不会写入</string>
+    <!-- 勾了「吃了这餐」又没逐样记的那一餐，贡献的摄入量就是这行计划热量本身。 -->
+    <string name="plan_preview_diet_touches_history">这天有餐次已经勾了「吃了这餐」：改它，本周的平均摄入数字也会跟着变</string>
+    <!-- 导入的行算 AI 行：不说这一句，用户二十分钟的外部对话会静默蒸发。 -->
+    <string name="plan_preview_import_overwrite_diet">之后你在今天点「生成饮食」，会把这些餐次原地换掉 —— 导入不会让这几餐变成你手改的内容。</string>
     <!-- ===== 每条动作的"为什么"（刀 3）===== -->
     <!-- 默认折起来：它是文字，不该和组数次数抢视觉；但入口必须在，那正是换用外部模型的理由。 -->
     <string name="plan_preview_reasons_show">看它为什么这样排（%1$d）</string>

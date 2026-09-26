@@ -8,10 +8,13 @@ import com.ironhabit.app.domain.model.AdviceSource
 import com.ironhabit.app.domain.model.Exercise
 import com.ironhabit.app.domain.model.ExerciseCategory
 import com.ironhabit.app.domain.model.Food
+import com.ironhabit.app.domain.model.Meal
+import com.ironhabit.app.domain.model.MealType
 import com.ironhabit.app.domain.model.UserProfile
 import com.ironhabit.app.domain.model.WeekPlan
 import com.ironhabit.app.domain.repository.ExerciseRepository
 import com.ironhabit.app.domain.repository.FoodRepository
+import com.ironhabit.app.domain.repository.MealRepository
 import com.ironhabit.app.domain.repository.PlanRepository
 import com.ironhabit.app.domain.repository.SettingsRepository
 import io.mockk.coEvery
@@ -40,6 +43,7 @@ class ImportExternalPlanUseCaseTest {
 
     private val exerciseRepository: ExerciseRepository = mockk(relaxed = true)
     private val foodRepository: FoodRepository = mockk(relaxed = true)
+    private val mealRepository: MealRepository = mockk(relaxed = true)
     private val planRepository: PlanRepository = mockk(relaxed = true)
     private val settingsRepository: SettingsRepository = mockk(relaxed = true)
 
@@ -47,6 +51,7 @@ class ImportExternalPlanUseCaseTest {
         planRepository = planRepository,
         exerciseRepository = exerciseRepository,
         foodRepository = foodRepository,
+        mealRepository = mealRepository,
         settingsRepository = settingsRepository,
         ioDispatcher = UnconfinedTestDispatcher(),
     )
@@ -62,6 +67,7 @@ class ImportExternalPlanUseCaseTest {
         // 食物库必须显式 stub：relaxed mock 对 `Flow` 返回的是"什么都不发"的空流，
         // 解析器里 `.first()` 会当场 NoSuchElementException。
         every { foodRepository.observeAll() } returns flowOf(foods)
+        coEvery { mealRepository.getMealsIncludingInactive(any()) } returns emptyList()
         coEvery { planRepository.getRowsForWeek(any()) } returns weekRows
         coEvery { planRepository.getRepeatRows() } returns templateRows
         every { settingsRepository.profile() } returns flowOf(profile)
@@ -272,5 +278,68 @@ class ImportExternalPlanUseCaseTest {
             2,
             nothing.preview.preservedCount,
         )
+    }
+
+    // ---------------- 饮食段（刀 3）----------------
+
+    private fun food(id: Long, name: String, kcalPer100g: Int, proteinPer100g: Double) = Food(
+        id = id,
+        name = name,
+        kcalPer100g = kcalPer100g,
+        proteinPer100g = proteinPer100g,
+        carbsPer100g = 0.0,
+        fatPer100g = 0.0,
+    )
+
+    private val dietText: String = """
+        {"schema":"${ExternalPlanSchema.SCHEMA}","meals":[{"dayOfWeek":2,"entries":[
+            {"mealType":"LUNCH","items":[{"food":"米饭（蒸）","grams":200}]}]}]}
+    """.trimIndent()
+
+    @Test
+    fun import_dietOnlyDocumentIsReady_notNothingAdoptable() = runTest {
+        // 只排吃、没排练的文档以前会落到 NothingAdoptable，屏幕上是那句
+        // 「槽位都被你自己的改动挡住了」—— 对一份训练条目为零的文档，那句话是错的。
+        stub(library, foods = listOf(food(11L, "米饭（蒸）", 116, 2.6)))
+
+        val ready = useCase()(dietText, targetWeek) as ExternalPlanImport.Ready
+
+        assertTrue("训练侧确实没有草案", ready.preview.allDrafts.isEmpty())
+        assertEquals(1, ready.meals.size)
+        assertEquals(2, ready.meals.single().dayOfWeek)
+        assertEquals("数字仍然只在解析层算好，这里不做第二遍", 232, ready.meals.single().kcal)
+    }
+
+    @Test
+    fun import_readyCarriesTheWeeksMealSlots_forThePreservedAndHistoryLines() = runTest {
+        stub(library, foods = listOf(food(11L, "米饭（蒸）", 116, 2.6)))
+        // 只给那一天放行（`stub()` 里已把其它天返回空表）：`any()` 会让七天都读到同一行，
+        // 那测的就不是"某一天的状态"，而是"整个星期都改过"。
+        coEvery { mealRepository.getMealsIncludingInactive(targetWeek + 1L) } returns listOf(
+            Meal(
+                dateEpochDay = targetWeek + 1L,
+                mealType = MealType.LUNCH,
+                isUserEdited = true,
+                isCompleted = true,
+            ),
+        )
+
+        val ready = useCase()(dietText, targetWeek) as ExternalPlanImport.Ready
+
+        val slot = ready.mealSlots.single()
+        assertEquals(2, slot.dayOfWeek)
+        assertEquals(MealType.LUNCH, slot.mealType)
+        assertTrue("这一格用户改过 → 采纳时必须跳过，界面也要说", slot.isUserEdited)
+        assertTrue("这一格勾过「吃了」 → 改它会同日改动本周平均摄入", slot.isCompleted)
+    }
+
+    @Test
+    fun import_skipsTheWeekMealRead_whenTheDocumentHasNoMeals() = runTest {
+        // 纯训练文档不该白跑 7 天查询（`getMealsIncludingInactive` 一天一次）。
+        stub(library)
+
+        useCase()(document(twoItems), targetWeek)
+
+        coVerify(exactly = 0) { mealRepository.getMealsIncludingInactive(any()) }
     }
 }

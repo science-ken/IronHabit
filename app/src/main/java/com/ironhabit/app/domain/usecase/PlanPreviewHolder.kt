@@ -1,6 +1,8 @@
 package com.ironhabit.app.domain.usecase
 
 import com.ironhabit.app.domain.ai.external.ExternalPlanNote
+import com.ironhabit.app.domain.ai.external.ImportedMealDraft
+import com.ironhabit.app.domain.ai.external.MealSlotSnapshot
 import com.ironhabit.app.domain.ai.external.ProfileFieldDiff
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -37,16 +39,30 @@ class PlanPreviewHolder @Inject constructor() {
     /** 「天 × 动作」→ 模型写的那句"为什么"。同样不落库，只在预览页折叠显示。 */
     private var reasons: Map<Pair<Int, Long>, String> = emptyMap()
 
+    /**
+     * 这份文档想排的餐次（外部导入路才有；内置生成恒为空）。
+     *
+     * 和草案同一份生命周期：分开存就会出现"看着上一份文档的吃、这一份文档的练"。
+     */
+    private var dietDrafts: List<ImportedMealDraft> = emptyList()
+
+    /** 目标周**现在**的餐次状态：预览页那两句「保留不动 / 改了它历史会变」的判据。 */
+    private var mealSlots: List<MealSlotSnapshot> = emptyList()
+
     fun set(
         preview: PlanPreview,
         importNotes: List<ExternalPlanNote> = emptyList(),
         profileDiffs: List<ProfileFieldDiff> = emptyList(),
         reasons: Map<Pair<Int, Long>, String> = emptyMap(),
+        dietDrafts: List<ImportedMealDraft> = emptyList(),
+        mealSlots: List<MealSlotSnapshot> = emptyList(),
     ) {
         current = preview
         this.importNotes = importNotes
         this.profileDiffs = profileDiffs
         this.reasons = reasons
+        this.dietDrafts = dietDrafts
+        this.mealSlots = mealSlots
     }
 
     /** 取出当前快照但不消耗它（页面重建、配置变更时还要能再渲染一次）。 */
@@ -59,11 +75,17 @@ class PlanPreviewHolder @Inject constructor() {
 
     fun peekReasons(): Map<Pair<Int, Long>, String> = reasons
 
+    fun peekDietDrafts(): List<ImportedMealDraft> = dietDrafts
+
+    fun peekMealSlots(): List<MealSlotSnapshot> = mealSlots
+
     /** 采纳完 / 取消完必须清掉，避免下一次进来看到上一次的陈旧草案。 */
     fun clear() {
         current = null
         importNotes = emptyList()
         profileDiffs = emptyList()
         reasons = emptyMap()
+        dietDrafts = emptyList()
+        mealSlots = emptyList()
     }
 }

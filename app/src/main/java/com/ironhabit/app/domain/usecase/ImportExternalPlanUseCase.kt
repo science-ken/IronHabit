@@ -8,9 +8,11 @@ import com.ironhabit.app.domain.ai.external.ExternalPlanNote
 import com.ironhabit.app.domain.ai.external.ImportedMealDraft
 import com.ironhabit.app.domain.ai.external.ImportedNewExercise
 import com.ironhabit.app.domain.ai.external.ImportedNewFood
+import com.ironhabit.app.domain.ai.external.MealSlotSnapshot
 import com.ironhabit.app.domain.ai.external.ProfileFieldDiff
 import com.ironhabit.app.domain.repository.ExerciseRepository
 import com.ironhabit.app.domain.repository.FoodRepository
+import com.ironhabit.app.domain.repository.MealRepository
 import com.ironhabit.app.domain.repository.PlanRepository
 import com.ironhabit.app.domain.repository.SettingsRepository
 import javax.inject.Inject
@@ -40,6 +42,7 @@ class ImportExternalPlanUseCase @Inject constructor(
     private val planRepository: PlanRepository,
     private val exerciseRepository: ExerciseRepository,
     private val foodRepository: FoodRepository,
+    private val mealRepository: MealRepository,
     private val settingsRepository: SettingsRepository,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
@@ -79,6 +82,25 @@ class ImportExternalPlanUseCase @Inject constructor(
                     val templateEditedRows = planRepository.getRepeatRows()
                         .filter { plan -> plan.isUserEdited }
 
+                    // 饮食侧现状只在**真的有餐次要排**时读：没有餐次就不该白跑 7 天查询。
+                    val mealSlots: List<MealSlotSnapshot> = if (parsed.draft.meals.isEmpty()) {
+                        emptyList()
+                    } else {
+                        (0L until DAYS_IN_WEEK).flatMap { offset ->
+                            val dayOfWeek: Int = (offset + 1).toInt()
+                            mealRepository.getMealsIncludingInactive(weekStartEpochDay + offset)
+                                .map { meal ->
+                                    MealSlotSnapshot(
+                                        dayOfWeek = dayOfWeek,
+                                        mealType = meal.mealType,
+                                        isUserEdited = meal.isUserEdited,
+                                        isCompleted = meal.isCompleted,
+                                        isActive = meal.isActive,
+                                    )
+                                }
+                        }
+                    }
+
                     val proposal = parsed.draft.proposal.copy(
                         preservedUserEditedIds = (weekRows + templateEditedRows)
                             .filter { plan -> plan.isUserEdited }
@@ -92,14 +114,11 @@ class ImportExternalPlanUseCase @Inject constructor(
                         retireStaleRows = false,
                     )
 
-                    if (preview.allDrafts.isEmpty()) {
-                        // 文档合法、但能写的训练槽位一个都不剩（全被手改行或模板归属日挡住）。
+                    // 训练侧没地方写 ≠ 这份文档没用：有餐次就照常进预览页（界面分开说两侧）。
+                    if (preview.allDrafts.isEmpty() && parsed.draft.meals.isEmpty()) {
+                        // 文档合法、但能写的槽位一个都不剩（全被手改行或模板归属日挡住）。
                         // 这时候跳预览页只会看到一句"没有待采纳的草案"，等于把人支走又不说原因；
                         // 所以连着预览一起回：`preservedCount` / `templateOwnedDays` 就是"为什么没地方写"。
-                        //
-                        // ⚠️ `allDrafts` 只看训练侧，所以一份"只有饮食"的文档目前会落到这里、
-                        // 显示那句"槽位都被你自己的改动挡住了"—— 那句话对它**是错的**。
-                        // 刀 3 给预览页加饮食节时一并修（那之后有餐次就该是 Ready）。
                         ExternalPlanImport.NothingAdoptable(
                             preview = preview,
                             notes = parsed.draft.notes,
@@ -127,6 +146,7 @@ class ImportExternalPlanUseCase @Inject constructor(
                             newExercises = parsed.draft.newExercises,
                             meals = parsed.draft.meals,
                             newFoods = parsed.draft.newFoods,
+                            mealSlots = mealSlots,
                         )
                     }
                 }
@@ -134,9 +154,10 @@ class ImportExternalPlanUseCase @Inject constructor(
         }
 }
 
+private const val DAYS_IN_WEEK = 7L
+
 /** 导入的三态。界面对每一态都有**各自**的说法，不许合并成"成功/失败"两态。 */
 sealed interface ExternalPlanImport {
-
     /**
      * 整份不收（格式不对 / 不是本 App 的合同 / 太大 / 一条有效都没有）。
      *
@@ -184,5 +205,7 @@ sealed interface ExternalPlanImport {
         val meals: List<ImportedMealDraft> = emptyList(),
         /** 库里没有的食物：等用户在弹层里确认才建进食物库。 */
         val newFoods: List<ImportedNewFood> = emptyList(),
+        /** 目标周**现在**的餐次状态（只在有餐次要排时才读），预览页靠它说「保留不动 / 写了也看不见」。 */
+        val mealSlots: List<MealSlotSnapshot> = emptyList(),
     ) : ExternalPlanImport
 }

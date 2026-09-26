@@ -4,6 +4,25 @@ import com.ironhabit.app.domain.model.FoodNutrition
 import com.ironhabit.app.domain.model.MealType
 
 /**
+ * 目标周**现在**某一餐是什么样：预览页那两句"会不会动到你的东西"的判据。
+ *
+ * 它来自库里已有的行，不是草案 —— 所以必须和草案一起送到预览页，
+ * 否则界面只能说"排了 4 餐"，说不出"其中午餐你手改过，这次不会动它"。
+ *
+ * @property isUserEdited 用户改过 / 删过 → [com.ironhabit.app.domain.usecase.AdoptImportedMealsUseCase] 会跳过这一格
+ * @property isActive `false` = 用户把这餐标成了「不吃」（软删行仍占槽位）。
+ *   它一定同时 `isUserEdited == true`，但界面要说的是另一句话：那一格**写进去也看不见**。
+ * @property isCompleted 已经勾了"吃了这餐" → 改这餐的**计划热量**会连带改本周的平均摄入数字
+ */
+data class MealSlotSnapshot(
+    val dayOfWeek: Int,
+    val mealType: MealType,
+    val isUserEdited: Boolean,
+    val isCompleted: Boolean,
+    val isActive: Boolean = true,
+)
+
+/**
  * 外部 AI 饮食文档解析出来的**一餐草案**。
  *
  * ## 数字从哪来（这条是整件事的承重墙）

@@ -289,7 +289,14 @@ class ExternalImportViewModel @Inject constructor(
 
     /** 把解析好的草案交给预览页（两条路共用：无候选时直接跳，"先只导入能导的"也走这里）。 */
     private fun handToPreview(result: ExternalPlanImport.Ready) {
-        planPreviewHolder.set(result.preview, result.notes, result.profileDiffs, result.reasons)
+        planPreviewHolder.set(
+            preview = result.preview,
+            importNotes = result.notes,
+            profileDiffs = result.profileDiffs,
+            reasons = result.reasons,
+            dietDrafts = result.meals,
+            mealSlots = result.mealSlots,
+        )
         pending = null
         _uiState.update { state ->
             state.copy(

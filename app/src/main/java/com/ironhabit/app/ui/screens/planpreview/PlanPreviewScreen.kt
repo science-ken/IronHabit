@@ -42,6 +42,7 @@ import com.ironhabit.app.ui.components.equipmentLabelRes
 import com.ironhabit.app.ui.components.goalLabelRes
 import com.ironhabit.app.ui.components.injuryLabelRes
 import com.ironhabit.app.ui.components.joinLabels
+import com.ironhabit.app.ui.components.mealTypeLabelRes
 import com.ironhabit.app.ui.screens.ai.ImportPlanNoteList
 import com.ironhabit.app.ui.theme.IronHabitSpacing
 
@@ -150,6 +151,15 @@ fun PlanPreviewScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                if (uiState.hasDiet) {
+                    item {
+                        Text(
+                            text = stringResource(R.string.plan_preview_import_overwrite_diet),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
                 item { ImportPlanNoteList(notes = uiState.importNotes) }
                 // 档案 diff 也在这同一屏：它和"这几天的计划"是同一份文档带来的两件事，
                 // 拆成两屏会让人点两次"确定"却只表达了一个意图。
@@ -232,7 +242,7 @@ fun PlanPreviewScreen(
                 stringResource(
                     R.string.plan_preview_footer,
                     uiState.adoptedDays,
-                    uiState.draftDays.size,
+                    uiState.adoptableDays.size,
                     uiState.adoptedItemCount,
                 )
             },
@@ -268,7 +278,7 @@ fun PlanPreviewScreen(
                     text = stringResource(
                         R.string.plan_preview_adopt_all,
                         uiState.adoptedDays,
-                        uiState.draftDays.size,
+                        uiState.adoptableDays.size,
                     ),
                 )
             }
@@ -332,16 +342,17 @@ private fun DayCard(day: PlanPreviewViewModel.Day, weekday: Int, onAdopt: () -> 
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                if (!day.adopted) {
-                    OutlinedButton(onClick = onAdopt) {
-                        Text(text = stringResource(R.string.plan_preview_adopt_day))
-                    }
-                } else {
-                    Text(
+                when {
+                    day.adopted -> Text(
                         text = stringResource(R.string.plan_preview_adopted),
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                     )
+                    // 四餐全被保护规则挡住、又没排动作的那天**不给按钮**：
+                    // 点一次弹一句"没有可采纳的"，比没有按钮更糟 —— 那看着像 app 坏了。
+                    day.adoptable -> OutlinedButton(onClick = onAdopt) {
+                        Text(text = stringResource(R.string.plan_preview_adopt_day))
+                    }
                 }
             }
             // 外部 AI 给每条动作写的"为什么"。默认折起来 —— 它是文字，不该和组数次数抢视觉；
@@ -386,6 +397,64 @@ private fun DayCard(day: PlanPreviewViewModel.Day, weekday: Int, onAdopt: () -> 
                         } else {
                             stringResource(R.string.plan_preview_reasons_show, explainedCount)
                         },
+                    )
+                }
+            }
+            // ---- 这一天的餐次（内置生成路 diet 恒为空 → 整块不显示）----
+            if (day.diet.isNotEmpty()) {
+                Text(
+                    text = stringResource(R.string.plan_preview_diet_title),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.fillMaxWidth().padding(top = IronHabitSpacing.sm),
+                )
+                day.diet.forEach { row ->
+                    // 三个实参全部 toString()：`plan_preview_diet_line` 用的是 %s，
+                    // 传 Int 进去在 Compose 里不会编译错，只会在渲染那一刻崩。
+                    Text(
+                        text = stringResource(R.string.plan_preview_diet_line, stringResource(mealTypeLabelRes(row.mealType)), row.kcal.toString(), row.proteinG.toString()),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    row.lines.forEach { line ->
+                        Text(
+                            text = "· $line",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.fillMaxWidth().padding(start = IronHabitSpacing.sm),
+                        )
+                    }
+                    if (row.missingCount > 0) {
+                        Text(
+                            text = stringResource(R.string.plan_preview_diet_missing, row.missingCount),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.fillMaxWidth().padding(start = IronHabitSpacing.sm),
+                        )
+                    }
+                    // 「保留不动」要说在**这一格**上，不是整页一句：
+                    // 一屏四天四餐摊开，只说总数没人能对上是哪一餐被留了下来。
+                    row.blocked?.let { block ->
+                        Text(
+                            text = stringResource(
+                                if (block == PlanPreviewViewModel.DietBlock.DECLINED) {
+                                    R.string.plan_preview_diet_declined
+                                } else {
+                                    R.string.plan_preview_diet_preserved
+                                },
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier.fillMaxWidth().padding(start = IronHabitSpacing.sm),
+                        )
+                    }
+                }
+                if (day.touchesLoggedHistory) {
+                    Text(
+                        text = stringResource(R.string.plan_preview_diet_touches_history),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.fillMaxWidth().padding(top = IronHabitSpacing.xs),
                     )
                 }
             }
