@@ -2,13 +2,16 @@ package com.ironhabit.app.domain.usecase
 
 import com.ironhabit.app.domain.ai.external.ExternalDocRefusal
 import com.ironhabit.app.domain.ai.external.ExternalPlanNote
+import com.ironhabit.app.domain.ai.external.ExternalPlanSchema
 import com.ironhabit.app.domain.ai.external.ProfileFieldDiff
 import com.ironhabit.app.domain.model.AdviceSource
 import com.ironhabit.app.domain.model.Exercise
 import com.ironhabit.app.domain.model.ExerciseCategory
+import com.ironhabit.app.domain.model.Food
 import com.ironhabit.app.domain.model.UserProfile
 import com.ironhabit.app.domain.model.WeekPlan
 import com.ironhabit.app.domain.repository.ExerciseRepository
+import com.ironhabit.app.domain.repository.FoodRepository
 import com.ironhabit.app.domain.repository.PlanRepository
 import com.ironhabit.app.domain.repository.SettingsRepository
 import io.mockk.coEvery
@@ -36,12 +39,14 @@ class ImportExternalPlanUseCaseTest {
     private val targetWeek: Long = 20_724L
 
     private val exerciseRepository: ExerciseRepository = mockk(relaxed = true)
+    private val foodRepository: FoodRepository = mockk(relaxed = true)
     private val planRepository: PlanRepository = mockk(relaxed = true)
     private val settingsRepository: SettingsRepository = mockk(relaxed = true)
 
     private fun useCase(): ImportExternalPlanUseCase = ImportExternalPlanUseCase(
         planRepository = planRepository,
         exerciseRepository = exerciseRepository,
+        foodRepository = foodRepository,
         settingsRepository = settingsRepository,
         ioDispatcher = UnconfinedTestDispatcher(),
     )
@@ -51,8 +56,12 @@ class ImportExternalPlanUseCaseTest {
         weekRows: List<WeekPlan> = emptyList(),
         templateRows: List<WeekPlan> = emptyList(),
         profile: UserProfile = UserProfile(trainingDaysPerWeek = 3),
+        foods: List<Food> = emptyList(),
     ) {
         everyLibrary(library)
+        // 食物库必须显式 stub：relaxed mock 对 `Flow` 返回的是"什么都不发"的空流，
+        // 解析器里 `.first()` 会当场 NoSuchElementException。
+        every { foodRepository.observeAll() } returns flowOf(foods)
         coEvery { planRepository.getRowsForWeek(any()) } returns weekRows
         coEvery { planRepository.getRepeatRows() } returns templateRows
         every { settingsRepository.profile() } returns flowOf(profile)
@@ -76,7 +85,7 @@ class ImportExternalPlanUseCaseTest {
     )
 
     private fun document(items: String, day: Int = 1): String =
-        """{"schema":"ironhabit-plan-import/v1","days":[{"dayOfWeek":$day,"focus":"FULL_BODY","items":[$items]}]}"""
+        """{"schema":"${ExternalPlanSchema.SCHEMA}","days":[{"dayOfWeek":$day,"focus":"FULL_BODY","items":[$items]}]}"""
 
     private val twoItems: String =
         """{"exercise":"杠铃深蹲","targetSets":4,"targetReps":8,"targetWeightKg":80.0},""" +
@@ -143,7 +152,7 @@ class ImportExternalPlanUseCaseTest {
     fun import_ready_alsoCarriesTheProfileDiffsAgainstTheCurrentProfile() = runTest {
         stub(library, profile = UserProfile(trainingDaysPerWeek = 3, goalWeightKg = 80f))
         val text = """
-            {"schema":"ironhabit-plan-import/v1","days":[{"dayOfWeek":1,"items":[
+            {"schema":"${ExternalPlanSchema.SCHEMA}","days":[{"dayOfWeek":1,"items":[
                 {"exercise":"杠铃深蹲","targetSets":3,"targetReps":12}]}],
              "profile":{"trainingDaysPerWeek":5,"goalWeightKg":80}}
         """.trimIndent()

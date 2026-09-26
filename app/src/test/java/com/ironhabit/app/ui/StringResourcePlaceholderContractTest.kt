@@ -177,6 +177,16 @@ class StringResourcePlaceholderContractTest {
         entry("plan_preview_note_reps_clamped", ArgKind.STRING, ArgKind.STRING)
         entry("plan_preview_note_profile_forbidden", ArgKind.STRING)
         entry("plan_preview_note_profile_value_rejected", ArgKind.STRING)
+        // 饮食段（v2）：同一条口径 —— subject / args 一律 toString() 后传 String。
+        entry("plan_preview_note_food_creatable", ArgKind.STRING)
+        entry("plan_preview_note_food_inactive", ArgKind.STRING)
+        entry("plan_preview_note_food_restricted", ArgKind.STRING)
+        entry("plan_preview_note_duplicate_food", ArgKind.STRING)
+        entry("plan_preview_note_over_meal_limit", ArgKind.STRING, ArgKind.STRING)
+        entry("plan_preview_note_grams_clamped", ArgKind.STRING, ArgKind.STRING)
+        entry("plan_preview_note_meal_type_unknown", ArgKind.STRING)
+        entry("plan_preview_note_duplicate_meal", ArgKind.STRING)
+        entry("plan_preview_note_new_food_value_rejected", ArgKind.STRING)
         // 档案 diff（刀 2）：天数与按钮计数是数字，走 %d；「已改 N 项」经 snackbarArg（String 通道）走 %s。
         entry("plan_preview_profile_days_value", ArgKind.NUMERIC)
         entry("plan_preview_profile_apply", ArgKind.NUMERIC)

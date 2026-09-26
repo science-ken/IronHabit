@@ -639,11 +639,13 @@
     <!-- 五种整份拒收各说各的下一步，不给一句万能的「格式错误」。 -->
     <string name="ai_import_refuse_empty">什么都没粘进来。</string>
     <string name="ai_import_refuse_not_json">这段里找不到能读的 JSON 对象。把模板整段发给 AI，并要求它「只输出 JSON」。</string>
-    <string name="ai_import_refuse_wrong_schema">这段 JSON 没带上本 App 认的合同版本号（顶层那个 schema 字段）。重新复制模板再问一次。</string>
+    <!-- 这句必须给"重新复制模板"这条出路：合同从 v1 升到 v2 之后，用户手上旧模板问回来的文档全部落到这里。 -->
+    <string name="ai_import_refuse_wrong_schema">这段 JSON 没带上本 App 现在认的合同版本号（顶层那个 schema 字段）—— 这一版改成能同时收训练和饮食，旧模板问回来的读不进来。重新点一次「复制提问模板」，整段再问一次。</string>
     <string name="ai_import_refuse_too_large">粘进来的内容太大（上限 512 KB）。只要那段计划 JSON，别把整段聊天记录搬来。</string>
-    <!-- 与下一条的区别是原因不同、下一步也不同：这条要重发模板，那条要改动作名。 -->
-    <string name="ai_import_refuse_empty_plan">这段 JSON 里一条动作都没写 —— 多半是它没收到你的动作库。把模板整段重新复制一次再发过去。</string>
-    <string name="ai_import_refuse_no_items">这段 JSON 读通了，但没有一条能用 —— 多半是动作名和你库里的名字对不上，下面逐条说了原因。</string>
+    <!-- 与下一条的区别是原因不同、下一步也不同：这条要重发模板，那条要改名字。
+         v2 起"只有饮食、没有训练"是合法文档，所以这句同时覆盖两半，不再单说动作库。 -->
+    <string name="ai_import_refuse_nothing_to_import">这段 JSON 里既没写动作也没写餐次 —— 多半是它没收到你发过去的那段数据。把模板整段重新复制一次再发过去。</string>
+    <string name="ai_import_refuse_no_items">这段 JSON 读通了，但没有一条能用 —— 多半是名字和你库里的对不上，下面逐条说了原因。</string>
     <!-- 模型自己写的那段话原样贴出来：它经常直接说了为什么没排，比 App 猜准。 -->
     <string name="ai_import_ai_said">它自己说：</string>
     <string name="ai_import_nothing_adoptable">这一周能写的槽位都被你自己的改动挡住了（已保留 %1$s 条），这次什么都没导入。</string>
@@ -668,6 +670,23 @@
     <string name="plan_preview_note_reps_clamped">%1$s：次数 %2$s 超出可记录范围，已按上限改过</string>
     <string name="plan_preview_note_profile_forbidden">%1$s 是你的实测数据，App 不收 AI 填的这一项</string>
     <string name="plan_preview_note_profile_value_rejected">档案里的 %1$s 它写了一个 App 认不出的值，没有采纳，也没有替你猜</string>
+    <!-- ===== 饮食段（刀 1/2：外部 AI 文档里的餐次）===== -->
+    <!-- 建库是往食物库永久加一行，而且数值得用户自己认，所以陌生名一律先摊出来、不静默排进那一餐。 -->
+    <string name="plan_preview_note_food_creatable">%1$s：食物库里没有这个名字，加进食物库后才能算进这一餐</string>
+    <!-- 停用行绝不能算"库里没有"：建库会撞重名再绕回来，所以这里单独一句、也不给新建候选。 -->
+    <string name="plan_preview_note_food_inactive">%1$s：这条你在食物库里停用过，没导入（要去食物库重新启用）</string>
+    <!-- 忌口是安全字段：命中即挡，界面不给"我知道，仍要"的出口。 -->
+    <string name="plan_preview_note_food_restricted">%1$s：这条在食物库里标了你的忌口，没导入</string>
+    <!-- 这句是上一句的前提：库里只有少数条目带标注，写成"已按忌口过滤"就是假话。 -->
+    <string name="ai_import_restriction_disclaimer">只挡食物库里标了这几类的条目；没有标注的食物不代表安全。</string>
+    <string name="plan_preview_note_blank_food_name">有一条食物名是空的，没导入</string>
+    <string name="plan_preview_note_duplicate_food">%1$s：这一餐出现了两次，只留第一条（份量没有相加）</string>
+    <string name="plan_preview_note_over_meal_limit">%1$s：这一餐已经有 %2$s 条，超出的没导入</string>
+    <string name="plan_preview_note_grams_clamped">%1$s：克数 %2$s 超出可记录范围，已按上限改过</string>
+    <!-- 认不出的餐次整条不采纳：猜成"加餐"会静默改掉用户那一餐原本的内容。 -->
+    <string name="plan_preview_note_meal_type_unknown">它写了一个 App 认不出的餐次（%1$s），那一餐没有采纳</string>
+    <string name="plan_preview_note_duplicate_meal">%1$s这一餐出现了两次，只留第一条</string>
+    <string name="plan_preview_note_new_food_value_rejected">%1$s 的数值超出可记录范围，没有采纳；建库时那一格要你自己填</string>
     <!-- ===== 档案 diff（刀 2）===== -->
     <!-- 默认一行都不勾：文档"想改"不等于用户"同意改"，而勾下去是立即写进档案、不给撤销。 -->
     <string name="plan_preview_profile_title">这份文档还想改的档案（勾哪几项就改哪几项）</string>

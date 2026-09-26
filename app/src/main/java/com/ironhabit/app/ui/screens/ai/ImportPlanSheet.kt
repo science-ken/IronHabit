@@ -35,6 +35,8 @@ import com.ironhabit.app.R
 import com.ironhabit.app.domain.ai.external.ExternalPlanDocumentParser
 import com.ironhabit.app.domain.ai.external.ExternalPlanNote
 import com.ironhabit.app.domain.ai.external.NewExerciseCandidate
+import com.ironhabit.app.domain.model.MealType
+import com.ironhabit.app.ui.components.mealTypeLabelRes
 import com.ironhabit.app.ui.components.weekRangeText
 import com.ironhabit.app.ui.theme.IronHabitSpacing
 
@@ -303,6 +305,16 @@ internal fun ImportPlanNoteList(notes: List<ExternalPlanNote>) {
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        // 挡过忌口就必须跟这一句：不写它，这份清单会被读成"已按忌口过滤干净了"，
+        // 而实际上只有食物库里**标了类别**的那几条会被挡（库里多数条目没有标注）。
+        if (notes.any { note -> note.kind == ExternalPlanNote.Kind.FOOD_RESTRICTED }) {
+            Text(
+                text = stringResource(R.string.ai_import_restriction_disclaimer),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
         notes.forEach { note -> ImportPlanNoteLine(note) }
     }
 }
@@ -318,6 +330,11 @@ private fun ImportPlanNoteLine(note: ExternalPlanNote) {
     val subject: String = note.subject.orEmpty()
     val firstArg: String = note.args.firstOrNull()?.toString().orEmpty()
     val dailyLimit: String = ExternalPlanDocumentParser.MAX_ITEMS_PER_DAY.toString()
+    val mealLimit: String = ExternalPlanDocumentParser.MAX_FOODS_PER_MEAL.toString()
+    // 餐次的中文唯一真源是 `strings.xml` 里的 `meal_*`，note 只带枚举名（架构 §7.5 禁止硬编码中文）。
+    val mealLabel: String = MealType.entries.firstOrNull { type -> type.name == subject }
+        ?.let { type -> stringResource(mealTypeLabelRes(type)) }
+        ?: subject
     // ⚠️ 下面每一句取文案的调用都必须**整句写在一行**（含全部实参）：
     // `StringResourcePlaceholderContractTest` 的调用点扫描按行匹配，
     // 把资源名换行写就会读成"实参个数为 0"，带参文案当场红灯。
@@ -332,6 +349,16 @@ private fun ImportPlanNoteLine(note: ExternalPlanNote) {
         ExternalPlanNote.Kind.REPS_CLAMPED -> stringResource(R.string.plan_preview_note_reps_clamped, subject, firstArg)
         ExternalPlanNote.Kind.PROFILE_FIELD_FORBIDDEN -> stringResource(R.string.plan_preview_note_profile_forbidden, subject)
         ExternalPlanNote.Kind.PROFILE_VALUE_REJECTED -> stringResource(R.string.plan_preview_note_profile_value_rejected, subject)
+        ExternalPlanNote.Kind.FOOD_CREATABLE -> stringResource(R.string.plan_preview_note_food_creatable, subject)
+        ExternalPlanNote.Kind.FOOD_INACTIVE -> stringResource(R.string.plan_preview_note_food_inactive, subject)
+        ExternalPlanNote.Kind.FOOD_RESTRICTED -> stringResource(R.string.plan_preview_note_food_restricted, subject)
+        ExternalPlanNote.Kind.BLANK_FOOD_NAME -> stringResource(R.string.plan_preview_note_blank_food_name)
+        ExternalPlanNote.Kind.DUPLICATE_FOOD -> stringResource(R.string.plan_preview_note_duplicate_food, subject)
+        ExternalPlanNote.Kind.OVER_MEAL_LIMIT -> stringResource(R.string.plan_preview_note_over_meal_limit, subject, mealLimit)
+        ExternalPlanNote.Kind.GRAMS_CLAMPED -> stringResource(R.string.plan_preview_note_grams_clamped, subject, firstArg)
+        ExternalPlanNote.Kind.MEAL_TYPE_UNKNOWN -> stringResource(R.string.plan_preview_note_meal_type_unknown, subject)
+        ExternalPlanNote.Kind.DUPLICATE_MEAL -> stringResource(R.string.plan_preview_note_duplicate_meal, mealLabel)
+        ExternalPlanNote.Kind.NEW_FOOD_VALUE_REJECTED -> stringResource(R.string.plan_preview_note_new_food_value_rejected, subject)
     }
     Text(
         text = "· $text",

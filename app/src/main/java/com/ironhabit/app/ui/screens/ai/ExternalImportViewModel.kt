@@ -368,7 +368,7 @@ class ExternalImportViewModel @Inject constructor(
         ExternalDocRefusal.NOT_A_DOCUMENT -> R.string.ai_import_refuse_not_json
         ExternalDocRefusal.WRONG_SCHEMA -> R.string.ai_import_refuse_wrong_schema
         ExternalDocRefusal.TOO_LARGE -> R.string.ai_import_refuse_too_large
-        ExternalDocRefusal.EMPTY_PLAN -> R.string.ai_import_refuse_empty_plan
+        ExternalDocRefusal.NOTHING_TO_IMPORT -> R.string.ai_import_refuse_nothing_to_import
         ExternalDocRefusal.NO_USABLE_ITEMS -> R.string.ai_import_refuse_no_items
     }
 }

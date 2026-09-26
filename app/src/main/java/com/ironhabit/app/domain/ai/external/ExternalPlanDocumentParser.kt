@@ -2,12 +2,16 @@ package com.ironhabit.app.domain.ai.external
 
 import com.ironhabit.app.domain.ai.remote.stripCodeFence
 import com.ironhabit.app.domain.model.AdviceSource
+import com.ironhabit.app.domain.model.DietRestriction
 import com.ironhabit.app.domain.model.Equipment
 import com.ironhabit.app.domain.model.Exercise
 import com.ironhabit.app.domain.model.ExerciseCategory
+import com.ironhabit.app.domain.model.Food
+import com.ironhabit.app.domain.model.FoodNutritionCalculator
 import com.ironhabit.app.domain.model.Goal
 import com.ironhabit.app.domain.model.InjuryArea
 import com.ironhabit.app.domain.model.InputLimits
+import com.ironhabit.app.domain.model.MealType
 import com.ironhabit.app.domain.model.MuscleGroup
 import com.ironhabit.app.domain.model.PlanItemDraft
 import com.ironhabit.app.domain.model.PlanProposal
@@ -63,12 +67,30 @@ object ExternalPlanDocumentParser {
     const val MAX_REASON_CHARS: Int = 160
 
     /**
+     * 一餐最多几条食物。
+     *
+     * 和 [MAX_ITEMS_PER_DAY] 同一个理由：外部 AI 看不见"一餐装得下几条"这个约束，
+     * 冒出一句"早餐 15 样"是常态。超出**不静默截断**，逐条进 [ExternalPlanNote.Kind.OVER_MEAL_LIMIT]。
+     * 8 是按餐卡一屏能看完、且没人真的一餐吃八样东西定的。
+     */
+    const val MAX_FOODS_PER_MEAL: Int = 8
+
+    /**
      * 把用户粘回来的文本读成草案。
      *
      * @param text 粘贴的原始文本（可能带围栏、前后有模型的解释话）
      * @param library 用户**启用中**的动作库（= 名字白名单，也是"库里没有"的判据）
+     * @param foods 食物库**全量（含已停用）**。不按 active 过滤是有意的：
+     *   停用行如果算"库里没有"，它会变成待新建候选 → 用户建库时撞上 `foods.name` UNIQUE
+     *   → 被当成"已有"跳过 → 重解析还是"库里没有"。**死循环**（刀 4 在动作侧已经踩过一次）。
+     * @param dietaryAvoid 用户的忌口集合，命中即整条挡（见 [ExternalPlanNote.Kind.FOOD_RESTRICTED]）
      */
-    fun parse(text: String, library: List<Exercise>): ExternalDocOutcome {
+    fun parse(
+        text: String,
+        library: List<Exercise>,
+        foods: List<Food> = emptyList(),
+        dietaryAvoid: Set<DietRestriction> = emptySet(),
+    ): ExternalDocOutcome {
         // 长度是字节数下界（UTF-8 每字符 ≥1 字节）：先做 O(1) 的粗筛，避免为巨型粘贴分配字节数组。
         if (text.length > MAX_DOC_BYTES) return ExternalDocOutcome.Refused(ExternalDocRefusal.TOO_LARGE)
         if (text.toByteArray(Charsets.UTF_8).size > MAX_DOC_BYTES) {
@@ -89,6 +111,11 @@ object ExternalPlanDocumentParser {
 
         val byName: Map<String, Exercise> = library
             .mapNotNull { exercise -> exercise.name.trim().takeIf { it.isNotEmpty() }?.let { it.lowercase() to exercise } }
+            .toMap()
+
+        // 食物名同口径：trim + lowercase **精确**匹配，不做模糊、不做拼音 —— 名字对不上就明说对不上。
+        val foodsByName: Map<String, Food> = foods
+            .mapNotNull { food -> food.name.trim().takeIf { it.isNotEmpty() }?.let { it.lowercase() to food } }
             .toMap()
 
         val notes = mutableListOf<ExternalPlanNote>()
@@ -115,20 +142,32 @@ object ExternalPlanDocumentParser {
                 )
             }
 
-        if (days.isEmpty()) {
-            // 和内置 B-3 同口径：一条都不剩 ≠ "这周什么都不练"。当成有效结果送去采纳会把整周清空。
+        val newFoods = mutableListOf<ImportedNewFood>()
+        val mealDrafts: List<ImportedMealDraft> = resolveMeals(
+            declared = document.meals,
+            foodsByName = foodsByName,
+            dietaryAvoid = dietaryAvoid,
+            declaredNewFoods = document.newFoods,
+            notes = notes,
+            newFoods = newFoods,
+        )
+
+        if (days.isEmpty() && mealDrafts.isEmpty()) {
+            // 和内置 B-3 同口径：一条都不剩 ≠ "这周什么都不练/什么都不吃"。当成有效结果送去采纳会把整周清空。
             //
             // 但两种"空"要给两句话，因为下一步完全不同：
-            // - 文档里**根本没写动作**（days 为空 / 每天 items 都空）→ 多半是它没收到 library，
-            //   该重发模板；这时候说"动作名对不上"是把用户往错方向支。
-            // - 写了动作但**每条都被防线挡掉** → 才是名字对不上，逐条清单在这里最值钱。
-            val hadAnyItem: Boolean = document.days.any { day -> day.items.isNotEmpty() }
+            // - 文档里**根本没写内容**（days 与 meals 都空，或只有 profile）→ 多半是它没收到数据包，
+            //   该重发模板；这时候说"名字对不上"是把用户往错方向支。
+            // - 写了但**每一条都被防线挡掉** → 才是名字对不上，逐条清单在这里最值钱。
+            val hadAnyItem: Boolean = document.days.any { day -> day.items.isNotEmpty() } ||
+                document.meals.any { day -> day.entries.any { entry -> entry.items.isNotEmpty() } }
             return ExternalDocOutcome.Refused(
-                reason = if (hadAnyItem) ExternalDocRefusal.NO_USABLE_ITEMS else ExternalDocRefusal.EMPTY_PLAN,
+                reason = if (hadAnyItem) ExternalDocRefusal.NO_USABLE_ITEMS else ExternalDocRefusal.NOTHING_TO_IMPORT,
                 notes = notes.toList(),
                 analysis = document.analysis?.trim()?.takeIf { it.isNotEmpty() },
-                // 候选照样带回去：一份"全是新动作"的文档不是废文档，它是"先加库再导入"。
+                // 候选照样带回去：一份"全是新东西"的文档不是废文档，它是"先加库再导入"。
                 newExercises = candidates,
+                newFoods = newFoods.toList(),
             )
         }
 
@@ -143,9 +182,191 @@ object ExternalPlanDocumentParser {
                 notes = notes.toList(),
                 profile = profilePatch,
                 newExercises = candidates,
+                meals = mealDrafts,
+                newFoods = newFoods.toList(),
             ),
         )
     }
+
+    /**
+     * 文档的 `meals` 段 → 一餐草案。数字一律**本地算**（见 [ImportedMealDraft]）。
+     *
+     * 一条食物内部的顺序即丢弃原因的优先级（和 [resolveItems] 同构）：
+     * 空名 → 库里没有（变成待建候选）→ 停用行 → 撞忌口 → 同餐重复 → 超上限 → 克数钳制。
+     *
+     * @param newFoods 出参：待用户确认的新食物（按名字去重后追加）。
+     */
+    private fun resolveMeals(
+        declared: List<ExternalMealDay>,
+        foodsByName: Map<String, Food>,
+        dietaryAvoid: Set<DietRestriction>,
+        declaredNewFoods: List<ExternalNewFood>,
+        notes: MutableList<ExternalPlanNote>,
+        newFoods: MutableList<ImportedNewFood>,
+    ): List<ImportedMealDraft> {
+        if (declared.isEmpty()) return emptyList()
+
+        // `newFoods` 从"准入凭证"降级成"预填资料"：库里没有的名字**一律**可建，
+        // 声明过的那条只是提供数值。所以这里只按名字取用，不做资格判断。
+        val declaredByName: Map<String, ExternalNewFood> = declaredNewFoods
+            .mapNotNull { entry -> entry.name.trim().takeIf { it.isNotEmpty() }?.let { it.lowercase() to entry } }
+            .toMap()
+
+        val seenSlots = mutableSetOf<Pair<Int, MealType>>()
+        val drafts = mutableListOf<ImportedMealDraft>()
+
+        for (day in declared) {
+            val dayOfWeek: Int = day.dayOfWeek.coerceIn(MIN_DAY_OF_WEEK, MAX_DAY_OF_WEEK)
+
+            for (entry in day.entries) {
+                val mealType: MealType? = entry.mealType.trim().uppercase()
+                    .let { raw -> MealType.entries.firstOrNull { it.name == raw } }
+                if (mealType == null) {
+                    // 认不出的餐次**不猜**成"加餐"：四餐的槽位是 UNIQUE(date, meal_type)，
+                    // 猜错会把用户某一餐的内容就地换掉，而那句换掉他永远看不出原因。
+                    notes += ExternalPlanNote(ExternalPlanNote.Kind.MEAL_TYPE_UNKNOWN, dayOfWeek, entry.mealType)
+                    continue
+                }
+                if (!seenSlots.add(dayOfWeek to mealType)) {
+                    // `subject` 给**枚举名**，中文字由界面按 `meal_*` 资源映射：
+                    // 这一层写死中文会撞上"餐次名必须资源化"那条硬规则（strings.xml 里就注着）。
+                    notes += ExternalPlanNote(
+                        ExternalPlanNote.Kind.DUPLICATE_MEAL,
+                        dayOfWeek,
+                        mealType.name,
+                    )
+                    continue
+                }
+                drafts += resolveMeal(dayOfWeek, mealType, entry, foodsByName, dietaryAvoid, declaredByName, notes, newFoods)
+            }
+        }
+
+        // 一餐里一条都没剩下 → 整餐不进草案：预览页对"文档没写到的餐次"的语义是**原样保留**，
+        // 所以"写了但全被挡"绝不能变成"清空这一餐"。原因逐条在 notes 里。
+        return drafts.filter { draft -> draft.entries.isNotEmpty() }
+    }
+
+    private fun resolveMeal(
+        dayOfWeek: Int,
+        mealType: MealType,
+        entry: ExternalMealEntry,
+        foodsByName: Map<String, Food>,
+        dietaryAvoid: Set<DietRestriction>,
+        declaredByName: Map<String, ExternalNewFood>,
+        notes: MutableList<ExternalPlanNote>,
+        newFoods: MutableList<ImportedNewFood>,
+    ): ImportedMealDraft {
+        val seenFoodIds = mutableSetOf<Long>()
+        val resolved = mutableListOf<ImportedFoodEntry>()
+        var unresolvedCount = 0
+
+        for (raw in entry.items) {
+            val name: String = raw.food.trim()
+            if (name.isEmpty()) {
+                notes += ExternalPlanNote(ExternalPlanNote.Kind.BLANK_FOOD_NAME, dayOfWeek)
+                continue
+            }
+            val food: Food? = foodsByName[name.lowercase()]
+            if (food == null) {
+                // 库里没有 → 待用户确认建库（刀 4）。这一餐**不含**它，所以那句"少算了 N 条"要计数。
+                notes += ExternalPlanNote(ExternalPlanNote.Kind.FOOD_CREATABLE, dayOfWeek, name)
+                unresolvedCount++
+                addNewFoodCandidate(name, declaredByName[name.lowercase()], dayOfWeek, notes, newFoods)
+                continue
+            }
+            if (!food.isActive) {
+                notes += ExternalPlanNote(ExternalPlanNote.Kind.FOOD_INACTIVE, dayOfWeek, name)
+                unresolvedCount++
+                continue
+            }
+            val hit: DietRestriction? = food.dietaryTags.firstOrNull { tag -> tag in dietaryAvoid }
+            if (hit != null) {
+                // 安全字段：命中就整条挡，不给"我知道，仍要"的出口（R5）。
+                notes += ExternalPlanNote(ExternalPlanNote.Kind.FOOD_RESTRICTED, dayOfWeek, name)
+                continue
+            }
+            if (!seenFoodIds.add(food.id)) {
+                notes += ExternalPlanNote(ExternalPlanNote.Kind.DUPLICATE_FOOD, dayOfWeek, name)
+                continue
+            }
+            if (resolved.size >= MAX_FOODS_PER_MEAL) {
+                notes += ExternalPlanNote(
+                    ExternalPlanNote.Kind.OVER_MEAL_LIMIT,
+                    dayOfWeek,
+                    name,
+                    listOf(MAX_FOODS_PER_MEAL),
+                )
+                continue
+            }
+
+            val grams: Int = raw.grams.coerceIn(InputLimits.MIN_SERVING_GRAMS, InputLimits.MAX_SERVING_GRAMS)
+            if (grams != raw.grams) {
+                notes += ExternalPlanNote(
+                    ExternalPlanNote.Kind.GRAMS_CLAMPED,
+                    dayOfWeek,
+                    name,
+                    listOf(raw.grams, grams),
+                )
+            }
+
+            resolved += ImportedFoodEntry(
+                foodId = food.id,
+                name = food.name.trim(),
+                grams = grams,
+                // 🔑 数字在这里算，不在文档里读：模型给的一餐合计营养值一律到不了这一行以下。
+                nutrition = FoodNutritionCalculator.forGrams(food, grams.toDouble()),
+            )
+        }
+
+        return ImportedMealDraft(
+            dayOfWeek = dayOfWeek,
+            mealType = mealType,
+            entries = resolved,
+            kcal = resolved.sumOf { item -> item.nutrition.kcal },
+            proteinG = resolved.sumOf { item -> item.nutrition.proteinG },
+            reason = entry.reason?.trim()?.takeIf { it.isNotEmpty() }?.take(MAX_REASON_CHARS),
+            unresolvedCount = unresolvedCount,
+        )
+    }
+
+    /**
+     * 攒一条"库里没有、等用户确认才建库"的食物。
+     *
+     * 同名的多条只留第一条；库里（含停用行）已有的名字**不进候选** ——
+     * 它是正常解析路径，报出来就等于指着用户刚照 app 说的做的那一步说"这不合法"。
+     */
+    private fun addNewFoodCandidate(
+        name: String,
+        declared: ExternalNewFood?,
+        dayOfWeek: Int,
+        notes: MutableList<ExternalPlanNote>,
+        out: MutableList<ImportedNewFood>,
+    ) {
+        if (out.any { candidate -> candidate.name.equals(name, ignoreCase = true) }) return
+
+        out += ImportedNewFood(
+            name = name,
+            kcalPer100g = declared?.let { raw ->
+                raw.kcalPer100g?.takeIf { it in InputLimits.MIN_FOOD_KCAL_PER_100G..InputLimits.MAX_FOOD_KCAL_PER_100G }
+                    .also { if (it == null && raw.kcalPer100g != null) notes += rejectedNewFood(name, "kcalPer100g", dayOfWeek) }
+            },
+            proteinPer100g = declared?.let { raw ->
+                raw.proteinPer100g?.takeIf { it in InputLimits.MIN_FOOD_MACRO_PER_100G..InputLimits.MAX_FOOD_MACRO_PER_100G }
+                    .also { if (it == null && raw.proteinPer100g != null) notes += rejectedNewFood(name, "proteinPer100g", dayOfWeek) }
+            },
+            carbsPer100g = declared?.let { raw ->
+                raw.carbsPer100g?.takeIf { it in InputLimits.MIN_FOOD_MACRO_PER_100G..InputLimits.MAX_FOOD_MACRO_PER_100G }
+                    .also { if (it == null && raw.carbsPer100g != null) notes += rejectedNewFood(name, "carbsPer100g", dayOfWeek) }
+            },
+            fatPer100g = declared?.let { raw ->
+                raw.fatPer100g?.takeIf { it in InputLimits.MIN_FOOD_MACRO_PER_100G..InputLimits.MAX_FOOD_MACRO_PER_100G }
+                    .also { if (it == null && raw.fatPer100g != null) notes += rejectedNewFood(name, "fatPer100g", dayOfWeek) }
+            },
+        )
+    }
+
+    private fun rejectedNewFood(name: String, field: String, dayOfWeek: Int) =
+        ExternalPlanNote(ExternalPlanNote.Kind.NEW_FOOD_VALUE_REJECTED, dayOfWeek, "$name.$field")
 
     /**
      * 校验文档声明的新动作，并挑出"库里没有但已声明"的那些作为待确认候选。
@@ -365,9 +586,14 @@ object ExternalPlanDocumentParser {
     private const val MIN_DURATION_MIN: Int = 1
 }
 
-/** 冻结的回程合同标识（改结构必须换版本号，模板与解析器同时改）。 */
+/** 冻结的回程合同标识（改结构必须换版本号，模板与解析器同时改）。
+ *
+ * `v1` → `v2`：`days` 从必填变可选、新增 `meals` / `newFoods` 两段（饮食导入）。
+ * 精确匹配、无版本容错是**有意的** —— 旧模板发出去的文档会吃 [ExternalDocRefusal.WRONG_SCHEMA]，
+ * 而那句拒收文案负责把用户支回"重新复制一次模板"，不给他一个读得半懂的计划。
+ */
 object ExternalPlanSchema {
-    const val SCHEMA: String = "ironhabit-plan-import/v1"
+    const val SCHEMA: String = "ironhabit-plan-import/v2"
 
     // 拒收名单里的字段名：给界面显示"哪一项被拒了"用，**不是**中文文案（架构禁止硬编码中文）。
     const val FIELD_HEIGHT_CM: String = "heightCm"
@@ -393,6 +619,8 @@ sealed interface ExternalDocOutcome {
         val analysis: String? = null,
         /** 一份"全是新动作"的文档不是废文档：候选照样带回去，让用户先加库再导入。 */
         val newExercises: List<ImportedNewExercise> = emptyList(),
+        /** 同上，食物侧：一份"全是库里没有的食物"的文档是"先加库再导入"，不是废文档。 */
+        val newFoods: List<ImportedNewFood> = emptyList(),
     ) : ExternalDocOutcome
 }
 
@@ -410,10 +638,15 @@ enum class ExternalDocRefusal {
     /** 超过 [ExternalPlanDocumentParser.MAX_DOC_BYTES]。 */
     TOO_LARGE,
 
-    /** 文档结构上就没写任何动作（`days` 空 / 每天 `items` 都空）—— 与下面那条不同，多半是它没收到动作库。 */
-    EMPTY_PLAN,
+    /**
+     * 文档结构上就没写内容：`days` 与 `meals` 都空（或只有 `profile`）。
+     *
+     * 取代 v1 的 `EMPTY_PLAN`：v2 起"只有饮食、没有训练"是**合法**文档，
+     * 所以这句不再暗示"它没收到动作库"，而是覆盖两半 —— 它多半没收到数据包。
+     */
+    NOTHING_TO_IMPORT,
 
-    /** 写了动作，但每一条都被防线挡掉（全对不上动作库）—— 与内置 B-3 同口径，不能当有效结果落库。 */
+    /** 写了内容，但每一条都被防线挡掉（全对不上库）—— 与内置 B-3 同口径，不能当有效结果落库。 */
     NO_USABLE_ITEMS,
 }
 
@@ -426,6 +659,10 @@ data class ExternalPlanDraft(
     val profile: ExternalProfilePatch = ExternalProfilePatch(),
     /** 待用户确认的新动作（库里没有且文档声明过）。空表 = 不需要建任何东西。 */
     val newExercises: List<ImportedNewExercise> = emptyList(),
+    /** 这一周解析出来的餐次草案（数字全是本地算的，见 [ImportedMealDraft]）。 */
+    val meals: List<ImportedMealDraft> = emptyList(),
+    /** 待用户确认的新食物（库里完全没有）。空表 = 这一份文档不需要建任何东西。 */
+    val newFoods: List<ImportedNewFood> = emptyList(),
 )
 
 /**
@@ -474,6 +711,37 @@ data class ExternalPlanNote(
 
         /** 档案字段写了个认不出的值（`goal:"TONING"`、编造的器械名…），**不猜、不采纳**（subject = 字段名）。 */
         PROFILE_VALUE_REJECTED,
+
+        // ---------------- 饮食段（v2 新增；界面一律要摊开，一条都不许静默） ----------------
+        /** 库里没有的食物 → 进"待确认建库"清单，这一餐**不含**它（subject = 食物名）。 */
+        FOOD_CREATABLE,
+
+        /** 库里**有但已停用**的食物：不导入、也不提示新建（新建会撞 UNIQUE 再绕回来）。 */
+        FOOD_INACTIVE,
+
+        /** 撞了用户忌口标签，**整条挡**（subject = 食物名）。界面不许给"仍要导入"的出口。 */
+        FOOD_RESTRICTED,
+
+        /** 空食物名。 */
+        BLANK_FOOD_NAME,
+
+        /** 同一餐里重复出现的同一食物（保留第一条，**不合并份量**）。 */
+        DUPLICATE_FOOD,
+
+        /** 该餐超出 [ExternalPlanDocumentParser.MAX_FOODS_PER_MEAL] 之后的条目。 */
+        OVER_MEAL_LIMIT,
+
+        /** 克数越界，已钳制（args：原值、钳后值）。 */
+        GRAMS_CLAMPED,
+
+        /** `mealType` 不是本 App 认识的餐次名，那一餐整条不采纳（subject = 它写的那个值）。 */
+        MEAL_TYPE_UNKNOWN,
+
+        /** 同一个 (星期, 餐次) 槽位出现两次，只留第一条（subject = `MealType.name`，中文由界面映射）。 */
+        DUPLICATE_MEAL,
+
+        /** 声明的新食物数值超出可记录范围，**置空等用户填**（subject = `名字.字段`）。 */
+        NEW_FOOD_VALUE_REJECTED,
     }
 }
 
@@ -481,15 +749,20 @@ data class ExternalPlanNote(
 
 @Serializable
 private data class ExternalDocument(
-    /** 必须回显 `ironhabit-plan-import/v1`，否则整份不收。 */
+    /** 必须回显 [ExternalPlanSchema.SCHEMA]，否则整份不收。 */
     val schema: String? = null,
-    val days: List<ExternalDay>,
+    /** v2 起可选：纯饮食文档没有训练日是合法的（v1 时代它会被当空计划整份拒掉）。 */
+    val days: List<ExternalDay> = emptyList(),
+    /** 可选：一周的餐次草案。 */
+    val meals: List<ExternalMealDay> = emptyList(),
     /** 可选：外部 AI 的"为什么这么排"，原样透传给预览页显示。 */
     val analysis: String? = null,
     /** 可选：档案改动（逐字段勾选后才写）。 */
     val profile: ExternalProfile? = null,
-    /** 可选：文档声明的新动作（用户确认后才建进库）。 */
+    /** 可选：新动作的**预填资料**（v2 起不再是建库门票，见 [resolveItems] 的调用侧）。 */
     val newExercises: List<ExternalNewExercise> = emptyList(),
+    /** 可选：新食物的**预填资料**（同上）。缺了这一段的陌生食物照样可建，只是数值要用户自己填。 */
+    val newFoods: List<ExternalNewFood> = emptyList(),
 )
 
 @Serializable
@@ -520,6 +793,52 @@ private data class ExternalNewExercise(
     val category: String? = null,
     val muscleGroups: List<String> = emptyList(),
     val equipment: List<String>? = null,
+)
+
+/** 文档里的一天饮食。`dayOfWeek` 与训练侧同口径（1=周一），越界钳到 1..7。 */
+@Serializable
+private data class ExternalMealDay(
+    val dayOfWeek: Int,
+    val entries: List<ExternalMealEntry> = emptyList(),
+)
+
+/**
+ * 一餐。`mealType` **不带默认值**：没有餐次就不知道该写进哪一个槽位，
+ * 而猜一个（比如一律当加餐）会静默改掉用户那一餐原本的内容。
+ */
+@Serializable
+private data class ExternalMealEntry(
+    val mealType: String,
+    val items: List<ExternalFoodItem> = emptyList(),
+    /** 可选：这一餐为什么这样配（自由文本，只在预览页显示，不落库）。 */
+    val reason: String? = null,
+)
+
+/**
+ * 一条食物。**只收克数，不收"碗/勺/份"**：
+ * `foods.json` 实测有 24 种单位名，里面是 `份（干）`、`碗（生）`、`把（生）` 这种东西，
+ * 模型抄不准 → 整条被拒，而用户看到的理由是"单位不认识"，比"我按克数算"难懂得多。
+ * 展示时的"1.3 碗"由界面按食物自己的份量换算，**不回写文档**。
+ */
+@Serializable
+private data class ExternalFoodItem(
+    /** **名字**而不是 id：模板发给模型的食物清单本来就没有 id。 */
+    val food: String,
+    val grams: Int,
+)
+
+/**
+ * 文档给"库里没有的食物"预填的营养值。四项**全部可空**：
+ * 建库门票取消后常见"什么数都没给"，那时界面必须空着等用户填，
+ * 而不是拿 0 顶上 —— 0 kcal/100g 是一个**陈述**，不是"不知道"。
+ */
+@Serializable
+private data class ExternalNewFood(
+    val name: String,
+    val kcalPer100g: Int? = null,
+    val proteinPer100g: Double? = null,
+    val carbsPer100g: Double? = null,
+    val fatPer100g: Double? = null,
 )
 
 /**

@@ -3,6 +3,7 @@ package com.ironhabit.app.ui.screens.ai
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.ai.external.ExternalDocRefusal
 import com.ironhabit.app.domain.ai.external.ExternalPlanNote
+import com.ironhabit.app.domain.ai.external.ExternalPlanSchema
 import com.ironhabit.app.domain.ai.external.ImportedNewExercise
 import com.ironhabit.app.domain.model.AdviceSource
 import com.ironhabit.app.domain.model.BodyReview
@@ -170,7 +171,7 @@ class ExternalImportViewModelTest {
         val vm = viewModel()
         val notes = listOf(ExternalPlanNote(ExternalPlanNote.Kind.UNKNOWN_EXERCISE, 1, "跳跃深蹲"))
         coEvery { importPlan(any(), any()) } returns ExternalPlanImport.Ready(draftPreview, notes)
-        vm.onTextChange("""{"schema":"ironhabit-plan-import/v1"}""")
+        vm.onTextChange("""{"schema":"${ExternalPlanSchema.SCHEMA}"}""")
 
         vm.parse()
         advanceUntilIdle()
@@ -192,7 +193,7 @@ class ExternalImportViewModelTest {
         val vm = viewModel()
         val notes = listOf(ExternalPlanNote(ExternalPlanNote.Kind.UNKNOWN_EXERCISE, 1, "不存在"))
         coEvery { importPlan(any(), any()) } returns ExternalPlanImport.Refused(
-            ExternalDocRefusal.EMPTY_PLAN,
+            ExternalDocRefusal.NOTHING_TO_IMPORT,
             notes,
             analysis = "未收到 library 数据",
         )
@@ -201,7 +202,7 @@ class ExternalImportViewModelTest {
         vm.parse()
         advanceUntilIdle()
 
-        assertEquals(R.string.ai_import_refuse_empty_plan, vm.uiState.value.refusalRes)
+        assertEquals(R.string.ai_import_refuse_nothing_to_import, vm.uiState.value.refusalRes)
         assertEquals(
             "模型自己那句话要交给界面贴出来，它比 App 猜的原因准",
             "未收到 library 数据",
@@ -221,7 +222,7 @@ class ExternalImportViewModelTest {
             ExternalDocRefusal.NOT_A_DOCUMENT to R.string.ai_import_refuse_not_json,
             ExternalDocRefusal.WRONG_SCHEMA to R.string.ai_import_refuse_wrong_schema,
             ExternalDocRefusal.TOO_LARGE to R.string.ai_import_refuse_too_large,
-            ExternalDocRefusal.EMPTY_PLAN to R.string.ai_import_refuse_empty_plan,
+            ExternalDocRefusal.NOTHING_TO_IMPORT to R.string.ai_import_refuse_nothing_to_import,
             ExternalDocRefusal.NO_USABLE_ITEMS to R.string.ai_import_refuse_no_items,
         )
         val vm = viewModel()
@@ -422,7 +423,7 @@ class ExternalImportViewModelTest {
         advanceUntilIdle()
         assertNotNull(vm.uiState.value.refusalRes)
 
-        vm.onClipboardRead("""{"schema":"ironhabit-plan-import/v1"}""")
+        vm.onClipboardRead("""{"schema":"${ExternalPlanSchema.SCHEMA}"}""")
 
         assertTrue(vm.uiState.value.text.startsWith("""{"schema"""))
         assertNull("换了内容就把上一次的判决清掉，否则新文本旁边挂着旧错误", vm.uiState.value.refusalRes)

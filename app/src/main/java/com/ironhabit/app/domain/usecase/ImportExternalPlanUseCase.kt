@@ -5,9 +5,12 @@ import com.ironhabit.app.domain.ai.external.ExternalDocOutcome
 import com.ironhabit.app.domain.ai.external.ExternalDocRefusal
 import com.ironhabit.app.domain.ai.external.ExternalPlanDocumentParser
 import com.ironhabit.app.domain.ai.external.ExternalPlanNote
+import com.ironhabit.app.domain.ai.external.ImportedMealDraft
 import com.ironhabit.app.domain.ai.external.ImportedNewExercise
+import com.ironhabit.app.domain.ai.external.ImportedNewFood
 import com.ironhabit.app.domain.ai.external.ProfileFieldDiff
 import com.ironhabit.app.domain.repository.ExerciseRepository
+import com.ironhabit.app.domain.repository.FoodRepository
 import com.ironhabit.app.domain.repository.PlanRepository
 import com.ironhabit.app.domain.repository.SettingsRepository
 import javax.inject.Inject
@@ -36,6 +39,7 @@ import kotlinx.coroutines.withContext
 class ImportExternalPlanUseCase @Inject constructor(
     private val planRepository: PlanRepository,
     private val exerciseRepository: ExerciseRepository,
+    private val foodRepository: FoodRepository,
     private val settingsRepository: SettingsRepository,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
@@ -47,7 +51,16 @@ class ImportExternalPlanUseCase @Inject constructor(
     suspend operator fun invoke(text: String, weekStartEpochDay: Long): ExternalPlanImport =
         withContext(ioDispatcher) {
             val library = exerciseRepository.observeActive().first()
-            val parsed = ExternalPlanDocumentParser.parse(text, library)
+            // 食物库取**全量含停用**并在解析器里分流：停用行不能算"库里没有"，
+            // 否则"建库 → 撞 UNIQUE → 跳过 → 重解析还是'库里没有'"这个死循环就成立了。
+            val foods = foodRepository.observeAll().first()
+            val profile = settingsRepository.profile().first()
+            val parsed = ExternalPlanDocumentParser.parse(
+                text = text,
+                library = library,
+                foods = foods,
+                dietaryAvoid = profile.dietaryAvoid,
+            )
 
             when (parsed) {
                 is ExternalDocOutcome.Refused -> ExternalPlanImport.Refused(
@@ -56,6 +69,7 @@ class ImportExternalPlanUseCase @Inject constructor(
                     analysis = parsed.analysis,
                     // 一份"全是新动作"的文档要能救回来：先让用户确认建库，再重解析一次。
                     newExercises = parsed.newExercises,
+                    newFoods = parsed.newFoods,
                 )
 
                 is ExternalDocOutcome.Parsed -> {
@@ -78,14 +92,22 @@ class ImportExternalPlanUseCase @Inject constructor(
                     )
 
                     if (preview.allDrafts.isEmpty()) {
-                        // 文档合法、但能写的槽位一个都不剩（全被手改行或模板归属日挡住）。
+                        // 文档合法、但能写的训练槽位一个都不剩（全被手改行或模板归属日挡住）。
                         // 这时候跳预览页只会看到一句"没有待采纳的草案"，等于把人支走又不说原因；
                         // 所以连着预览一起回：`preservedCount` / `templateOwnedDays` 就是"为什么没地方写"。
-                        ExternalPlanImport.NothingAdoptable(preview, parsed.draft.notes)
+                        //
+                        // ⚠️ `allDrafts` 只看训练侧，所以一份"只有饮食"的文档目前会落到这里、
+                        // 显示那句"槽位都被你自己的改动挡住了"—— 那句话对它**是错的**。
+                        // 刀 3 给预览页加饮食节时一并修（那之后有餐次就该是 Ready）。
+                        ExternalPlanImport.NothingAdoptable(
+                            preview = preview,
+                            notes = parsed.draft.notes,
+                            meals = parsed.draft.meals,
+                            newFoods = parsed.draft.newFoods,
+                        )
                     } else {
                         // 档案差异在这里算，是因为**只有此刻**才知道当前档案是什么：
                         // 值没变的项不进列表，界面就不会出现「目标：增肌 → 增肌」那种噪音勾选。
-                        val profile = settingsRepository.profile().first()
                         ExternalPlanImport.Ready(
                             preview = preview,
                             notes = parsed.draft.notes,
@@ -102,6 +124,8 @@ class ImportExternalPlanUseCase @Inject constructor(
                                 }
                                 .toMap(),
                             newExercises = parsed.draft.newExercises,
+                            meals = parsed.draft.meals,
+                            newFoods = parsed.draft.newFoods,
                         )
                     }
                 }
@@ -124,16 +148,21 @@ sealed interface ExternalPlanImport {
         val analysis: String? = null,
         /** 全是新动作的文档不是废文档：先让用户确认建库，再重解析一次就救得回来。 */
         val newExercises: List<ImportedNewExercise> = emptyList(),
+        /** 同上，食物侧。 */
+        val newFoods: List<ImportedNewFood> = emptyList(),
     ) : ExternalPlanImport
 
     /**
-     * 读通了、也合法，但本周没有一个槽位能写（全被保护规则挡住）。
+     * 读通了、也合法，但本周没有一个训练槽位能写（全被保护规则挡住）。
      *
      * [preview] 一定没有任何草案，但它的 `preservedCount` / `templateOwnedDays` 正是界面要说的原因。
      */
     data class NothingAdoptable(
         val preview: PlanPreview,
         val notes: List<ExternalPlanNote>,
+        /** 解析出来的餐次：训练侧没地方写，不代表饮食侧也没地方写（刀 3 之前界面还看不到它们）。 */
+        val meals: List<ImportedMealDraft> = emptyList(),
+        val newFoods: List<ImportedNewFood> = emptyList(),
     ) : ExternalPlanImport
 
     /**
@@ -150,5 +179,9 @@ sealed interface ExternalPlanImport {
         val reasons: Map<Pair<Int, Long>, String> = emptyMap(),
         /** 库里没有、文档声明过的动作：等用户在弹层里勾选确认才建进库。 */
         val newExercises: List<ImportedNewExercise> = emptyList(),
+        /** 这一周的餐次草案（数字全本地算）。刀 3 起在预览页与训练同屏逐天采纳。 */
+        val meals: List<ImportedMealDraft> = emptyList(),
+        /** 库里没有的食物：等用户在弹层里确认才建进食物库。 */
+        val newFoods: List<ImportedNewFood> = emptyList(),
     ) : ExternalPlanImport
 }

@@ -1,11 +1,14 @@
 package com.ironhabit.app.domain.ai.external
 
 import com.ironhabit.app.domain.model.AdviceSource
+import com.ironhabit.app.domain.model.DietRestriction
 import com.ironhabit.app.domain.model.Equipment
 import com.ironhabit.app.domain.model.Exercise
 import com.ironhabit.app.domain.model.ExerciseCategory
+import com.ironhabit.app.domain.model.Food
 import com.ironhabit.app.domain.model.Goal
 import com.ironhabit.app.domain.model.InjuryArea
+import com.ironhabit.app.domain.model.MealType
 import com.ironhabit.app.domain.model.PlanReason
 import com.ironhabit.app.domain.model.TrainingFocus
 import org.junit.Assert.assertEquals
@@ -139,7 +142,7 @@ class ExternalPlanDocumentParserTest {
         val outcome = ExternalPlanDocumentParser.parse(text, library)
 
         val refused = outcome as ExternalDocOutcome.Refused
-        assertEquals(ExternalDocRefusal.EMPTY_PLAN, refused.reason)
+        assertEquals(ExternalDocRefusal.NOTHING_TO_IMPORT, refused.reason)
         assertEquals(
             "模型自己那句话是唯一线索，不能丢",
             true,
@@ -153,7 +156,7 @@ class ExternalPlanDocumentParserTest {
 
         val refused = ExternalPlanDocumentParser.parse(text, library) as ExternalDocOutcome.Refused
 
-        assertEquals(ExternalDocRefusal.EMPTY_PLAN, refused.reason)
+        assertEquals(ExternalDocRefusal.NOTHING_TO_IMPORT, refused.reason)
     }
 
     // ---------------- 每条动作的"为什么"（刀 3）----------------
@@ -628,5 +631,225 @@ class ExternalPlanDocumentParserTest {
         val days = parsed(text).proposal.days
 
         assertEquals(listOf(3), days.map { it.dayOfWeek })
+    }
+
+    // ---------------- 饮食段（v2）----------------
+    // 这一组测的是这条通道里最容易骗人的一块：一餐的数字。
+
+    private fun food(
+        id: Long,
+        name: String,
+        kcalPer100g: Int,
+        proteinPer100g: Double = 0.0,
+        tags: Set<DietRestriction> = emptySet(),
+        isActive: Boolean = true,
+    ) = Food(
+        id = id,
+        name = name,
+        kcalPer100g = kcalPer100g,
+        proteinPer100g = proteinPer100g,
+        carbsPer100g = 0.0,
+        fatPer100g = 0.0,
+        dietaryTags = tags,
+        isActive = isActive,
+    )
+
+    private val foodLibrary: List<Food> = listOf(
+        food(11L, "米饭（蒸）", kcalPer100g = 116, proteinPer100g = 2.6),
+        food(12L, "鸡胸肉", kcalPer100g = 133, proteinPer100g = 23.3),
+        food(13L, "水煮蛋", kcalPer100g = 144, proteinPer100g = 12.6),
+        food(14L, "虾仁", kcalPer100g = 99, proteinPer100g = 16.4, tags = setOf(DietRestriction.SEAFOOD)),
+        // 停用行：它**不是**"库里没有"，否则建库撞 UNIQUE → 跳过 → 重解析还是"库里没有" → 死循环。
+        food(15L, "馒头", kcalPer100g = 221, proteinPer100g = 7.0, isActive = false),
+    ) + (1L..9L).map { index -> food(20L + index, "测试食物$index", kcalPer100g = 10) }
+
+    private fun mealDoc(entriesJson: String, day: Int = 1): String =
+        """{"schema":"${ExternalPlanSchema.SCHEMA}","meals":[{"dayOfWeek":$day,"entries":[$entriesJson]}]}"""
+
+    private fun mealEntry(mealType: String, items: String): String =
+        """{"mealType":"$mealType","items":[$items]}"""
+
+    private fun parsedDiet(text: String, avoid: Set<DietRestriction> = emptySet()): ExternalPlanDraft =
+        when (val outcome = ExternalPlanDocumentParser.parse(text, library, foodLibrary, avoid)) {
+            is ExternalDocOutcome.Parsed -> outcome.draft
+            is ExternalDocOutcome.Refused -> error("期望解析成功，实际整份拒收：${outcome.reason} / ${outcome.notes}")
+        }
+
+    private fun dietRefused(text: String): ExternalDocOutcome.Refused =
+        when (val outcome = ExternalPlanDocumentParser.parse(text, library, foodLibrary, emptySet())) {
+            is ExternalDocOutcome.Refused -> outcome
+            is ExternalDocOutcome.Parsed -> error("期望整份拒收，实际解析成功：${outcome.draft}")
+        }
+
+    @Test
+    fun parse_mealNumbersComeFromTheLibrary_notFromTheDocument() {
+        // 文档自己在条目上写了 kcal/proteinG：`ignoreUnknownKeys` 让它们凭空消失。
+        // 这一餐的合计必须是 116×2 + 133×1.5 本地算出来的，一个字节都不许是它报的 9999。
+        val draft = parsedDiet(
+            mealDoc(
+                mealEntry(
+                    "LUNCH",
+                    """{"food":"米饭（蒸）","grams":200,"kcal":9999,"proteinG":99},""" +
+                        """{"food":"鸡胸肉","grams":150}""",
+                ),
+            ),
+        )
+
+        val lunch: ImportedMealDraft = draft.meals.single()
+        assertEquals(232 + 200, lunch.kcal)
+        assertEquals(5.2 + 34.95, lunch.proteinG, 0.0001)
+        assertEquals(0, lunch.unresolvedCount)
+    }
+
+    @Test
+    fun parse_dietOnlyDocument_isNoLongerRefusedAsAnEmptyPlan() {
+        // v1 时代没有 `days` 就整份不收（BRIEF 记过这条欠账）；v2 起"只问吃的"是合法文档。
+        val draft = parsedDiet(mealDoc(mealEntry("DINNER", """{"food":"水煮蛋","grams":60}""")))
+
+        assertTrue(draft.proposal.days.isEmpty())
+        assertEquals(1, draft.meals.size)
+    }
+
+    @Test
+    fun parse_profileOnlyDocument_isRefusedAsNothingToImport() {
+        val outcome = dietRefused(
+            """{"schema":"${ExternalPlanSchema.SCHEMA}","profile":{"trainingDaysPerWeek":5}}""",
+        )
+
+        assertEquals(ExternalDocRefusal.NOTHING_TO_IMPORT, outcome.reason)
+    }
+
+    @Test
+    fun parse_allFoodsUnknown_isRefusedButHandsBackTheCandidates() {
+        // 一份"全是库里没有的食物"不是废文档，它是"先加库再导入" —— 候选必须跟着回过去。
+        val outcome = dietRefused(mealDoc(mealEntry("LUNCH", """{"food":"紫薯","grams":200}""")))
+
+        assertEquals(ExternalDocRefusal.NO_USABLE_ITEMS, outcome.reason)
+        assertEquals(listOf(ExternalPlanNote.Kind.FOOD_CREATABLE), outcome.notes.map { note -> note.kind })
+        assertEquals("紫薯", outcome.newFoods.single().name)
+        // 文档没声明 newFoods → 数值一格都没有，**不能**拿 0 顶上（0 是一个陈述，不是"不知道"）。
+        assertTrue(outcome.newFoods.single().hasCompleteNutrition.not())
+    }
+
+    @Test
+    fun parse_partiallyKnownMeal_keepsItAndCountsWhatWasLeftOut() {
+        val draft = parsedDiet(
+            mealDoc(mealEntry("LUNCH", """{"food":"米饭（蒸）","grams":200},{"food":"紫薯","grams":150}""")),
+        )
+
+        val lunch: ImportedMealDraft = draft.meals.single()
+        assertEquals(1, lunch.entries.size)
+        assertEquals(232, lunch.kcal)
+        // 界面那句「这餐少算了 N 条（未入库）」就取这个数。
+        assertEquals(1, lunch.unresolvedCount)
+    }
+
+    @Test
+    fun parse_deactivatedFood_isListedAsInactive_andNeverOfferedAsANewFood() {
+        val draft = parsedDiet(
+            mealDoc(mealEntry("BREAKFAST", """{"food":"米饭（蒸）","grams":150},{"food":"馒头","grams":100}""")),
+        )
+
+        assertEquals(listOf(ExternalPlanNote.Kind.FOOD_INACTIVE), draft.notes.map { note -> note.kind })
+        assertTrue("停用行不能变成建库候选，否则重解析会一直停在「库里没有」", draft.newFoods.isEmpty())
+        assertEquals(1, draft.meals.single().unresolvedCount)
+    }
+
+    @Test
+    fun parse_foodHittingAvoidedTag_isBlockedAndNotCountedAsMissing() {
+        val draft = parsedDiet(
+            mealDoc(mealEntry("LUNCH", """{"food":"米饭（蒸）","grams":200},{"food":"虾仁","grams":100}""")),
+            avoid = setOf(DietRestriction.SEAFOOD),
+        )
+
+        assertEquals(ExternalPlanNote.Kind.FOOD_RESTRICTED, draft.notes.single().kind)
+        assertEquals(232, draft.meals.single().kcal)
+        // 忌口挡掉的是**故意不算**，不是"少算了"：混进同一个数字会让那句提示变成假话。
+        assertEquals(0, draft.meals.single().unresolvedCount)
+    }
+
+    @Test
+    fun parse_ninthFoodInAMeal_isListed_notSilentlyCut() {
+        val nineItems: String = (1L..9L).joinToString(",") { index ->
+            """{"food":"测试食物$index","grams":100}"""
+        }
+
+        val draft = parsedDiet(mealDoc(mealEntry("LUNCH", nineItems)))
+
+        assertEquals(ExternalPlanDocumentParser.MAX_FOODS_PER_MEAL, draft.meals.single().entries.size)
+        val overflow: ExternalPlanNote = draft.notes.single()
+        assertEquals(ExternalPlanNote.Kind.OVER_MEAL_LIMIT, overflow.kind)
+        assertEquals("测试食物9", overflow.subject)
+    }
+
+    @Test
+    fun parse_sameFoodTwiceInAMeal_keepsFirstAndDoesNotAddPortions() {
+        val draft = parsedDiet(
+            mealDoc(mealEntry("LUNCH", """{"food":"米饭（蒸）","grams":200},{"food":"米饭（蒸）","grams":300}""")),
+        )
+
+        // 合并份量等于 App 替用户改数量，所以只留第一条、另一条点名说明。
+        assertEquals(232, draft.meals.single().kcal)
+        assertEquals(ExternalPlanNote.Kind.DUPLICATE_FOOD, draft.notes.single().kind)
+    }
+
+    @Test
+    fun parse_unknownMealType_dropsOnlyThatMeal() {
+        val draft = parsedDiet(
+            """{"schema":"${ExternalPlanSchema.SCHEMA}","meals":[{"dayOfWeek":1,"entries":[
+                {"mealType":"BRUNCH","items":[{"food":"水煮蛋","grams":60}]},
+                {"mealType":"LUNCH","items":[{"food":"米饭（蒸）","grams":200}]}]}]}""",
+        )
+
+        assertEquals(ExternalPlanNote.Kind.MEAL_TYPE_UNKNOWN, draft.notes.single().kind)
+        assertEquals("BRUNCH", draft.notes.single().subject)
+        assertEquals(listOf(MealType.LUNCH), draft.meals.map { meal -> meal.mealType })
+    }
+
+    @Test
+    fun parse_sameSlotTwice_keepsTheFirstMealAndListsTheSecond() {
+        val draft = parsedDiet(
+            """{"schema":"${ExternalPlanSchema.SCHEMA}","meals":[{"dayOfWeek":1,"entries":[
+                {"mealType":"LUNCH","items":[{"food":"米饭（蒸）","grams":200}]},
+                {"mealType":"LUNCH","items":[{"food":"水煮蛋","grams":60}]}]}]}""",
+        )
+
+        assertEquals(232, draft.meals.single().kcal)
+        assertEquals(MealType.LUNCH.name, draft.notes.single().subject)
+        assertEquals(ExternalPlanNote.Kind.DUPLICATE_MEAL, draft.notes.single().kind)
+    }
+
+    @Test
+    fun parse_gramsOutOfRange_areClampedAndListed() {
+        val draft = parsedDiet(
+            mealDoc(mealEntry("LUNCH", """{"food":"米饭（蒸）","grams":5000},{"food":"水煮蛋","grams":0}""")),
+        )
+
+        assertEquals(2, draft.notes.size)
+        assertTrue(draft.notes.all { note -> note.kind == ExternalPlanNote.Kind.GRAMS_CLAMPED })
+        // 上限 2000 克、下限 1 克（与表单同源，不另立数字）。
+        assertEquals(listOf(2000, 1), draft.meals.single().entries.map { entry -> entry.grams })
+    }
+
+    @Test
+    fun parse_declaredNewFoodNumbers_prefillTheCandidate_andOutOfRangeOnesBecomeNull() {
+        val outcome = dietRefused(
+            """{"schema":"${ExternalPlanSchema.SCHEMA}","meals":[{"dayOfWeek":1,"entries":[
+                {"mealType":"LUNCH","items":[{"food":"紫薯","grams":200}]}]}],
+             "newFoods":[{"name":"紫薯","kcalPer100g":6000,"proteinPer100g":1.6}]}""",
+        )
+
+        val candidate: ImportedNewFood = outcome.newFoods.single()
+        assertEquals(1.6, candidate.proteinPer100g!!, 0.0001)
+        // 越界的数值只能变回"空着等用户填"，不能钳成一个看起来像数值的数。
+        assertNull(candidate.kcalPer100g)
+        assertTrue(outcome.notes.any { note -> note.kind == ExternalPlanNote.Kind.NEW_FOOD_VALUE_REJECTED })
+    }
+
+    @Test
+    fun parse_dayOfWeekOutOfRange_isClampedTheSameWayAsTrainingDays() {
+        val draft = parsedDiet(mealDoc(mealEntry("LUNCH", """{"food":"米饭（蒸）","grams":200}"""), day = 9))
+
+        assertEquals(7, draft.meals.single().dayOfWeek)
     }
 }
