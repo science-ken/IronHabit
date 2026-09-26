@@ -18,7 +18,6 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.LocalDate
 import org.junit.Assert.assertEquals
-import org.junit.Ignore
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -69,7 +68,11 @@ class BuildExternalDietPromptUseCaseTest {
         // 体重必须显式 stub 成 null：relaxed mock 对可空返回会给一个非空链式对象，
         // 那会让模板里凭空出现一个假体重。
         coEvery { bodyMetricRepository.latest(any()) } returns null
-        coEvery { mealRepository.getMealsIncludingInactive(any()) } returns existing
+        // 按天给：全返回同一份的话「还没排」那一支永远走不到，测的就不是现状摘要。
+        existing.forEach { meal ->
+            coEvery { mealRepository.getMealsIncludingInactive(meal.dateEpochDay) } returns listOf(meal)
+        }
+        coEvery { mealRepository.getMealsIncludingInactive(if (existing.isEmpty()) any() else not(existing[0].dateEpochDay)) } returns emptyList()
         coEvery { trainingDayResolver(any()) } returnsMany trainingDays
     }
 
@@ -112,15 +115,12 @@ class BuildExternalDietPromptUseCaseTest {
         assertTrue(text.contains("没写到的餐次 App 原样保留"))
     }
 
-    // 未解：渲染出的【每天的目标】里 0 行「周N」，而 {{TARGETS}} 确实被替换成了空串
-    // （同文件"占位符不残留"那条是绿的）。三种可能：循环没跑 / mock 让协程提前结束 /
-    // substringAfter 命中了规则 6 里那个同名标记。下一位先把 text 打出来再改代码。
-    @Ignore("新模板的动态段还没验通，见上面三行")
+    @Test
     fun dietTemplate_givesOneTargetPerDay_andSeparatesTrainingFromRestDays() = runTest {
         stub(trainingDays = listOf(true, true, false, false, false, false, false))
 
         val text = useCase()(weekStart)
-        val block: String = text.substringAfter("【每天的目标】").substringBefore("【我的食物库】")
+        val block: String = text.substringAfterLast("【每天的目标】").substringBefore("【我的食物库】")
         val lines: List<String> = block.lines().filter { it.startsWith("周") }
 
         assertEquals("七天七个目标，一天都不能少", 7, lines.size)
@@ -147,10 +147,7 @@ class BuildExternalDietPromptUseCaseTest {
         assertFalse("停用的那条不该再发给模型 —— 它排回来也只会得到一句「你停用过」", text.contains("馒头"))
     }
 
-    // 未解：渲染出的【每天的目标】里 0 行「周N」，而 {{TARGETS}} 确实被替换成了空串
-    // （同文件"占位符不残留"那条是绿的）。三种可能：循环没跑 / mock 让协程提前结束 /
-    // substringAfter 命中了规则 6 里那个同名标记。下一位先把 text 打出来再改代码。
-    @Ignore("新模板的动态段还没验通，见上面三行")
+    @Test
     fun dietTemplate_showsWhatTheWeekAlreadyHas_soItDoesNotRepeatOrOverfill() = runTest {
         stub(
             existing = listOf(
@@ -170,10 +167,7 @@ class BuildExternalDietPromptUseCaseTest {
         assertTrue("没排的那天要明说，不能被读成「随便排」", block.contains("（还没排）"))
     }
 
-    // 未解：渲染出的【每天的目标】里 0 行「周N」，而 {{TARGETS}} 确实被替换成了空串
-    // （同文件"占位符不残留"那条是绿的）。三种可能：循环没跑 / mock 让协程提前结束 /
-    // substringAfter 命中了规则 6 里那个同名标记。下一位先把 text 打出来再改代码。
-    @Ignore("新模板的动态段还没验通，见上面三行")
+    @Test
     fun dietTemplate_statesRestrictions_andSaysSoExplicitlyWhenThereAreNone() = runTest {
         stub(profile = UserProfile(dietaryAvoid = setOf(DietRestriction.SEAFOOD, DietRestriction.PEANUT)))
         val withAvoid = useCase()(weekStart)
@@ -184,7 +178,7 @@ class BuildExternalDietPromptUseCaseTest {
         assertTrue(withAvoid.contains("SEAFOOD") && withAvoid.contains("PEANUT"))
         assertTrue(withoutAvoid.contains("（档案里没有登记任何忌口）"))
         // 库里多数条目没标标签，这一句是"挡不住"的免责声明，不能省。
-        assertTrue(withAvoid.contains("没有标注的食物不代表安全"))
+        assertTrue(withAvoid.contains("没标注的食物它挡不住"))
     }
 
     @Test
