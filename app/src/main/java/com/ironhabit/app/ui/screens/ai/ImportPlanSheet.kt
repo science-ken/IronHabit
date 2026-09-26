@@ -362,6 +362,7 @@ private fun ImportPlanNoteLine(note: ExternalPlanNote) {
         ExternalPlanNote.Kind.DUPLICATE_MEAL -> stringResource(R.string.plan_preview_note_duplicate_meal, mealLabel)
         ExternalPlanNote.Kind.NEW_FOOD_VALUE_REJECTED -> stringResource(R.string.plan_preview_note_new_food_value_rejected, subject)
         ExternalPlanNote.Kind.MEAL_ENTRIES_MISSING -> stringResource(R.string.plan_preview_note_meal_entries_missing, firstArg)
+        ExternalPlanNote.Kind.DIET_SECTION_MISPLACED -> stringResource(R.string.plan_preview_note_diet_section_misplaced, subject)
     }
     Text(
         text = "· $text",

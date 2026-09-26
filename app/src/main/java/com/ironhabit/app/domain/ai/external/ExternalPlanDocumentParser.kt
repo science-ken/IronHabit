@@ -21,6 +21,8 @@ import com.ironhabit.app.domain.model.TrainingFocus
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 
 /**
  * **外部 AI 文档 → 一周计划草案** 的解析（零网络、零 Android 依赖，纯函数）。
@@ -99,11 +101,12 @@ object ExternalPlanDocumentParser {
             return ExternalDocOutcome.Refused(ExternalDocRefusal.TOO_LARGE)
         }
 
-        val document: ExternalDocument = decode(text)
+        val decoded: DecodedDocument = decode(text)
             ?: return ExternalDocOutcome.Refused(
                 if (stripCodeFence(text).isEmpty()) ExternalDocRefusal.EMPTY_DOCUMENT
                 else ExternalDocRefusal.NOT_A_DOCUMENT,
             )
+        val document: ExternalDocument = decoded.document
 
         // schema 不回显就拒收：粘进来的东西没有边界，用户可能粘的是聊天记录、别家的 JSON、
         // 或上一版模板的输出。标签是唯一便宜的判据，而"尽力读读看"会把上一次的计划混进这一周。
@@ -121,6 +124,17 @@ object ExternalPlanDocumentParser {
             .toMap()
 
         val notes = mutableListOf<ExternalPlanNote>()
+
+        // 真机撞到的那一种：模型把吃写在顶层 `nutrition` 里（`days` 那半却完全照合同）。
+        // `ignoreUnknownKeys` 会让它凭空消失，用户只看见"我问到的吃没影了"，而 App 一句都没说。
+        // 所以顶层有"像是吃"的键、又没有 `meals` 时，点名它。
+        if (document.meals.isEmpty()) {
+            decoded.topLevelKeys
+                .filter { key -> key in DIET_LIKE_KEYS }
+                .forEach { key ->
+                    notes += ExternalPlanNote(ExternalPlanNote.Kind.DIET_SECTION_MISPLACED, null, key)
+                }
+        }
 
         val (profilePatch, profileNotes) = resolveProfile(document.profile)
         notes += profileNotes
@@ -596,10 +610,16 @@ object ExternalPlanDocumentParser {
     }
 
     /** 去围栏 → 抽出 JSON 子串 → 宽松反序列化；任何失败都返回 `null`（调用方转成可识别拒收原因）。 */
-    private fun decode(raw: String): ExternalDocument? {
+    private fun decode(raw: String): DecodedDocument? {
         val candidate: String = extractJsonObject(stripCodeFence(raw)) ?: return null
         return try {
-            json.decodeFromString(ExternalDocument.serializer(), candidate)
+            val element: JsonElement = json.parseToJsonElement(candidate)
+            DecodedDocument(
+                document = json.decodeFromJsonElement(ExternalDocument.serializer(), element),
+                // 顶层键要单独留一份：`ignoreUnknownKeys` 会让模型自造的字段凭空消失，
+                // 而"它明明给了吃，App 却说没有"是这条通道最难查的一种表现。
+                topLevelKeys = (element as? JsonObject)?.keys?.toSet() ?: emptySet(),
+            )
         } catch (e: SerializationException) {
             null
         } catch (e: IllegalArgumentException) {
@@ -624,7 +644,21 @@ object ExternalPlanDocumentParser {
     private const val MAX_DAY_OF_WEEK: Int = 7
     private const val SECONDS_PER_MINUTE: Int = 60
     private const val MIN_DURATION_MIN: Int = 1
+
+    /**
+     * 模型爱用来装"吃"的顶层键名。认不出形状没关系，**认得出它写在哪**就能说一句话，
+     * 而不是让用户对着一份"我问到了吃、App 里却没有"的文档自己猜。
+     */
+    private val DIET_LIKE_KEYS: Set<String> = setOf(
+        "nutrition", "nutritionPlan", "diet", "dietPlan", "mealPlan", "meal_plan", "mealsPlan", "foodPlan",
+    )
 }
+
+/** 解码结果 + **顶层键集合**（未知键会被 `ignoreUnknownKeys` 吞掉，但我们要能点名它）。 */
+private class DecodedDocument(
+    val document: ExternalDocument,
+    val topLevelKeys: Set<String>,
+)
 
 /** 冻结的回程合同标识（改结构必须换版本号，模板与解析器同时改）。
  *
@@ -794,6 +828,9 @@ data class ExternalPlanNote(
          * 而合同要的是 `entries`）。不发这一条就是静默丢掉一整天的吃。
          */
         MEAL_ENTRIES_MISSING,
+
+        /** 它把吃写在顶层 `nutrition` 之类的键里（合同要的是 `meals`）—— 被 `ignoreUnknownKeys` 吞掉前点名它（subject = 那个键名）。 */
+        DIET_SECTION_MISPLACED,
     }
 }
 

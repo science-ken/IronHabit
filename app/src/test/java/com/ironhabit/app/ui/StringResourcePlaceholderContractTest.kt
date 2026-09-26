@@ -188,6 +188,7 @@ class StringResourcePlaceholderContractTest {
         entry("plan_preview_note_duplicate_meal", ArgKind.STRING)
         entry("plan_preview_note_new_food_value_rejected", ArgKind.STRING)
         entry("plan_preview_note_meal_entries_missing", ArgKind.STRING)
+        entry("plan_preview_note_diet_section_misplaced", ArgKind.STRING)
         // 档案 diff（刀 2）：天数与按钮计数是数字，走 %d；「已改 N 项」经 snackbarArg（String 通道）走 %s。
         entry("plan_preview_profile_days_value", ArgKind.NUMERIC)
         // 刀 3 预览页饮食段：餐次名与数字全部走 %s（实参一律 toString()，避免 %d 收到字符串崩在清单里）。

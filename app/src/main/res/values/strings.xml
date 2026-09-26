@@ -695,6 +695,8 @@
     <!-- 说的是"App 读不到"，不是"它没给"：模型把吃写在 nutrition 之类的地方时，
          说"它没安排吃"就是假话，而用户明明看见自己问到了吃。 -->
     <string name="plan_preview_note_diet_section_missing">这份文档里没有 App 读得到的餐次段（要的是顶层 meals）—— 如果它把吃写在别处（例如 nutrition），这次不会导进来。想吃的那部分请走「导入饮食」那一份模板。</string>
+    <!-- 用户明明问到了吃，App 却因为字段名对不上而无声吞掉 —— 这一句是那段对话唯一的交代。 -->
+    <string name="plan_preview_note_diet_section_misplaced">它把吃写在了顶层 %1$s 里，App 只读 meals 那一段，所以这部分没有导进来（不是被删掉了）</string>
     <!-- ===== 档案 diff（刀 2）===== -->
     <!-- 默认一行都不勾：文档"想改"不等于用户"同意改"，而勾下去是立即写进档案、不给撤销。 -->
     <string name="plan_preview_profile_title">这份文档还想改的档案（勾哪几项就改哪几项）</string>

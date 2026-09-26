@@ -922,4 +922,23 @@ class ExternalPlanDocumentParserTest {
 
         assertTrue(draft.notes.isEmpty())
     }
+
+    @Test
+    fun parse_dietUnderNutritionKey_namesIt_insteadOfSwallowingIt() {
+        // 用户真机拿回来的那份，原样形状：`days` 完全照合同，吃写在顶层 `nutrition` 里。
+        // 以前 `ignoreUnknownKeys` 把它无声吞掉 → 用户只看见"我问到的吃没影了"。
+        val text = """
+            {"schema":"${ExternalPlanSchema.SCHEMA}",
+             "days":[{"dayOfWeek":1,"items":[{"exercise":"杠铃深蹲","targetSets":3,"targetReps":12}]}],
+             "nutrition":{"dailyCalories":2400,"meals":[{"meal":"早餐","items":["鸡蛋3个"]}]}}
+        """.trimIndent()
+
+        val draft = ExternalPlanDocumentParser.parse(text, library, foodLibrary, emptySet())
+            as ExternalDocOutcome.Parsed
+
+        val note: ExternalPlanNote = draft.draft.notes.single { n -> n.kind == ExternalPlanNote.Kind.DIET_SECTION_MISPLACED }
+        assertEquals("nutrition", note.subject)
+        assertTrue("但它仍然不能凭空变成草案 —— 形状不对就是导不进来", draft.draft.meals.isEmpty())
+        assertTrue("训练那一半照常进来", draft.draft.proposal.days.isNotEmpty())
+    }
 }
