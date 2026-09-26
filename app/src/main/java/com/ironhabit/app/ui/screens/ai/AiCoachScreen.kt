@@ -212,14 +212,8 @@ fun AiCoachScreen(
                         uiState = uiState,
                         onEditProfile = onEditProfile,
                     )
-                    CoachChatCard(
-                        canAsk = uiState.canAskCoach,
-                        messages = uiState.chatMessages,
-                        input = uiState.chatInput,
-                        isAsking = uiState.isAsking,
-                        onInputChange = viewModel::onChatInputChange,
-                        onSend = viewModel::onAskCoach,
-                    )
+                    // 工具行紧跟在档案下面、对话卡片上面：四枚按钮是"这页能干什么"的入口，
+                    // 而对话是问一句答一句的去处。入口压在对话历史下面，等于每次都要先滑过上一轮的话。
                     AiCoachToolRow(
                         uiState = uiState,
                         onGeneratePlan = viewModel::generatePlan,
@@ -231,6 +225,14 @@ fun AiCoachScreen(
                         onOpenImportDiet = {
                             importViewModel.open(uiState.weeklyReview, ImportSection.DIET)
                         },
+                    )
+                    CoachChatCard(
+                        canAsk = uiState.canAskCoach,
+                        messages = uiState.chatMessages,
+                        input = uiState.chatInput,
+                        isAsking = uiState.isAsking,
+                        onInputChange = viewModel::onChatInputChange,
+                        onSend = viewModel::onAskCoach,
                     )
                     DietResults(uiState = uiState)
                 }
