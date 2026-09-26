@@ -702,19 +702,19 @@ class ExternalPlanDocumentParserTest {
     ) + (1L..9L).map { index -> food(20L + index, "测试食物$index", kcalPer100g = 10) }
 
     private fun mealDoc(entriesJson: String, day: Int = 1): String =
-        """{"schema":"${ExternalPlanSchema.SCHEMA}","meals":[{"dayOfWeek":$day,"entries":[$entriesJson]}]}"""
+        """{"schema":"${ExternalPlanSchema.DIET_SCHEMA}","meals":[{"dayOfWeek":$day,"entries":[$entriesJson]}]}"""
 
     private fun mealEntry(mealType: String, items: String): String =
         """{"mealType":"$mealType","items":[$items]}"""
 
     private fun parsedDiet(text: String, avoid: Set<DietRestriction> = emptySet()): ExternalPlanDraft =
-        when (val outcome = ExternalPlanDocumentParser.parse(text, library, foodLibrary, avoid)) {
+        when (val outcome = ExternalPlanDocumentParser.parse(text, library, foodLibrary, avoid, ImportSection.DIET)) {
             is ExternalDocOutcome.Parsed -> outcome.draft
             is ExternalDocOutcome.Refused -> error("期望解析成功，实际整份拒收：${outcome.reason} / ${outcome.notes}")
         }
 
     private fun dietRefused(text: String): ExternalDocOutcome.Refused =
-        when (val outcome = ExternalPlanDocumentParser.parse(text, library, foodLibrary, emptySet())) {
+        when (val outcome = ExternalPlanDocumentParser.parse(text, library, foodLibrary, emptySet(), ImportSection.DIET)) {
             is ExternalDocOutcome.Refused -> outcome
             is ExternalDocOutcome.Parsed -> error("期望整份拒收，实际解析成功：${outcome.draft}")
         }
@@ -751,7 +751,7 @@ class ExternalPlanDocumentParserTest {
     @Test
     fun parse_profileOnlyDocument_isRefusedAsNothingToImport() {
         val outcome = dietRefused(
-            """{"schema":"${ExternalPlanSchema.SCHEMA}","profile":{"trainingDaysPerWeek":5}}""",
+            """{"schema":"${ExternalPlanSchema.DIET_SCHEMA}","profile":{"trainingDaysPerWeek":5}}""",
         )
 
         assertEquals(ExternalDocRefusal.NOTHING_TO_IMPORT, outcome.reason)
@@ -834,7 +834,7 @@ class ExternalPlanDocumentParserTest {
     @Test
     fun parse_unknownMealType_dropsOnlyThatMeal() {
         val draft = parsedDiet(
-            """{"schema":"${ExternalPlanSchema.SCHEMA}","meals":[{"dayOfWeek":1,"entries":[
+            """{"schema":"${ExternalPlanSchema.DIET_SCHEMA}","meals":[{"dayOfWeek":1,"entries":[
                 {"mealType":"BRUNCH","items":[{"food":"水煮蛋","grams":60}]},
                 {"mealType":"LUNCH","items":[{"food":"米饭（蒸）","grams":200}]}]}]}""",
         )
@@ -847,7 +847,7 @@ class ExternalPlanDocumentParserTest {
     @Test
     fun parse_sameSlotTwice_keepsTheFirstMealAndListsTheSecond() {
         val draft = parsedDiet(
-            """{"schema":"${ExternalPlanSchema.SCHEMA}","meals":[{"dayOfWeek":1,"entries":[
+            """{"schema":"${ExternalPlanSchema.DIET_SCHEMA}","meals":[{"dayOfWeek":1,"entries":[
                 {"mealType":"LUNCH","items":[{"food":"米饭（蒸）","grams":200}]},
                 {"mealType":"LUNCH","items":[{"food":"水煮蛋","grams":60}]}]}]}""",
         )
@@ -872,7 +872,7 @@ class ExternalPlanDocumentParserTest {
     @Test
     fun parse_declaredNewFoodNumbers_prefillTheCandidate_andOutOfRangeOnesBecomeNull() {
         val outcome = dietRefused(
-            """{"schema":"${ExternalPlanSchema.SCHEMA}","meals":[{"dayOfWeek":1,"entries":[
+            """{"schema":"${ExternalPlanSchema.DIET_SCHEMA}","meals":[{"dayOfWeek":1,"entries":[
                 {"mealType":"LUNCH","items":[{"food":"紫薯","grams":200}]}]}],
              "newFoods":[{"name":"紫薯","kcalPer100g":6000,"proteinPer100g":1.6}]}""",
         )
@@ -893,20 +893,21 @@ class ExternalPlanDocumentParserTest {
 
     @Test
     fun parse_mealDayWithoutEntries_isNamed_notSilentlyDropped() {
-        // 真机反馈的那一种：文档里 `meals` 有这一天，但条目一条都没读到
-        // （最常见是模型把 items 直接挂在天的层级上）。以前这会是**零说明**的静默丢失。
+        // 真机撞到的那一种：`meals` 里有这一天，但条目一条都没读到
+        // （最常见是模型把 items 直接挂在天的层级上）。以前这会是零说明的静默丢失。
+        // 饮食入口下"整天没条目"= 没有任何可采纳的东西 → 整份拒收，但原因必须跟着回来。
         val text = """
-            {"schema":"${ExternalPlanSchema.SCHEMA}",
-             "days":[{"dayOfWeek":1,"items":[{"exercise":"杠铃深蹲","targetSets":3,"targetReps":12}]}],
+            {"schema":"${ExternalPlanSchema.DIET_SCHEMA}",
              "meals":[{"dayOfWeek":2}]}
         """.trimIndent()
 
-        val draft = ExternalPlanDocumentParser.parse(text, library, foodLibrary, emptySet())
-            as ExternalDocOutcome.Parsed
+        val refused = ExternalPlanDocumentParser.parse(
+            text, library, foodLibrary, emptySet(), ImportSection.DIET,
+        ) as ExternalDocOutcome.Refused
 
-        assertTrue("训练那一半照常进来", draft.draft.proposal.days.isNotEmpty())
-        assertTrue("餐次一条都没生成", draft.draft.meals.isEmpty())
-        val note: ExternalPlanNote = draft.draft.notes.single { n -> n.kind == ExternalPlanNote.Kind.MEAL_ENTRIES_MISSING }
+        val note: ExternalPlanNote = refused.notes.single { n ->
+            n.kind == ExternalPlanNote.Kind.MEAL_ENTRIES_MISSING
+        }
         assertEquals(2, note.dayOfWeek)
         assertEquals("星期要能上界面", listOf(2), note.args)
     }
@@ -933,7 +934,9 @@ class ExternalPlanDocumentParserTest {
              "nutrition":{"dailyCalories":2400,"meals":[{"meal":"早餐","items":["鸡蛋3个"]}]}}
         """.trimIndent()
 
-        val draft = ExternalPlanDocumentParser.parse(text, library, foodLibrary, emptySet())
+        val draft = ExternalPlanDocumentParser.parse(
+            text, library, foodLibrary, emptySet(), ImportSection.TRAINING,
+        )
             as ExternalDocOutcome.Parsed
 
         val note: ExternalPlanNote = draft.draft.notes.single { n -> n.kind == ExternalPlanNote.Kind.DIET_SECTION_MISPLACED }

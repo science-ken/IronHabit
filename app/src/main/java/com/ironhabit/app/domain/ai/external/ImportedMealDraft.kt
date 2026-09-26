@@ -4,6 +4,26 @@ import com.ironhabit.app.domain.model.FoodNutrition
 import com.ironhabit.app.domain.model.MealType
 
 /**
+ * 一份文档是从**哪个入口**粘进来的。两个入口两份模板（2026-09-26 拆），
+ * 各自的合同只认自己那一半 —— 粘错入口当场 `WRONG_SCHEMA`，而不是"读通了但少一半"。
+ */
+enum class ImportSection {
+    /** 「导入训练」：读 `days` / `profile` / `newExercises`。 */
+    TRAINING,
+
+    /** 「导入饮食」：只读 `meals` / `newFoods`。档案改动仍然只属于训练那一份。 */
+    DIET,
+    ;
+
+    /** 本入口认的回程合同。 */
+    val schema: String
+        get() = when (this) {
+            TRAINING -> ExternalPlanSchema.SCHEMA
+            DIET -> ExternalPlanSchema.DIET_SCHEMA
+        }
+}
+
+/**
  * 目标周**现在**某一餐是什么样：预览页那两句"会不会动到你的东西"的判据。
  *
  * 它来自库里已有的行，不是草案 —— 所以必须和草案一起送到预览页，

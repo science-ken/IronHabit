@@ -36,6 +36,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ironhabit.app.R
+import com.ironhabit.app.domain.ai.external.ImportSection
 import com.ironhabit.app.domain.model.AdviceSource
 import com.ironhabit.app.domain.model.ExerciseSuggestion
 import com.ironhabit.app.domain.model.RemoteFallbackReason
@@ -52,6 +53,7 @@ import com.ironhabit.app.ui.theme.IronHabitSpacing
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
@@ -223,7 +225,12 @@ fun AiCoachScreen(
                         onGeneratePlan = viewModel::generatePlan,
                         onGenerateDiet = viewModel::generateDiet,
                         onOpenExerciseLibrary = onOpenExerciseLibrary,
-                        onOpenImport = { importViewModel.open(uiState.weeklyReview) },
+                        onOpenImport = {
+                            importViewModel.open(uiState.weeklyReview, ImportSection.TRAINING)
+                        },
+                        onOpenImportDiet = {
+                            importViewModel.open(uiState.weeklyReview, ImportSection.DIET)
+                        },
                     )
                     DietResults(uiState = uiState)
                 }
@@ -581,6 +588,7 @@ private fun AiCoachToolRow(
     onGenerateDiet: () -> Unit,
     onOpenExerciseLibrary: () -> Unit,
     onOpenImport: () -> Unit,
+    onOpenImportDiet: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -626,6 +634,19 @@ private fun AiCoachToolRow(
                 modifier = Modifier.weight(1f),
                 onClick = onOpenImport,
             )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm)) {
+            // 两个入口两份模板（2026-09-26 拆）：合成一条长提示两头要，
+            // 模型对后半段的遵循度明显差 —— 真实回答把吃写进了 nutrition，用户白问一次。
+            ToolButton(
+                labelRes = R.string.ai_tool_import_diet,
+                noteRes = R.string.ai_tool_import_diet_note,
+                enabled = true,
+                modifier = Modifier.weight(1f),
+                onClick = onOpenImportDiet,
+            )
+            // 占位保持两列对齐：单独一枚按钮横撑满会比上面两枚宽一倍，看着像另一组控件。
+            Spacer(modifier = Modifier.weight(1f))
         }
     }
 }

@@ -3,6 +3,7 @@ package com.ironhabit.app.domain.usecase
 import com.ironhabit.app.domain.ai.external.ExternalDocRefusal
 import com.ironhabit.app.domain.ai.external.ExternalPlanNote
 import com.ironhabit.app.domain.ai.external.ExternalPlanSchema
+import com.ironhabit.app.domain.ai.external.ImportSection
 import com.ironhabit.app.domain.ai.external.ProfileFieldDiff
 import com.ironhabit.app.domain.model.AdviceSource
 import com.ironhabit.app.domain.model.Exercise
@@ -292,7 +293,7 @@ class ImportExternalPlanUseCaseTest {
     )
 
     private val dietText: String = """
-        {"schema":"${ExternalPlanSchema.SCHEMA}","meals":[{"dayOfWeek":2,"entries":[
+        {"schema":"${ExternalPlanSchema.DIET_SCHEMA}","meals":[{"dayOfWeek":2,"entries":[
             {"mealType":"LUNCH","items":[{"food":"米饭（蒸）","grams":200}]}]}]}
     """.trimIndent()
 
@@ -302,7 +303,7 @@ class ImportExternalPlanUseCaseTest {
         // 「槽位都被你自己的改动挡住了」—— 对一份训练条目为零的文档，那句话是错的。
         stub(library, foods = listOf(food(11L, "米饭（蒸）", 116, 2.6)))
 
-        val ready = useCase()(dietText, targetWeek) as ExternalPlanImport.Ready
+        val ready = useCase()(dietText, targetWeek, ImportSection.DIET) as ExternalPlanImport.Ready
 
         assertTrue("训练侧确实没有草案", ready.preview.allDrafts.isEmpty())
         assertEquals(1, ready.meals.size)
@@ -324,7 +325,7 @@ class ImportExternalPlanUseCaseTest {
             ),
         )
 
-        val ready = useCase()(dietText, targetWeek) as ExternalPlanImport.Ready
+        val ready = useCase()(dietText, targetWeek, ImportSection.DIET) as ExternalPlanImport.Ready
 
         val slot = ready.mealSlots.single()
         assertEquals(2, slot.dayOfWeek)

@@ -14,6 +14,7 @@ import com.ironhabit.app.domain.model.TrainingReview
 import com.ironhabit.app.domain.model.WeekPlan
 import com.ironhabit.app.domain.model.WeeklyReview
 import com.ironhabit.app.domain.usecase.BuildExternalCoachPromptUseCase
+import com.ironhabit.app.domain.usecase.BuildExternalDietPromptUseCase
 import com.ironhabit.app.domain.usecase.CreateImportedExercisesUseCase
 import com.ironhabit.app.domain.usecase.ExternalPlanImport
 import com.ironhabit.app.domain.usecase.ImportExternalPlanUseCase
@@ -53,6 +54,7 @@ class ExternalImportViewModelTest {
 
     private val importPlan = mockk<ImportExternalPlanUseCase>()
     private val buildPromptTemplate = mockk<BuildExternalCoachPromptUseCase>(relaxed = true)
+    private val buildDietPrompt = mockk<BuildExternalDietPromptUseCase>(relaxed = true)
     private val createExercises = mockk<CreateImportedExercisesUseCase>()
     private val holder = PlanPreviewHolder()
     private val utc = TimeZone.UTC
@@ -66,6 +68,7 @@ class ExternalImportViewModelTest {
 
     private fun viewModel(): ExternalImportViewModel = ExternalImportViewModel(
         buildPromptTemplate = buildPromptTemplate,
+        buildDietPrompt = buildDietPrompt,
         importPlan = importPlan,
         createExercises = createExercises,
         planPreviewHolder = holder,

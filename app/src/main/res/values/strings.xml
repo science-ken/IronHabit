@@ -617,9 +617,12 @@
     <string name="ai_tool_library_note">训练页 · 再点动作库</string>
 
     <!-- ===== 外部 AI 文档导入（刀 1：只导训练计划）===== -->
-    <string name="ai_tool_import">导入计划</string>
-    <string name="ai_tool_import_note">带去问你自己的 AI</string>
+    <string name="ai_tool_import">导入训练</string>
+    <string name="ai_tool_import_note">带去问 AI 排课</string>
+    <string name="ai_tool_import_diet">导入饮食</string>
+    <string name="ai_tool_import_diet_note">带去问 AI 配三餐</string>
     <string name="ai_import_title">导入外部 AI 排的计划</string>
+    <string name="ai_import_title_diet">导入外部 AI 配的三餐</string>
     <!-- 这句是这条通道全部的前提：App 不联网、不花 token，问 AI 发生在手机外面。 -->
     <string name="ai_import_intro">这一步 App 不联网，也不消耗 token：模板用的数据都在你手机上，问 AI 和拿到回答都在外面完成，回来只做「读成计划 + 你逐天确认」。</string>
     <string name="ai_import_week_label">写进哪一周</string>
@@ -640,7 +643,7 @@
     <string name="ai_import_refuse_empty">什么都没粘进来。</string>
     <string name="ai_import_refuse_not_json">这段里找不到能读的 JSON 对象。把模板整段发给 AI，并要求它「只输出 JSON」。</string>
     <!-- 这句必须给"重新复制模板"这条出路：合同从 v1 升到 v2 之后，用户手上旧模板问回来的文档全部落到这里。 -->
-    <string name="ai_import_refuse_wrong_schema">这段 JSON 没带上本 App 现在认的合同版本号（顶层那个 schema 字段）—— 这一版改成能同时收训练和饮食，旧模板问回来的读不进来。重新点一次「复制提问模板」，整段再问一次。</string>
+    <string name="ai_import_refuse_wrong_schema">这段 JSON 的合同版本号（顶层 schema）不是这一处认的那个 —— 训练和饮食现在是两个入口、两份模板，粘错地方也会报这句。确认一下你要导的是哪一半，再从对应的「复制提问模板」重新问一次。</string>
     <string name="ai_import_refuse_too_large">粘进来的内容太大（上限 512 KB）。只要那段计划 JSON，别把整段聊天记录搬来。</string>
     <!-- 与下一条的区别是原因不同、下一步也不同：这条要重发模板，那条要改名字。
          v2 起"只有饮食、没有训练"是合法文档，所以这句同时覆盖两半，不再单说动作库。 -->

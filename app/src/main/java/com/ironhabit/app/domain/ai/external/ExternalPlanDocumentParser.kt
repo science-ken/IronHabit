@@ -94,6 +94,7 @@ object ExternalPlanDocumentParser {
         library: List<Exercise>,
         foods: List<Food> = emptyList(),
         dietaryAvoid: Set<DietRestriction> = emptySet(),
+        section: ImportSection = ImportSection.TRAINING,
     ): ExternalDocOutcome {
         // 长度是字节数下界（UTF-8 每字符 ≥1 字节）：先做 O(1) 的粗筛，避免为巨型粘贴分配字节数组。
         if (text.length > MAX_DOC_BYTES) return ExternalDocOutcome.Refused(ExternalDocRefusal.TOO_LARGE)
@@ -106,12 +107,23 @@ object ExternalPlanDocumentParser {
                 if (stripCodeFence(text).isEmpty()) ExternalDocRefusal.EMPTY_DOCUMENT
                 else ExternalDocRefusal.NOT_A_DOCUMENT,
             )
-        val document: ExternalDocument = decoded.document
+        val rawDocument: ExternalDocument = decoded.document
 
         // schema 不回显就拒收：粘进来的东西没有边界，用户可能粘的是聊天记录、别家的 JSON、
         // 或上一版模板的输出。标签是唯一便宜的判据，而"尽力读读看"会把上一次的计划混进这一周。
-        if (document.schema?.trim() != ExternalPlanSchema.SCHEMA) {
+        if (rawDocument.schema?.trim() != section.schema) {
             return ExternalDocOutcome.Refused(ExternalDocRefusal.WRONG_SCHEMA)
+        }
+
+        // 两个入口各读各的一半。饮食那份不收 `days` / `profile` / `newExercises`
+        // —— 档案改动只属于训练那一份，两个入口都能改档案就会出现"哪份说了算"。
+        val document: ExternalDocument = when (section) {
+            ImportSection.TRAINING -> rawDocument.copy(meals = emptyList(), newFoods = emptyList())
+            ImportSection.DIET -> rawDocument.copy(
+                days = emptyList(),
+                profile = null,
+                newExercises = emptyList(),
+            )
         }
 
         val byName: Map<String, Exercise> = library
@@ -665,9 +677,17 @@ private class DecodedDocument(
  * `v1` → `v2`：`days` 从必填变可选、新增 `meals` / `newFoods` 两段（饮食导入）。
  * 精确匹配、无版本容错是**有意的** —— 旧模板发出去的文档会吃 [ExternalDocRefusal.WRONG_SCHEMA]，
  * 而那句拒收文案负责把用户支回"重新复制一次模板"，不给他一个读得半懂的计划。
+ *
+ * 2026-09-26 晚拆成**两个入口**（用户拍板，见 `.scratch/ironhabit-external-diet-import/spec.md` §11）：
+ * 训练文档仍是 `ironhabit-plan-import/v2`，饮食文档另发一份短模板用 `ironhabit-diet-import/v1`。
+ * 理由是实测的：一份长模板两头要，模型对后半段的遵循度明显更差 —— 用户那份真实文档里
+ * `days` 完全照合同，吃却自己另起了一段 `nutrition`。
  */
 object ExternalPlanSchema {
     const val SCHEMA: String = "ironhabit-plan-import/v2"
+
+    /** 饮食那份模板的回程合同。与训练那份**互不相认**：粘错入口就吃 `WRONG_SCHEMA`。 */
+    const val DIET_SCHEMA: String = "ironhabit-diet-import/v1"
 
     // 拒收名单里的字段名：给界面显示"哪一项被拒了"用，**不是**中文文案（架构禁止硬编码中文）。
     const val FIELD_HEIGHT_CM: String = "heightCm"

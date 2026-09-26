@@ -34,6 +34,7 @@ import androidx.compose.ui.text.style.TextAlign
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.ai.external.ExternalPlanDocumentParser
 import com.ironhabit.app.domain.ai.external.ExternalPlanNote
+import com.ironhabit.app.domain.ai.external.ImportSection
 import com.ironhabit.app.domain.ai.external.NewExerciseCandidate
 import com.ironhabit.app.domain.model.MealType
 import com.ironhabit.app.ui.components.mealTypeLabelRes
@@ -77,7 +78,13 @@ internal fun ImportPlanSheet(
             verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.md),
         ) {
             Text(
-                text = stringResource(R.string.ai_import_title),
+                text = stringResource(
+                    if (uiState.mode == ImportSection.DIET) {
+                        R.string.ai_import_title_diet
+                    } else {
+                        R.string.ai_import_title
+                    },
+                ),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
             )

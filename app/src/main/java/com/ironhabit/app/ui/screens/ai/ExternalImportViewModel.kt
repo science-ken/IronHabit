@@ -6,10 +6,12 @@ import androidx.lifecycle.viewModelScope
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.ai.external.ExternalDocRefusal
 import com.ironhabit.app.domain.ai.external.ExternalPlanNote
+import com.ironhabit.app.domain.ai.external.ImportSection
 import com.ironhabit.app.domain.ai.external.ImportedNewExercise
 import com.ironhabit.app.domain.ai.external.NewExerciseCandidate
 import com.ironhabit.app.domain.model.WeeklyReview
 import com.ironhabit.app.domain.usecase.BuildExternalCoachPromptUseCase
+import com.ironhabit.app.domain.usecase.BuildExternalDietPromptUseCase
 import com.ironhabit.app.domain.usecase.CreateImportedExercisesUseCase
 import com.ironhabit.app.domain.usecase.ExternalPlanImport
 import com.ironhabit.app.domain.usecase.ImportExternalPlanUseCase
@@ -45,6 +47,7 @@ import kotlinx.datetime.toLocalDateTime
 @HiltViewModel
 class ExternalImportViewModel @Inject constructor(
     private val buildPromptTemplate: BuildExternalCoachPromptUseCase,
+    private val buildDietPrompt: BuildExternalDietPromptUseCase,
     private val importPlan: ImportExternalPlanUseCase,
     private val createExercises: CreateImportedExercisesUseCase,
     private val planPreviewHolder: PlanPreviewHolder,
@@ -57,6 +60,13 @@ class ExternalImportViewModel @Inject constructor(
 
     data class UiState(
         val sheetOpen: Boolean = false,
+        /**
+         * 这一张弹层是哪个入口开的 —— 决定复制哪份模板、按哪份合同判。
+         *
+         * 两个入口互不相认（粘错当场 `WRONG_SCHEMA`），所以这个值不能靠猜：
+         * 它只在 [open] 里被赋值，弹层开着的时候不会自己变。
+         */
+        val mode: ImportSection = ImportSection.TRAINING,
         val week: WeekChoice = WeekChoice.THIS_WEEK,
         /** 拼好的提问模板；`null` = 还没要过（用户点「复制提问模板」才算）。 */
         val template: String? = null,
@@ -116,9 +126,9 @@ class ExternalImportViewModel @Inject constructor(
      *（按钮文案还是"复制提问模板"、剪贴板也没动），用户读解成"按钮坏了"再点一次才成功。
      * 打开弹层这一动作本身就是"我要模板"，拼装在它背后跑掉。
      */
-    fun open(review: WeeklyReview?) {
+    fun open(review: WeeklyReview?, mode: ImportSection = ImportSection.TRAINING) {
         lastReview = review
-        _uiState.update { it.copy(sheetOpen = true) }
+        _uiState.update { it.copy(sheetOpen = true, mode = mode) }
         refreshTemplate()
     }
 
@@ -197,7 +207,13 @@ class ExternalImportViewModel @Inject constructor(
         _uiState.update { it.copy(isBuildingTemplate = true, template = null, templateFailedRes = null) }
         buildJob = viewModelScope.launch {
             val text: String? = try {
-                buildPromptTemplate(review, week)
+                // 两份模板各自独立：训练那份只管练，饮食那份只管吃。
+                // 合在一条长提示里两头要，模型对后半段的遵循度明显差（真实回答把吃写进了 nutrition）。
+                if (_uiState.value.mode == ImportSection.DIET) {
+                    buildDietPrompt(week)
+                } else {
+                    buildPromptTemplate(review, week)
+                }
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (unexpected: Exception) {
@@ -239,7 +255,7 @@ class ExternalImportViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            val result: ExternalPlanImport = importPlan(text, weekStart)
+            val result: ExternalPlanImport = importPlan(text, weekStart, _uiState.value.mode)
 
             when (result) {
                 is ExternalPlanImport.Refused -> _uiState.update {

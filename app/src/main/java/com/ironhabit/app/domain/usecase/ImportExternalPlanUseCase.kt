@@ -5,11 +5,13 @@ import com.ironhabit.app.domain.ai.external.ExternalDocOutcome
 import com.ironhabit.app.domain.ai.external.ExternalDocRefusal
 import com.ironhabit.app.domain.ai.external.ExternalPlanDocumentParser
 import com.ironhabit.app.domain.ai.external.ExternalPlanNote
+import com.ironhabit.app.domain.ai.external.ImportSection
 import com.ironhabit.app.domain.ai.external.ImportedMealDraft
 import com.ironhabit.app.domain.ai.external.ImportedNewExercise
 import com.ironhabit.app.domain.ai.external.ImportedNewFood
 import com.ironhabit.app.domain.ai.external.MealSlotSnapshot
 import com.ironhabit.app.domain.ai.external.ProfileFieldDiff
+import com.ironhabit.app.domain.model.AdviceSource
 import com.ironhabit.app.domain.repository.ExerciseRepository
 import com.ironhabit.app.domain.repository.FoodRepository
 import com.ironhabit.app.domain.repository.MealRepository
@@ -51,7 +53,11 @@ class ImportExternalPlanUseCase @Inject constructor(
      * @param text 用户粘进来的原文（可带围栏与寒暄）
      * @param weekStartEpochDay 要写进哪一周的周一 epochDay
      */
-    suspend operator fun invoke(text: String, weekStartEpochDay: Long): ExternalPlanImport =
+    suspend operator fun invoke(
+        text: String,
+        weekStartEpochDay: Long,
+        section: ImportSection = ImportSection.TRAINING,
+    ): ExternalPlanImport =
         withContext(ioDispatcher) {
             // 动作库取**全量含停用**：停用行不能算"库里没有"，否则建库撞 UNIQUE 再绕回来（死循环）。
             val library = exerciseRepository.getAll()
@@ -64,6 +70,7 @@ class ImportExternalPlanUseCase @Inject constructor(
                 library = library,
                 foods = foods,
                 dietaryAvoid = profile.dietaryAvoid,
+                section = section,
             )
 
             when (parsed) {
@@ -77,29 +84,31 @@ class ImportExternalPlanUseCase @Inject constructor(
                 )
 
                 is ExternalDocOutcome.Parsed -> {
+                    if (section == ImportSection.DIET) {
+                        // 「导入饮食」那份文档没有训练草案：预览页只出饮食节，
+                        // 也不去读该周训练行 —— 那些行与这份文档无关，读了也不会写。
+                        return@withContext ExternalPlanImport.Ready(
+                            preview = PlanPreview(
+                                weekStartEpochDay = weekStartEpochDay,
+                                draftsByDay = emptyMap(),
+                                weekRowsForRetirement = emptyList(),
+                                templateOwnedDays = emptySet(),
+                                source = AdviceSource.EXTERNAL_AI_IMPORT,
+                                analysis = parsed.draft.proposal.analysis,
+                            ),
+                            notes = parsed.draft.notes,
+                            meals = parsed.draft.meals,
+                            newFoods = parsed.draft.newFoods,
+                            mealSlots = mealSlotsOf(mealRepository, weekStartEpochDay, parsed.draft.meals),
+                        )
+                    }
                     // 🔒 必须拿**该周全量**（含软删除行）：投影器靠它挡手改/软删槽位。
                     val weekRows = planRepository.getRowsForWeek(weekStartEpochDay)
                     val templateEditedRows = planRepository.getRepeatRows()
                         .filter { plan -> plan.isUserEdited }
 
                     // 饮食侧现状只在**真的有餐次要排**时读：没有餐次就不该白跑 7 天查询。
-                    val mealSlots: List<MealSlotSnapshot> = if (parsed.draft.meals.isEmpty()) {
-                        emptyList()
-                    } else {
-                        (0L until DAYS_IN_WEEK).flatMap { offset ->
-                            val dayOfWeek: Int = (offset + 1).toInt()
-                            mealRepository.getMealsIncludingInactive(weekStartEpochDay + offset)
-                                .map { meal ->
-                                    MealSlotSnapshot(
-                                        dayOfWeek = dayOfWeek,
-                                        mealType = meal.mealType,
-                                        isUserEdited = meal.isUserEdited,
-                                        isCompleted = meal.isCompleted,
-                                        isActive = meal.isActive,
-                                    )
-                                }
-                        }
-                    }
+                    val weekMealSlots = mealSlotsOf(mealRepository, weekStartEpochDay, parsed.draft.meals)
 
                     val proposal = parsed.draft.proposal.copy(
                         preservedUserEditedIds = (weekRows + templateEditedRows)
@@ -146,13 +155,35 @@ class ImportExternalPlanUseCase @Inject constructor(
                             newExercises = parsed.draft.newExercises,
                             meals = parsed.draft.meals,
                             newFoods = parsed.draft.newFoods,
-                            mealSlots = mealSlots,
+                            mealSlots = weekMealSlots,
                         )
                     }
                 }
             }
         }
 }
+
+/** 目标周现在的餐次（只在真要排吃时才读，一天一次查询）。 */
+private suspend fun mealSlotsOf(
+    mealRepository: MealRepository,
+    weekStartEpochDay: Long,
+    meals: List<ImportedMealDraft>,
+): List<MealSlotSnapshot> =
+    if (meals.isEmpty()) {
+        emptyList()
+    } else {
+        (0L until DAYS_IN_WEEK).flatMap { offset ->
+            mealRepository.getMealsIncludingInactive(weekStartEpochDay + offset).map { meal ->
+                MealSlotSnapshot(
+                    dayOfWeek = (offset + 1).toInt(),
+                    mealType = meal.mealType,
+                    isUserEdited = meal.isUserEdited,
+                    isCompleted = meal.isCompleted,
+                    isActive = meal.isActive,
+                )
+            }
+        }
+    }
 
 private const val DAYS_IN_WEEK = 7L
 
