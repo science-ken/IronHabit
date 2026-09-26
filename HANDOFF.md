@@ -5,6 +5,15 @@
 
 ---
 
+## 🔴 2026-09-26 开工中：外部 AI **饮食**导入（本文件里"导入只做训练计划"的范围从此作废）
+
+- **发布状态别引用本文写死的数字**，现测：`git rev-list --left-right --count origin/main...HEAD`。2026-09-26 实测 **`0 0`**，HEAD = `808667b` = **22 / 2.0.11**（tag `v2.0.11` 已发）。
+- 定稿在 `.scratch/ironhabit-external-diet-import/spec.md`。**`.scratch/` 被 gitignore，那文件没有 commit**，别去 git 历史里找。
+- 这次**推翻**了训练侧当初的 "Diet explicitly excluded"，但**没有**放宽承重墙：饮食**只写 `meals` 计划行**，`meal_items`（"我真的吃了"那张表）照旧一个字节都不写；一餐的 kcal/蛋白永远由 `foods` 每 100g × 克数**本地算**，模型在文档里写的营养数字一律拒收。
+- 已上线的训练链路里有 **1 个必修的线上故障**：`BuildExternalCoachPromptUseCase.kt:147`（劝模型别建议新动作）与 `:160`（要建议就必须声明 `newExercises`）**自相矛盾**，模型听前者时条目走 `UNKNOWN_EXERCISE` 静默丢掉。饮食刀 5 取消建库门票、顺带修它。**别把"必须声明"当成不可动的设计**。
+
+---
+
 ## ✅ 最新快照（2026-09-23 傍晚 · 「每周相同」拆成两个动作 + 食物库 127 条两列排 · **已发到 21 / 2.0.10**）
 
 **发布现状**：tag `v2.0.10` → `ba67136`，Release 上挂着 `app-release.apk`（2,491,270 字节）。
