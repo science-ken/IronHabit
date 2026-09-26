@@ -361,6 +361,7 @@ private fun ImportPlanNoteLine(note: ExternalPlanNote) {
         ExternalPlanNote.Kind.MEAL_TYPE_UNKNOWN -> stringResource(R.string.plan_preview_note_meal_type_unknown, subject)
         ExternalPlanNote.Kind.DUPLICATE_MEAL -> stringResource(R.string.plan_preview_note_duplicate_meal, mealLabel)
         ExternalPlanNote.Kind.NEW_FOOD_VALUE_REJECTED -> stringResource(R.string.plan_preview_note_new_food_value_rejected, subject)
+        ExternalPlanNote.Kind.MEAL_ENTRIES_MISSING -> stringResource(R.string.plan_preview_note_meal_entries_missing, firstArg)
     }
     Text(
         text = "· $text",

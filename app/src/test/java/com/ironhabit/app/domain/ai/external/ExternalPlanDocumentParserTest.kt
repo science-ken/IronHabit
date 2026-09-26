@@ -890,4 +890,36 @@ class ExternalPlanDocumentParserTest {
 
         assertEquals(7, draft.meals.single().dayOfWeek)
     }
+
+    @Test
+    fun parse_mealDayWithoutEntries_isNamed_notSilentlyDropped() {
+        // 真机反馈的那一种：文档里 `meals` 有这一天，但条目一条都没读到
+        // （最常见是模型把 items 直接挂在天的层级上）。以前这会是**零说明**的静默丢失。
+        val text = """
+            {"schema":"${ExternalPlanSchema.SCHEMA}",
+             "days":[{"dayOfWeek":1,"items":[{"exercise":"杠铃深蹲","targetSets":3,"targetReps":12}]}],
+             "meals":[{"dayOfWeek":2}]}
+        """.trimIndent()
+
+        val draft = ExternalPlanDocumentParser.parse(text, library, foodLibrary, emptySet())
+            as ExternalDocOutcome.Parsed
+
+        assertTrue("训练那一半照常进来", draft.draft.proposal.days.isNotEmpty())
+        assertTrue("餐次一条都没生成", draft.draft.meals.isEmpty())
+        val note: ExternalPlanNote = draft.draft.notes.single { n -> n.kind == ExternalPlanNote.Kind.MEAL_ENTRIES_MISSING }
+        assertEquals(2, note.dayOfWeek)
+        assertEquals("星期要能上界面", listOf(2), note.args)
+    }
+
+    @Test
+    fun parse_trainingOnlyDocument_keepsTheNotesClean() {
+        // 只导训练是**合法**用法（v1 时代一直如此）。"它没给吃"不能塞进"这份文档里没导进来的"
+        // 那份清单 —— 那会让每次正常导入都凭空多一条抱怨，而清单的可信度就是它的用处。
+        // 那一句话属于预览页，见 `PlanPreviewScreen` 的 `plan_preview_note_diet_section_missing`。
+        val draft = parsed(
+            doc("""{"exercise":"杠铃深蹲","targetSets":3,"targetReps":12}"""),
+        )
+
+        assertTrue(draft.notes.isEmpty())
+    }
 }

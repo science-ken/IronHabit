@@ -161,6 +161,16 @@ fun PlanPreviewScreen(
                     }
                 }
                 item { ImportPlanNoteList(notes = uiState.importNotes) }
+                if (uiState.dietAbsent) {
+                    // 一句平静的说明，不进"没导进来"那份清单：它没给吃，不是 App 弄丢了吃。
+                    item {
+                        Text(
+                            text = stringResource(R.string.plan_preview_note_diet_section_missing),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
                 // 档案 diff 也在这同一屏：它和"这几天的计划"是同一份文档带来的两件事，
                 // 拆成两屏会让人点两次"确定"却只表达了一个意图。
                 if (uiState.profileRows.isNotEmpty()) {

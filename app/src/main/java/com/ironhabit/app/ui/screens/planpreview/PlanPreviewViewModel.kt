@@ -161,6 +161,18 @@ class PlanPreviewViewModel @Inject constructor(
         val adoptedItemCount: Int get() = adoptableDays.filter { day -> day.adopted }.sumOf { day -> day.items.size }
         /** 有任何饮食行的那天要不要显示饮食块（内置生成路整块不显示）。 */
         val hasDiet: Boolean get() = days.any { day -> day.diet.isNotEmpty() }
+
+        /**
+         * 外部导入、且**整周一条餐次都没生成** —— 和"给了但被挡掉"是两件事：
+         * 后者在上方清单里逐条说了原因，前者是它压根没排吃。
+         * 不分开说，用户只会以为 App 把吃的那半弄丢了（真机就是这么反馈的）。
+         *
+         * `days.isNotEmpty()` 是防首帧闪烁：状态还没装载完时不该先亮一句"它没给"。
+         */
+        val dietAbsent: Boolean
+            get() = source == AdviceSource.EXTERNAL_AI_IMPORT &&
+                days.isNotEmpty() &&
+                days.none { day -> day.diet.isNotEmpty() }
     }
 
     private val _uiState = MutableStateFlow(UiState())

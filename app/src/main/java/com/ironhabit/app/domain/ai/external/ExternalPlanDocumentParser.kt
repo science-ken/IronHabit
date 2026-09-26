@@ -219,6 +219,19 @@ object ExternalPlanDocumentParser {
         for (day in declared) {
             val dayOfWeek: Int = day.dayOfWeek.coerceIn(MIN_DAY_OF_WEEK, MAX_DAY_OF_WEEK)
 
+            if (day.entries.isEmpty()) {
+                // 它这一天确实写了东西（`meals` 里有这一项），但条目一条都没读到 ——
+                // 最常见的形状是把 items 直接挂在天下（`{"dayOfWeek":1,"items":[…]}`），
+                // 而合同要的是 `entries`。不报这一句，用户看到的就只是"吃的那部分凭空没了"。
+                notes += ExternalPlanNote(
+                    ExternalPlanNote.Kind.MEAL_ENTRIES_MISSING,
+                    dayOfWeek,
+                    null,
+                    listOf(dayOfWeek),
+                )
+                continue
+            }
+
             for (entry in day.entries) {
                 val mealType: MealType? = entry.mealType.trim().uppercase()
                     .let { raw -> MealType.entries.firstOrNull { it.name == raw } }
@@ -773,8 +786,14 @@ data class ExternalPlanNote(
         /** 同一个 (星期, 餐次) 槽位出现两次，只留第一条（subject = `MealType.name`，中文由界面映射）。 */
         DUPLICATE_MEAL,
 
-        /** 声明的新食物数值超出可记录范围，**置空等用户填**（subject = `名字.字段`）。 */
+        /** 声明的新动作数值超出可记录范围，**置空等用户填**（subject = `名字.字段`）。 */
         NEW_FOOD_VALUE_REJECTED,
+
+        /**
+         * `meals` 里有这一天，但那一天**一条条目都没读到**（多半是把 `items` 写在了天的层级上，
+         * 而合同要的是 `entries`）。不发这一条就是静默丢掉一整天的吃。
+         */
+        MEAL_ENTRIES_MISSING,
     }
 }
 
