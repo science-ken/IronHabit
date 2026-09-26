@@ -692,7 +692,9 @@
     <string name="plan_preview_note_new_food_value_rejected">%1$s 的数值超出可记录范围，没有采纳；建库时那一格要你自己填</string>
     <!-- 静默丢掉一整天的吃是这条通道最坏的一类反馈：格式对不上也要点名。 -->
     <string name="plan_preview_note_meal_entries_missing">星期 %1$s 它排了吃，但那一天的条目 App 一条都没读到（要的是 entries 数组，多半是把 items 直接写在了天的层级上），这一天的吃没有采纳</string>
-    <string name="plan_preview_note_diet_section_missing">这份文档只排了训练，没有安排吃 —— 不是 App 弄丢了，是它这次没给。要吃的那部分，把模板整段再发一次并在问题里点名要三餐</string>
+    <!-- 说的是"App 读不到"，不是"它没给"：模型把吃写在 nutrition 之类的地方时，
+         说"它没安排吃"就是假话，而用户明明看见自己问到了吃。 -->
+    <string name="plan_preview_note_diet_section_missing">这份文档里没有 App 读得到的餐次段（要的是顶层 meals）—— 如果它把吃写在别处（例如 nutrition），这次不会导进来。想吃的那部分请走「导入饮食」那一份模板。</string>
     <!-- ===== 档案 diff（刀 2）===== -->
     <!-- 默认一行都不勾：文档"想改"不等于用户"同意改"，而勾下去是立即写进档案、不给撤销。 -->
     <string name="plan_preview_profile_title">这份文档还想改的档案（勾哪几项就改哪几项）</string>
