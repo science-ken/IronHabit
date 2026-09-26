@@ -115,7 +115,7 @@ class FoodLibraryViewModel @Inject constructor(
         _uiState.update { it.copy(showInactive = !it.showInactive) }
     }
 
-    /** 展开 / 收起「被忌口挡掉的」那一栏。 */
+    /** 展开 / 收起「标了你忌口的」那一栏。 */
     fun onToggleRestricted() {
         _uiState.update { it.copy(showRestricted = !it.showRestricted) }
     }

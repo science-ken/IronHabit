@@ -277,6 +277,16 @@ private fun FoodListSection(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.fillMaxWidth(),
         )
+        // 只在挑菜模式出现：这一栏**不拦你挑**，而"被忌口挡掉"读起来像拦。
+        // 硬挡是「导入饮食」那一路的规则（R5），自己记的这一餐由用户自己决定。
+        if (picking) {
+            Text(
+                text = stringResource(R.string.food_restricted_still_picking),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
         uiState.visibleRestrictedFoods.chunked(GRID_COLUMNS).forEach { rowFoods ->
             Row(
                 modifier = Modifier.fillMaxWidth(),

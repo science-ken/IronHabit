@@ -909,9 +909,12 @@
     <string name="action_deactivate">停用</string>
     <string name="action_activate">启用</string>
     <string name="action_restore">恢复</string>
-    <string name="chip_food_restricted_count">被忌口挡掉 %1$d</string>
+    <string name="chip_food_restricted_count">标了你忌口的 %1$d</string>
     <string name="food_restricted_header">这些标了你的忌口</string>
     <string name="food_restricted_disclaimer">只列出食物库里标注过这几类的条目；没有标注的食物不代表安全。</string>
+    <!-- 这一栏**不挡你挑**，所以 chip 不能写"挡掉"：忌口是安全字段，但硬挡只发生在「导入饮食」那一路
+         （R5：模型排进来的命中条目整条不进那一餐）。自己记的这一餐由你自己决定，App 不替你按掉。 -->
+    <string name="food_restricted_still_picking">这一栏还是能挑 —— 忌口在「导入饮食」那一路才是整条挡，你自己记的这一餐不由 App 替你决定。</string>
     <string name="chip_food_inactive_count">已停用 %1$d 条</string>
     <string name="label_food_inactive_summary">已停用 · 每 100g 约 %1$d kcal</string>
     <!-- 自律页「已删除 N 条」：软删的习惯在库里，只是以前界面上找不回来 -->

@@ -22,7 +22,7 @@ data class FoodLibraryUiState(
     val showInactive: Boolean = false,
     /** 档案里登记的忌口。空集合 = 这一整块不参与筛选（不是"全挡"）。 */
     val dietaryAvoid: Set<DietRestriction> = emptySet(),
-    /** 「显示被忌口挡掉的」是否展开。默认收起：挡掉的东西堆在列表里会挤掉真正能挑的。 */
+    /** 「标了你忌口的」那一栏是否展开。默认收起：它们堆在主列表里会挤掉真正能挑的。 */
     val showRestricted: Boolean = false,
     /** 正在新建/编辑的食物 id；`null` = 列表态。 */
     val editingFoodId: Long? = null,
