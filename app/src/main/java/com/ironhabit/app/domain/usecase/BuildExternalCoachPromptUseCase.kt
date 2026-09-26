@@ -219,7 +219,8 @@ class BuildExternalCoachPromptUseCase @Inject constructor(
    • dayOfWeek 取 1..7（1=周一，7=周日）；只安排 {{DAYS}} 个训练日，不要多排，也不要排满 7 天。
    • focus 只能取：FULL_BODY / LOWER_BODY / UPPER_PUSH / UPPER_PULL / CARDIO_CORE。
 4. items 每项是一个动作：{"exercise":"动作名","targetSets":4,"targetReps":8,"targetWeightKg":80.0}
-   • exercise 必须**逐字**取自下面【我的数据】里 library 数组的 name；库里没有的动作一律不要写，也不要建议新动作。
+   • exercise 优先用下面【我的数据】里 library 数组的 name，**逐字照抄**（别改一个字、别去标点）。
+     库里确实没有的动作也可以排 —— App 会把它列成"库里没有的动作"让我确认，不会静默丢掉。
    • targetSets 是 1..31 的整数，targetReps 是 1..100 的整数；自重动作 targetWeightKg 填 null。
    • 组数/次数/重量按【我的数据】里真有的字段定：week.days[].items 是我实际举起的重量与 RPE，summary.progressed 是本周加过重的动作，summary.stalled 是卡住没动的动作。做满且 RPE 偏低可以小幅加重。
    • 可选 "reason"：用一句话（40 字以内）说明**为什么排这个动作**。App 里默认折叠，用户点开才看得到，所以别把同样的话再写进 analysis。
@@ -232,10 +233,12 @@ class BuildExternalCoachPromptUseCase @Inject constructor(
    • injuryAreas：数组，元素只能取自 {{INJURIES}}；确认用户没有伤病时才给空数组 []
    • injuryNote：一句话（不超过 200 字）
    身高、体重、体脂、年龄、性别**一律不要写**：那是你的实测数据，App 不收 AI 填的这一项，写了会被逐条退回。
-7. 如果你要用我库里**没有**的动作，必须同时在顶层加一个 "newExercises" 数组声明它，否则那一条会被 App 直接丢掉：
+7. 要用我库里**没有**的动作时可以顺手在顶层加一个 "newExercises" 数组，它**不是准入条件** ——
+   不加也能排，App 会自己把陌生名字列出来问我；加了只是帮它把字段先填好：
    {"name":"保加利亚分腿蹲","category":"STRENGTH","muscleGroups":["腿部","臀部"],"equipment":["DUMBBELL"]}
-   • category 只能取 {{CATEGORIES}}
-   • muscleGroups 只能取这些已有标签：{{MUSCLES}}。**不要造新词** —— 词表是固定的，造了新词这一条会被整条拒收。
+   • category 只能取 {{CATEGORIES}}；写了 App 认不出的值就按 CUSTOM 建，之后我自己在动作库里改
+   • muscleGroups 只能取这些已有标签：{{MUSCLES}}。**造新词不会让这条被丢**，但那个标签会被丢掉，
+     而标签不全的动作伤病避让可能对它无效 —— 所以宁可留空也别编。
    • equipment 可选，元素只能取自 {{EQUIPMENTS}}
    能用我库里已有的动作就别加新的：加进去的行会永久留在我的动作库里。
 8. 饮食写在顶层 "meals" 数组里，一天一项：{"dayOfWeek":1,"entries":[{"mealType":"BREAKFAST","items":[…]}]}

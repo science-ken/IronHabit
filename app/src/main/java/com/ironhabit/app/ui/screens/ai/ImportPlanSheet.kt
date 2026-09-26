@@ -339,9 +339,11 @@ private fun ImportPlanNoteLine(note: ExternalPlanNote) {
     // `StringResourcePlaceholderContractTest` 的调用点扫描按行匹配，
     // 把资源名换行写就会读成"实参个数为 0"，带参文案当场红灯。
     val text: String = when (note.kind) {
-        ExternalPlanNote.Kind.UNKNOWN_EXERCISE -> stringResource(R.string.plan_preview_note_unknown_exercise, subject)
+        ExternalPlanNote.Kind.EXERCISE_INACTIVE -> stringResource(R.string.plan_preview_note_exercise_inactive, subject)
         ExternalPlanNote.Kind.EXERCISE_CREATABLE -> stringResource(R.string.plan_preview_note_exercise_creatable, subject)
         ExternalPlanNote.Kind.NEW_EXERCISE_REJECTED -> stringResource(R.string.plan_preview_note_new_exercise_rejected, subject)
+        ExternalPlanNote.Kind.NEW_EXERCISE_CATEGORY_DEFAULTED -> stringResource(R.string.plan_preview_note_exercise_category_defaulted, subject, firstArg)
+        ExternalPlanNote.Kind.NEW_EXERCISE_MUSCLES_DROPPED -> stringResource(R.string.plan_preview_note_exercise_muscles_dropped, subject, firstArg)
         ExternalPlanNote.Kind.BLANK_EXERCISE_NAME -> stringResource(R.string.plan_preview_note_blank_name)
         ExternalPlanNote.Kind.DUPLICATE_EXERCISE -> stringResource(R.string.plan_preview_note_duplicate, subject)
         ExternalPlanNote.Kind.OVER_DAILY_LIMIT -> stringResource(R.string.plan_preview_note_over_limit, subject, dailyLimit)

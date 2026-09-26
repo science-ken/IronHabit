@@ -169,7 +169,7 @@ class ExternalImportViewModelTest {
     @Test
     fun parse_ready_handsPreviewAndNotesToHolderAndAsksForNavigation() = runTest {
         val vm = viewModel()
-        val notes = listOf(ExternalPlanNote(ExternalPlanNote.Kind.UNKNOWN_EXERCISE, 1, "跳跃深蹲"))
+        val notes = listOf(ExternalPlanNote(ExternalPlanNote.Kind.EXERCISE_INACTIVE, 1, "跳跃深蹲"))
         coEvery { importPlan(any(), any()) } returns ExternalPlanImport.Ready(draftPreview, notes)
         vm.onTextChange("""{"schema":"${ExternalPlanSchema.SCHEMA}"}""")
 
@@ -191,7 +191,7 @@ class ExternalImportViewModelTest {
     @Test
     fun parse_refused_showsItsOwnSentenceAndWritesNothing() = runTest {
         val vm = viewModel()
-        val notes = listOf(ExternalPlanNote(ExternalPlanNote.Kind.UNKNOWN_EXERCISE, 1, "不存在"))
+        val notes = listOf(ExternalPlanNote(ExternalPlanNote.Kind.EXERCISE_INACTIVE, 1, "不存在"))
         coEvery { importPlan(any(), any()) } returns ExternalPlanImport.Refused(
             ExternalDocRefusal.NOTHING_TO_IMPORT,
             notes,
@@ -451,7 +451,7 @@ class ExternalImportViewModelTest {
         val vm = viewModel()
         coEvery { importPlan(any(), any()) } returns ExternalPlanImport.Refused(
             ExternalDocRefusal.NO_USABLE_ITEMS,
-            listOf(ExternalPlanNote(ExternalPlanNote.Kind.UNKNOWN_EXERCISE, 1, "x")),
+            listOf(ExternalPlanNote(ExternalPlanNote.Kind.EXERCISE_INACTIVE, 1, "x")),
         )
         vm.onTextChange("旧的")
         vm.parse()

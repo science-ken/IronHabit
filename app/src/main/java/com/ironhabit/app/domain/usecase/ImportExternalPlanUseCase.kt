@@ -50,7 +50,8 @@ class ImportExternalPlanUseCase @Inject constructor(
      */
     suspend operator fun invoke(text: String, weekStartEpochDay: Long): ExternalPlanImport =
         withContext(ioDispatcher) {
-            val library = exerciseRepository.observeActive().first()
+            // 动作库取**全量含停用**：停用行不能算"库里没有"，否则建库撞 UNIQUE 再绕回来（死循环）。
+            val library = exerciseRepository.getAll()
             // 食物库取**全量含停用**并在解析器里分流：停用行不能算"库里没有"，
             // 否则"建库 → 撞 UNIQUE → 跳过 → 重解析还是'库里没有'"这个死循环就成立了。
             val foods = foodRepository.observeAll().first()

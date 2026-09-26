@@ -652,17 +652,20 @@
     <!-- ===== 新动作待确认（刀 4）===== -->
     <!-- 建动作是往用户库里永久加一行，一个错别字（"杠铃深蹲 "）就该被这一勾挡住，所以不给默认全选。 -->
     <string name="ai_import_new_exercise_title">动作库里没有这几个（勾哪些就加哪些）</string>
-    <string name="ai_import_new_exercise_no_muscle">（没标肌群）</string>
+    <!-- 门票取消后大量候选会没有肌群标签；这句是它们唯一的诚实提示（伤病避让靠标签）。 -->
+    <string name="ai_import_new_exercise_no_muscle">（没标肌群 · 伤病避让可能对它无效）</string>
     <string name="ai_import_new_exercise_create">加入动作库并重新解析（%1$d）</string>
     <!-- 退路：不想建这些动作时也得走得了，否则"有候选"就把人锁在弹层里。 -->
     <string name="ai_import_proceed_without">先只导入能导的（不建这些动作）</string>
     <string name="ai_import_exercises_created">已加入 %1$s 个动作</string>
     <!-- 不写"勾上面那个按钮"：这句话也会出现在预览页，那块按钮并不在那一屏。 -->
     <string name="plan_preview_note_exercise_creatable">%1$s：动作库里没有这个名字，加进动作库后才能导进来</string>
-    <string name="plan_preview_note_new_exercise_rejected">想新建的 %1$s 不合法（分类或肌群标签对不上本 App 的词表），没有采纳</string>
+    <string name="plan_preview_note_new_exercise_rejected">想新建的 %1$s 连名字都没有，没有采纳</string>
+    <string name="plan_preview_note_exercise_inactive">%1$s：这条你在动作库里停用过，没导入（要去动作库重新启用）</string>
+    <string name="plan_preview_note_exercise_category_defaulted">「%1$s」的分类它写了一个 App 认不出的值（%2$s），建库时会先按「自定义」放进去，你可以自己去动作库里改</string>
+    <string name="plan_preview_note_exercise_muscles_dropped">「%1$s」有几个肌群标签不在本 App 的词表里（%2$s），这几个已丢掉 —— 标签不全的动作，伤病避让可能对它无效</string>
     <!-- 清单必须摊开：用户看不见动作库 id，也只有列出来他才知道是"库里没有"而不是"App 偷偷少写"。 -->
     <string name="plan_preview_import_notes_title">这份文档里没导进来的</string>
-    <string name="plan_preview_note_unknown_exercise">%1$s：动作库里找不到这个名字，没导入</string>
     <string name="plan_preview_note_blank_name">有一条动作名是空的，没导入</string>
     <string name="plan_preview_note_duplicate">%1$s：这天出现了两次，只留第一条</string>
     <string name="plan_preview_note_over_limit">%1$s：这天已经有 %2$s 条，超出的没导入</string>

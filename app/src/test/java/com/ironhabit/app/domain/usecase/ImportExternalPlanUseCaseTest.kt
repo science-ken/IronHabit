@@ -68,7 +68,7 @@ class ImportExternalPlanUseCaseTest {
     }
 
     private fun everyLibrary(library: List<Exercise>) {
-        every { exerciseRepository.observeActive() } returns flowOf(library)
+        coEvery { exerciseRepository.getAll() } returns library
     }
 
     private fun exercise(id: Long, name: String) = Exercise(
@@ -248,7 +248,7 @@ class ImportExternalPlanUseCaseTest {
 
         assertEquals(ExternalDocRefusal.NO_USABLE_ITEMS, refused.reason)
         assertEquals(
-            listOf(ExternalPlanNote.Kind.UNKNOWN_EXERCISE),
+            listOf(ExternalPlanNote.Kind.EXERCISE_CREATABLE),
             refused.notes.map { it.kind },
         )
     }

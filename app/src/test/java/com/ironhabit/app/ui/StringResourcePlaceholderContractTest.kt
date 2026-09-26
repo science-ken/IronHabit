@@ -170,7 +170,7 @@ class StringResourcePlaceholderContractTest {
         entry("ai_import_nothing_adoptable", ArgKind.STRING)
         // 预览页的"没导进来"清单：subject 与 args 一律 .toString() 后传 String，
         // 这样这一组的类型口径只有一种，不会因为 %d 收到 String 而运行时崩。
-        entry("plan_preview_note_unknown_exercise", ArgKind.STRING)
+        entry("plan_preview_note_exercise_inactive", ArgKind.STRING)
         entry("plan_preview_note_duplicate", ArgKind.STRING)
         entry("plan_preview_note_over_limit", ArgKind.STRING, ArgKind.STRING)
         entry("plan_preview_note_sets_clamped", ArgKind.STRING, ArgKind.STRING)
@@ -198,6 +198,9 @@ class StringResourcePlaceholderContractTest {
         entry("ai_import_exercises_created", ArgKind.STRING)
         entry("plan_preview_note_exercise_creatable", ArgKind.STRING)
         entry("plan_preview_note_new_exercise_rejected", ArgKind.STRING)
+        // 刀 5：门票取消后不合法的字段从"整条拒收"变成"降级 + 点名"，所以两句新的。
+        entry("plan_preview_note_exercise_category_defaulted", ArgKind.STRING, ArgKind.STRING)
+        entry("plan_preview_note_exercise_muscles_dropped", ArgKind.STRING, ArgKind.STRING)
 
         // ---------------- 【未使用】strings.xml 有占位符、代码暂无引用 ----------------
         entry("label_week_of", ArgKind.STRING)

@@ -91,7 +91,8 @@ class ExternalPlanDocumentParserTest {
     }
 
     @Test
-    fun parse_unknownExerciseName_isDroppedAndListedWithName() {
+    fun parse_unknownExerciseName_becomesACreatableCandidate_andIsListedWithName() {
+        // 刀 5 取消门票：陌生名不再是"静默丢掉"，而是"要不要建进库"的一次确认。
         val draft = parsed(
             doc(
                 """
@@ -103,13 +104,31 @@ class ExternalPlanDocumentParserTest {
 
         assertEquals(listOf(1L), draft.proposal.days.single().items.map { it.exerciseId })
         val note = draft.notes.single()
-        assertEquals(ExternalPlanNote.Kind.UNKNOWN_EXERCISE, note.kind)
+        assertEquals(ExternalPlanNote.Kind.EXERCISE_CREATABLE, note.kind)
         assertEquals(
-            "必须把原样名字回显给用户，否则他不知道是哪一条被丢了",
+            "必须把原样名字回显给用户，否则他不知道是哪一条没进来",
             "太空漫步机等",
             note.subject,
         )
         assertEquals(1, note.dayOfWeek)
+        val candidate = draft.newExercises.single()
+        assertEquals("太空漫步机等", candidate.name)
+        assertEquals("没声明就没有分类：按 CUSTOM 进候选，用户建完可自己改", ExerciseCategory.CUSTOM, candidate.category)
+        assertTrue(candidate.muscleGroups.isEmpty())
+    }
+
+    @Test
+    fun parse_deactivatedExercise_isListedAsInactive_andNeverOfferedAsANewExercise() {
+        // 停用行若算"库里没有"：建库撞 exercises.name UNIQUE → 被跳过 → 重解析还是"库里没有" → 死循环。
+        val withInactive: List<Exercise> = library + exercise(9L, "杠铃硬举").copy(isActive = false)
+        val outcome = ExternalPlanDocumentParser.parse(
+            doc("""{"exercise":"杠铃深蹲","targetSets":3,"targetReps":12},{"exercise":"杠铃硬举","targetSets":3,"targetReps":12}"""),
+            withInactive,
+        ) as ExternalDocOutcome.Parsed
+
+        assertEquals(listOf(ExternalPlanNote.Kind.EXERCISE_INACTIVE), outcome.draft.notes.map { it.kind })
+        assertTrue("停用行不能变成建库候选", outcome.draft.newExercises.isEmpty())
+        assertEquals(listOf(1L), outcome.draft.proposal.days.single().items.map { it.exerciseId })
     }
 
     @Test
@@ -195,7 +214,7 @@ class ExternalPlanDocumentParserTest {
 
     @Test
     fun parse_droppedItem_takesItsReasonAlong() {
-        // 动作名对不上 → 整条丢，它那句理由也跟着消失（否则会出现"给一条不存在的动作解释"）。
+        // 库里没有、又没建库 → 整条不进草案，它那句理由也跟着消失（否则会出现"给一条不存在的动作解释"）。
         val outcome = ExternalPlanDocumentParser.parse(
             doc("""{"exercise":"不存在的动作","targetSets":3,"targetReps":12,"reason":"很有道理"}"""),
             library,
@@ -204,7 +223,7 @@ class ExternalPlanDocumentParserTest {
         val refused = outcome as ExternalDocOutcome.Refused
         assertEquals(ExternalDocRefusal.NO_USABLE_ITEMS, refused.reason)
         assertEquals(
-            listOf(ExternalPlanNote.Kind.UNKNOWN_EXERCISE),
+            listOf(ExternalPlanNote.Kind.EXERCISE_CREATABLE),
             refused.notes.map { it.kind },
         )
     }
@@ -242,15 +261,17 @@ class ExternalPlanDocumentParserTest {
     }
 
     @Test
-    fun parse_undeclaredUnknownName_staysPlainUnknown() {
+    fun parse_undeclaredUnknownName_isStillCreatable() {
+        // 这一条钉的就是刀 5 改掉的那个门票：旧行为是"没声明 → 静默丢掉"，
+        // 而 shipped 模板里那句「也不要建议新动作」正好在劝模型别声明 —— 于是用户少了一条还看不出原因。
         val draft = parsed(doc(mixedItems))
 
-        assertTrue(draft.newExercises.isEmpty())
-        assertEquals(ExternalPlanNote.Kind.UNKNOWN_EXERCISE, draft.notes.single().kind)
+        assertEquals(listOf("保加利亚分腿蹲"), draft.newExercises.map { it.name })
+        assertEquals(ExternalPlanNote.Kind.EXERCISE_CREATABLE, draft.notes.single().kind)
     }
 
     @Test
-    fun parse_newExerciseWithUnknownCategory_isRejectedEntirely() {
+    fun parse_newExerciseWithUnknownCategory_defaultsToCustom_andSaysSo() {
         val draft = parsed(
             doc(
                 mixedItems,
@@ -258,29 +279,46 @@ class ExternalPlanDocumentParserTest {
             ),
         )
 
-        assertTrue("分类不认识 → 整条不进候选", draft.newExercises.isEmpty())
-        val rejected = draft.notes.filter { it.kind == ExternalPlanNote.Kind.NEW_EXERCISE_REJECTED }
-        assertEquals(1, rejected.size)
-        assertTrue(rejected.single().subject!!.contains("category"))
-        // 条目本身仍是"库里找不到"，不是"待新建"——声明失效了就不该给它这个资格。
-        assertEquals(ExternalPlanNote.Kind.UNKNOWN_EXERCISE, draft.notes.first { it.dayOfWeek != null }.kind)
+        val candidate = draft.newExercises.single()
+        assertEquals(
+            "分类不认识不再整条拒收（门票取消后拒收=永远建不了），改成按 CUSTOM 建 + 点名",
+            ExerciseCategory.CUSTOM,
+            candidate.category,
+        )
+        assertEquals(listOf("腿部"), candidate.muscleGroups)
+        val note = draft.notes.single { it.kind == ExternalPlanNote.Kind.NEW_EXERCISE_CATEGORY_DEFAULTED }
+        assertEquals("FLEXIBILITY", note.args.single())
     }
 
     @Test
-    fun parse_newExerciseWithInventedMuscleLabel_isRejectedNotHalfAccepted() {
-        // "有分类没肌群"的动作看起来正常，实际永远躲不开伤病避让 —— 半收比不收更坏。
+    fun parse_newExerciseWithInventedMuscleLabel_dropsThatLabelAndNamesIt() {
+        // 旧行为是整条拒收，理由是"有分类没肌群会静默失效"；但门票取消后整条丢的代价变成
+        // "这个动作永远建不了"，所以改成：丢掉词表外的标签 + 点名 + 候选行上标「没标肌群」。
         val draft = parsed(
             doc(
                 mixedItems,
-                ""","newExercises":[{"name":"保加利亚分腿蹲","category":"STRENGTH","muscleGroups":["股四头肌"]}]""",
+                ""","newExercises":[{"name":"保加利亚分腿蹲","category":"STRENGTH","muscleGroups":["腿部","股四头肌"]}]""",
             ),
         )
 
-        assertTrue(draft.newExercises.isEmpty())
-        val rejected = draft.notes.filter { it.kind == ExternalPlanNote.Kind.NEW_EXERCISE_REJECTED }
+        val candidate = draft.newExercises.single()
+        assertEquals(listOf("腿部"), candidate.muscleGroups)
+        val note = draft.notes.single { it.kind == ExternalPlanNote.Kind.NEW_EXERCISE_MUSCLES_DROPPED }
+        assertTrue("要点名是哪个标签不在词表里", note.args.single().toString().contains("股四头肌"))
+    }
+
+    @Test
+    fun parse_newExerciseWithBlankName_isStillRefusedEntirely() {
+        // 唯一保留的"整条拒收"：没有名字建不出任何东西。
+        val draft = parsed(
+            doc(
+                mixedItems,
+                ""","newExercises":[{"name":"  ","category":"STRENGTH"}]""",
+            ),
+        )
+
         assertTrue(
-            "要点名是哪个标签不在词表里",
-            rejected.single().subject!!.contains("股四头肌"),
+            draft.notes.any { it.kind == ExternalPlanNote.Kind.NEW_EXERCISE_REJECTED },
         )
     }
 

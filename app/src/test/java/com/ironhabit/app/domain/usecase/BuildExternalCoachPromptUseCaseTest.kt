@@ -261,7 +261,7 @@ class BuildExternalCoachPromptUseCaseTest {
         assertTrue(text.contains("BODYWEIGHT/STRENGTH/CARDIO/CUSTOM"))
         assertTrue(text.contains("腿部"))
         assertTrue(text.contains("臀腿"))
-        assertTrue("不声明就丢这条，必须写在模板里", text.contains("会被 App 直接丢掉"))
+        assertTrue("陌生名不再静默丢掉，模板必须这么写", text.contains("不会静默丢掉"))
         assertFalse("占位符一个都不许残留", text.contains("{{"))
     }
 

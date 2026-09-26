@@ -79,7 +79,9 @@ object ExternalPlanDocumentParser {
      * 把用户粘回来的文本读成草案。
      *
      * @param text 粘贴的原始文本（可能带围栏、前后有模型的解释话）
-     * @param library 用户**启用中**的动作库（= 名字白名单，也是"库里没有"的判据）
+     * @param library 动作库**全量（含已停用）**，同时当名字白名单用。
+     *   不按 active 过滤是有意的：停用行动作若算"库里没有"，它会变成建库候选 → 用户勾了 →
+     *   撞 `exercises.name` UNIQUE 被跳过 → 重解析还是"库里没有"（**死循环**，食物侧同一个坑）。
      * @param foods 食物库**全量（含已停用）**。不按 active 过滤是有意的：
      *   停用行如果算"库里没有"，它会变成待新建候选 → 用户建库时撞上 `foods.name` UNIQUE
      *   → 被当成"已有"跳过 → 重解析还是"库里没有"。**死循环**（刀 4 在动作侧已经踩过一次）。
@@ -123,16 +125,15 @@ object ExternalPlanDocumentParser {
         val (profilePatch, profileNotes) = resolveProfile(document.profile)
         notes += profileNotes
 
-        // 先挑新动作候选，再解析条目：不认识的名字只有**声明过且合法**的那些才有资格，
-        // 其余照旧按"库里找不到"丢弃 —— 建库是往用户库里永久加一行，不该由一个错别字触发。
-        val (candidates, newExerciseNotes) = resolveNewExercises(document.newExercises, library)
-        notes += newExerciseNotes
-        val declaredNewNames: Set<String> = candidates.map { entry -> entry.name.lowercase() }.toSet()
+        // 建库门票已取消（刀 5）：库里没有的名字**一律**进待确认候选，不再要求文档先声明。
+        // 先吃声明（能带上分类/肌群），再在解析条目时把没声明过的陌生名补进来。
+        val candidates = mutableListOf<ImportedNewExercise>()
+        candidates += resolveNewExercises(document.newExercises, library, notes)
 
         val days: List<PlannedDay> = document.days
             .map { day -> day.dayOfWeek.coerceIn(MIN_DAY_OF_WEEK, MAX_DAY_OF_WEEK) to day }
             .mapNotNull { (dayOfWeek, day) ->
-                val items = resolveItems(dayOfWeek, day.items, byName, declaredNewNames, notes)
+                val items = resolveItems(dayOfWeek, day.items, byName, notes, candidates)
                 if (items.isEmpty()) null
                 else PlannedDay(
                     dayOfWeek = dayOfWeek,
@@ -166,7 +167,7 @@ object ExternalPlanDocumentParser {
                 notes = notes.toList(),
                 analysis = document.analysis?.trim()?.takeIf { it.isNotEmpty() },
                 // 候选照样带回去：一份"全是新东西"的文档不是废文档，它是"先加库再导入"。
-                newExercises = candidates,
+                newExercises = candidates.toList(),
                 newFoods = newFoods.toList(),
             )
         }
@@ -181,7 +182,7 @@ object ExternalPlanDocumentParser {
                 ),
                 notes = notes.toList(),
                 profile = profilePatch,
-                newExercises = candidates,
+                newExercises = candidates.toList(),
                 meals = mealDrafts,
                 newFoods = newFoods.toList(),
             ),
@@ -369,59 +370,76 @@ object ExternalPlanDocumentParser {
         ExternalPlanNote(ExternalPlanNote.Kind.NEW_FOOD_VALUE_REJECTED, dayOfWeek, "$name.$field")
 
     /**
-     * 校验文档声明的新动作，并挑出"库里没有但已声明"的那些作为待确认候选。
+     * 校验文档声明的新动作，挑出"库里没有"的那些当候选。
      *
-     * @return 候选列表 + 逐条说明（不合法的整条拒收并点名）
+     * **刀 5 起这不再是准入凭证**：陌生名即使没声明也会由 [resolveItems] 补进候选，
+     * 声明的作用只剩下**预填**分类 / 肌群 / 器械。所以这里从"整条拒收"改成了"降级 + 说清楚"——
+     * 门票取消之后再整条拒收，后果从"少一条"变成了"这条永远建不了"，那是更坏的结果。
+     *
+     * @return 候选列表（说明直接 append 进 [notes]）
      */
     private fun resolveNewExercises(
         declared: List<ExternalNewExercise>,
         library: List<Exercise>,
-    ): Pair<List<ImportedNewExercise>, List<ExternalPlanNote>> {
-        if (declared.isEmpty()) return emptyList<ImportedNewExercise>() to emptyList()
+        notes: MutableList<ExternalPlanNote>,
+    ): List<ImportedNewExercise> {
+        if (declared.isEmpty()) return emptyList()
 
-        val notes = mutableListOf<ExternalPlanNote>()
         val valid = mutableListOf<ImportedNewExercise>()
 
         for (raw: ExternalNewExercise in declared) {
             val name: String = raw.name.trim()
+            if (name.isEmpty()) {
+                // 只有"连名字都没有"仍然整条拒收：没有名字的行建不出任何东西。
+                notes += rejectedNewExercise("newExercises（名字为空）")
+                continue
+            }
             val category: ExerciseCategory? = raw.category?.let { enumNameOrNull<ExerciseCategory>(it) }
-            val badMuscles: List<String> = raw.muscleGroups.map { it.trim() }
-                .filter { it.isNotEmpty() && it !in MuscleGroup.formOptions }
-
-            when {
-                name.isEmpty() -> notes += rejectedNewExercise("newExercises（名字为空）")
-                category == null -> notes += rejectedNewExercise("newExercises[$name].category")
-                // 一个标签不认识就整条拒收：半收的条目最坏 —— "有分类没肌群"的动作看起来正常，
-                // 实际永远躲不开伤病避让，而那正是它被建进来的理由之一。
-                badMuscles.isNotEmpty() -> notes += rejectedNewExercise(
-                    "newExercises[$name].muscleGroups: " + badMuscles.joinToString(" / "),
-                )
-
-                else -> valid += ImportedNewExercise(
-                    name = name,
-                    category = category,
-                    muscleGroups = raw.muscleGroups.map { it.trim() }.filter { it.isNotEmpty() }.distinct(),
-                    equipment = raw.equipment?.mapNotNull { enumNameOrNull<Equipment>(it) }?.toSet() ?: emptySet(),
+            if (category == null && !raw.category.isNullOrBlank()) {
+                notes += ExternalPlanNote(
+                    ExternalPlanNote.Kind.NEW_EXERCISE_CATEGORY_DEFAULTED,
+                    null,
+                    name,
+                    listOf(raw.category.trim()),
                 )
             }
+            val labels: List<String> = raw.muscleGroups.map { it.trim() }.filter { it.isNotEmpty() }
+            val badMuscles: List<String> = labels.filter { it !in MuscleGroup.formOptions }
+            if (badMuscles.isNotEmpty()) {
+                // 以前是整条拒收，现在是**丢掉那几个标签并点名**：
+                // 留着坏标签会静默失效，整条丢掉又让用户永远建不了这个动作。
+                notes += ExternalPlanNote(
+                    ExternalPlanNote.Kind.NEW_EXERCISE_MUSCLES_DROPPED,
+                    null,
+                    name,
+                    listOf(badMuscles.joinToString(" / ")),
+                )
+            }
+
+            valid += ImportedNewExercise(
+                name = name,
+                // 没有分类的行在规则引擎里等于"哪块肌群都不算"，所以给 CUSTOM 而不是 null：
+                // 它至少是用户可以自己改的合法值，而"没分类"会让伤病避让静默失效。
+                category = category ?: ExerciseCategory.CUSTOM,
+                muscleGroups = labels.filter { it in MuscleGroup.formOptions }.distinct(),
+                equipment = raw.equipment?.mapNotNull { enumNameOrNull<Equipment>(it) }?.toSet() ?: emptySet(),
+            )
         }
 
-        // 只有"库里确实没有"的才需要用户确认要新建；已有的那条名字会被正常解析成草案。
-        //
-        // 库里已有却仍声明成新动作 → **不给任何提示**。它不是错误：条目照常按名字解析成功，
-        // 用户看不到任何后果。而"建完库自动重解析"这一趟必然走到这里，
-        // 报出来就等于指着用户刚照我们说的做的那一步说"这不合法"。
+        // 库里（含停用行）已有的名字不进候选：它是正常解析路径。
+        // 而且**不给任何提示** —— "建完库自动重解析"这一趟必然走到这里，
+        // 报出来就等于指着用户刚照 app 说的做的那一步说"这不合法"。
         val known: Set<String> = library.map { existing -> existing.name.trim() }.toSet()
-        return valid.filter { it.name !in known } to notes
+        return valid.filter { it.name !in known }
     }
 
-    /** 一天内的条目：名字反查 → 去重 → 单日上限 → 数值钳制（顺序即丢弃原因优先级）。 */
+    /** 一天内的条目：名字反查 → 停用分流 → 去重 → 单日上限 → 数值钳制（顺序即丢弃原因优先级）。 */
     private fun resolveItems(
         dayOfWeek: Int,
         rawItems: List<ExternalItem>,
         byName: Map<String, Exercise>,
-        declaredNewNames: Set<String>,
         notes: MutableList<ExternalPlanNote>,
+        newExercises: MutableList<ImportedNewExercise>,
     ): List<PlanItemDraft> {
         val seen = mutableSetOf<Long>()
         val resolved = mutableListOf<PlanItemDraft>()
@@ -434,17 +452,15 @@ object ExternalPlanDocumentParser {
             }
             val exercise: Exercise? = byName[name.lowercase()]
             if (exercise == null) {
-                // 幻觉名 / 已停用 / 用户改了名 —— 一律"库里找不到"，不猜、不新建。
-                // 唯一例外：文档在 newExercises 里点名声明过它，那就变成"待用户确认新建"的候选。
-                notes += ExternalPlanNote(
-                    if (name.lowercase() in declaredNewNames) {
-                        ExternalPlanNote.Kind.EXERCISE_CREATABLE
-                    } else {
-                        ExternalPlanNote.Kind.UNKNOWN_EXERCISE
-                    },
-                    dayOfWeek,
-                    name,
-                )
+                // 建库门票取消（刀 5）：库里没有就是"待你确认新建"，不再问文档有没有声明过。
+                // 幻觉名 / 改名 也走这里 —— 用户看一眼就能不勾，比静默丢掉一条好。
+                notes += ExternalPlanNote(ExternalPlanNote.Kind.EXERCISE_CREATABLE, dayOfWeek, name)
+                addNewExerciseCandidate(name, newExercises)
+                continue
+            }
+            if (!exercise.isActive) {
+                // 停用行**不能**算"库里没有"：给了建库候选就是死循环（建 → 撞 UNIQUE → 跳过 → 还是没有）。
+                notes += ExternalPlanNote(ExternalPlanNote.Kind.EXERCISE_INACTIVE, dayOfWeek, name)
                 continue
             }
             if (!seen.add(exercise.id)) {
@@ -554,6 +570,17 @@ object ExternalPlanDocumentParser {
 
     private fun rejectedNewExercise(what: String) =
         ExternalPlanNote(ExternalPlanNote.Kind.NEW_EXERCISE_REJECTED, null, what)
+
+    /** 陌生名补进待确认候选：分类给 `CUSTOM`、肌群留空，界面上那条会写「没标肌群」。 */
+    private fun addNewExerciseCandidate(name: String, out: MutableList<ImportedNewExercise>) {
+        if (out.any { candidate -> candidate.name.equals(name, ignoreCase = true) }) return
+        out += ImportedNewExercise(
+            name = name,
+            category = ExerciseCategory.CUSTOM,
+            muscleGroups = emptyList(),
+            equipment = emptySet(),
+        )
+    }
 
     /** 去围栏 → 抽出 JSON 子串 → 宽松反序列化；任何失败都返回 `null`（调用方转成可识别拒收原因）。 */
     private fun decode(raw: String): ExternalDocument? {
@@ -682,14 +709,20 @@ data class ExternalPlanNote(
     val args: List<Any> = emptyList(),
 ) {
     enum class Kind {
-        /** 名字在动作库里找不到（幻觉名 / 已停用 / 改名）。 */
-        UNKNOWN_EXERCISE,
-
-        /** 库里没有，但文档在 `newExercises` 里声明过 → 等用户勾选确认后才建进库。 */
+        /** 库里没有这个名字 → 进待确认新建清单（刀 5 起不再要求文档先声明）。 */
         EXERCISE_CREATABLE,
 
-        /** 声明的新动作本身不合法（分类不认识 / 肌群标签不在词表 / 库里已有同名），整条拒收。 */
+        /** 库里有这条但**已停用**：不导入，也不给建库候选（给了就是死循环）。 */
+        EXERCISE_INACTIVE,
+
+        /** 声明的新动作连名字都没有，整条拒收（没有名字建不出任何东西）。 */
         NEW_EXERCISE_REJECTED,
+
+        /** 声明里的 `category` 是 App 认不出的值 → 建库时先按 `CUSTOM` 放，**点名告知**。 */
+        NEW_EXERCISE_CATEGORY_DEFAULTED,
+
+        /** 声明里的肌群标签有不在词表的 → **丢掉那几个**并点名（整条拒收会让用户永远建不了它）。 */
+        NEW_EXERCISE_MUSCLES_DROPPED,
 
         /** 空动作名。 */
         BLANK_EXERCISE_NAME,
