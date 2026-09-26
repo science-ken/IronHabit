@@ -884,6 +884,9 @@
     <string name="action_deactivate">停用</string>
     <string name="action_activate">启用</string>
     <string name="action_restore">恢复</string>
+    <string name="chip_food_restricted_count">被忌口挡掉 %1$d</string>
+    <string name="food_restricted_header">这些标了你的忌口</string>
+    <string name="food_restricted_disclaimer">只列出食物库里标注过这几类的条目；没有标注的食物不代表安全。</string>
     <string name="chip_food_inactive_count">已停用 %1$d 条</string>
     <string name="label_food_inactive_summary">已停用 · 每 100g 约 %1$d kcal</string>
     <!-- 自律页「已删除 N 条」：软删的习惯在库里，只是以前界面上找不回来 -->

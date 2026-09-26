@@ -8,6 +8,7 @@ import com.ironhabit.app.domain.model.FoodServing
 import com.ironhabit.app.domain.model.FoodSource
 import com.ironhabit.app.domain.model.InputLimits
 import com.ironhabit.app.domain.repository.FoodRepository
+import com.ironhabit.app.domain.repository.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -64,6 +65,7 @@ data class FoodFormState(
 @HiltViewModel
 class FoodLibraryViewModel @Inject constructor(
     private val foodRepository: FoodRepository,
+    private val settingsRepository: SettingsRepository,
     private val clock: Clock,
 ) : ViewModel() {
 
@@ -74,6 +76,13 @@ class FoodLibraryViewModel @Inject constructor(
     val formState: StateFlow<FoodFormState> = _formState.asStateFlow()
 
     init {
+        // 忌口来自档案（DataStore，不在库里）：它变了要重算沉底那一栏，
+        // 否则用户在设置里勾了「海鲜」回到这里还能照挑不误。
+        viewModelScope.launch {
+            settingsRepository.profile().collect { profile ->
+                _uiState.update { it.copy(dietaryAvoid = profile.dietaryAvoid) }
+            }
+        }
         viewModelScope.launch {
             foodRepository.observeAll().collect { foods ->
                 // 启用/停用分两栏而不是混排一栏：整库按拼音排好是用户找东西的依据，
@@ -96,6 +105,11 @@ class FoodLibraryViewModel @Inject constructor(
     /** 展开 / 收起「已停用」那一栏。 */
     fun onToggleInactive() {
         _uiState.update { it.copy(showInactive = !it.showInactive) }
+    }
+
+    /** 展开 / 收起「被忌口挡掉的」那一栏。 */
+    fun onToggleRestricted() {
+        _uiState.update { it.copy(showRestricted = !it.showRestricted) }
     }
 
     fun onOpenCreate() {

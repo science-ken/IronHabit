@@ -194,6 +194,7 @@ class StringResourcePlaceholderContractTest {
         // 刀 3 预览页饮食段：餐次名与数字全部走 %s（实参一律 toString()，避免 %d 收到字符串崩在清单里）。
         entry("plan_preview_diet_line", ArgKind.STRING, ArgKind.STRING, ArgKind.STRING)
         entry("plan_preview_diet_missing", ArgKind.NUMERIC)
+        entry("chip_food_restricted_count", ArgKind.NUMERIC)
         entry("plan_preview_profile_apply", ArgKind.NUMERIC)
         entry("plan_preview_profile_applied", ArgKind.STRING)
         // 刀 3：每条动作"为什么"的展开按钮（计数是 Int，走 %d）。

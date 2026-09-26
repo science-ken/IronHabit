@@ -1,5 +1,6 @@
 package com.ironhabit.app.ui.screens.food
 
+import com.ironhabit.app.domain.model.DietRestriction
 import com.ironhabit.app.domain.model.Food
 import java.text.Collator
 import java.util.Locale
@@ -19,11 +20,27 @@ data class FoodLibraryUiState(
     val query: String = "",
     /** 「已停用」筛选是否展开。 */
     val showInactive: Boolean = false,
+    /** 档案里登记的忌口。空集合 = 这一整块不参与筛选（不是"全挡"）。 */
+    val dietaryAvoid: Set<DietRestriction> = emptySet(),
+    /** 「显示被忌口挡掉的」是否展开。默认收起：挡掉的东西堆在列表里会挤掉真正能挑的。 */
+    val showRestricted: Boolean = false,
     /** 正在新建/编辑的食物 id；`null` = 列表态。 */
     val editingFoodId: Long? = null,
 ) {
     /** 当前显示给用户的启用条目。挑选模式只用这一条（见 [visibleInactiveFoods]）。 */
-    val visibleFoods: List<Food> get() = searchFoods(allFoods, query)
+    val visibleFoods: List<Food> get() = searchFoods(allFoods.filterNot { isBlockedByAvoid(it, dietaryAvoid) }, query)
+
+    /**
+     * 命中忌口、被沉到底部那一栏的食物。
+     *
+     * 只在 [showRestricted] 打开时才非空 —— 与 [visibleInactiveFoods] 同一个闸门写法，
+     * 免得每个渲染处都要自己记得判一次。
+     */
+    val visibleRestrictedFoods: List<Food>
+        get() = if (showRestricted) searchFoods(
+            allFoods.filter { isBlockedByAvoid(it, dietaryAvoid) },
+            query,
+        ) else emptyList()
 
     /**
      * 展开「已停用」后该显示的停用行；收起态恒为空 —— 闸门放在状态里，
@@ -35,9 +52,12 @@ data class FoodLibraryUiState(
     val visibleInactiveFoods: List<Food>
         get() = if (showInactive) searchFoods(inactiveFoods, query) else emptyList()
 
-    /** 两段都没有命中时才该显示空态提示。 */
+    /** 忌口挡掉了多少条（跟着搜索词走，chip 上的数字必须和展开后看到的对得上）。 */
+    val restrictedCount: Int get() = allFoods.count { isBlockedByAvoid(it, dietaryAvoid) && it.name.contains(query.trim(), ignoreCase = true) }
+
+    /** 三段都没有命中时才该显示空态提示。 */
     val nothingToShow: Boolean
-        get() = visibleFoods.isEmpty() && visibleInactiveFoods.isEmpty()
+        get() = visibleFoods.isEmpty() && visibleInactiveFoods.isEmpty() && visibleRestrictedFoods.isEmpty()
 }
 
 /**
@@ -51,6 +71,16 @@ fun searchFoods(foods: List<Food>, query: String): List<Food> {
     if (trimmed.isEmpty()) return foods
     return foods.filter { food -> food.name.contains(trimmed, ignoreCase = true) }
 }
+
+/**
+ * 这条食物是否命中了用户的忌口。
+ *
+ * ⚠️ 它**只是筛选**，不是安全保证：库里只有少数条目带标签（内置 127 条里约三成），
+ * 用户自建的食物更是一条都没有（表单不允许编辑标签）。所以界面上不能写「已按忌口过滤」，
+ * 只能写"挡掉了库里标注过的这几类"，并补一句没标注的不代表安全。
+ */
+fun isBlockedByAvoid(food: Food, avoid: Set<DietRestriction>): Boolean =
+    avoid.isNotEmpty() && food.dietaryTags.any { tag -> tag in avoid }
 
 /**
  * 中文按拼音排序。

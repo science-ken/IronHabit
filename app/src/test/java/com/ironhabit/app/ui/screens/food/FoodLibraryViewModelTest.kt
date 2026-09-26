@@ -6,6 +6,7 @@ import com.ironhabit.app.domain.model.Food
 import com.ironhabit.app.domain.model.FoodServing
 import com.ironhabit.app.domain.model.FoodSource
 import com.ironhabit.app.domain.repository.FoodRepository
+import com.ironhabit.app.domain.repository.SettingsRepository
 import com.ironhabit.app.test.MainDispatcherRule
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -40,12 +41,15 @@ class FoodLibraryViewModelTest {
 
     private val savedFood = slot<Food>()
     private val repository = mockk<FoodRepository>(relaxed = true)
+    /** 忌口现在要参与筛选，所以这个 mock 必须给得出档案：relaxed 的 `profile()` 返回空流，
+     *  那样 dietaryAvoid 永远停在默认值，测不到"档案变了要重算"。 */
+    private val settingsRepository = mockk<SettingsRepository>(relaxed = true)
     private val clock = mockk<Clock>(relaxed = true)
 
     private fun viewModel(): FoodLibraryViewModel {
         every { repository.observeAll() } returns flowOf(emptyList())
         coEvery { repository.upsert(capture(savedFood)) } returns 7L
-        return FoodLibraryViewModel(repository, clock)
+        return FoodLibraryViewModel(repository, settingsRepository, clock)
     }
 
     /** 填一份合法的新建表单（热量必填，宏量留空 = 0 合法）。 */
@@ -179,7 +183,7 @@ class FoodLibraryViewModelTest {
         every { repo.observeAll() } returns flowOf(listOf(milk))
         coEvery { repo.getFood(3L) } returns milk
         coEvery { repo.upsert(capture(savedFood)) } returns 3L
-        val vm = FoodLibraryViewModel(repo, clock)
+        val vm = FoodLibraryViewModel(repo, settingsRepository, clock)
         mainDispatcherRule.testDispatcher.scheduler.advanceUntilIdle()
 
         vm.onOpenEdit(milk)
@@ -202,7 +206,7 @@ class FoodLibraryViewModelTest {
         val repo = mockk<FoodRepository>(relaxed = true)
         every { repo.observeAll() } returns flowOf(emptyList())
         coEvery { repo.upsert(any()) } throws RuntimeException("db busy")
-        val vm = FoodLibraryViewModel(repo, clock)
+        val vm = FoodLibraryViewModel(repo, settingsRepository, clock)
 
         vm.onOpenCreate()
         vm.onNameChange("米糊")
@@ -242,7 +246,7 @@ class FoodLibraryViewModelTest {
     @Test
     fun disabledFoodsGetTheirOwnColumnAndNeverLeakIntoTheActiveOne() =
         runTest(mainDispatcherRule.testDispatcher) {
-            val vm = FoodLibraryViewModel(twoColumnRepo(), clock)
+            val vm = FoodLibraryViewModel(twoColumnRepo(), settingsRepository, clock)
             mainDispatcherRule.testDispatcher.scheduler.advanceUntilIdle()
 
             assertEquals(listOf("牛奶", "酸奶"), vm.uiState.value.visibleFoods.map { it.name })
@@ -261,7 +265,7 @@ class FoodLibraryViewModelTest {
     @Test
     fun searchAppliesToBothColumnsAndTheDisabledHitCountsAsNotEmpty() =
         runTest(mainDispatcherRule.testDispatcher) {
-            val vm = FoodLibraryViewModel(twoColumnRepo(), clock)
+            val vm = FoodLibraryViewModel(twoColumnRepo(), settingsRepository, clock)
             mainDispatcherRule.testDispatcher.scheduler.advanceUntilIdle()
             vm.onToggleInactive()
 
@@ -279,7 +283,7 @@ class FoodLibraryViewModelTest {
     fun activatingAndDeactivatingGoStraightToTheRepository() =
         runTest(mainDispatcherRule.testDispatcher) {
             val repo = twoColumnRepo()
-            val vm = FoodLibraryViewModel(repo, clock)
+            val vm = FoodLibraryViewModel(repo, settingsRepository, clock)
 
             vm.onActivate(3L)
             vm.onDeactivate(1L)
@@ -294,7 +298,7 @@ class FoodLibraryViewModelTest {
     fun deactivatingOpensTheDisabledColumnImmediately() =
         runTest(mainDispatcherRule.testDispatcher) {
             val repo = twoColumnRepo()
-            val vm = FoodLibraryViewModel(repo, clock)
+            val vm = FoodLibraryViewModel(repo, settingsRepository, clock)
             mainDispatcherRule.testDispatcher.scheduler.advanceUntilIdle()
             assertFalse(vm.uiState.value.showInactive)
 

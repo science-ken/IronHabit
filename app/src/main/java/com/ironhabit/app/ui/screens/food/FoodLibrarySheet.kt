@@ -205,6 +205,18 @@ private fun FoodListSection(
         )
     }
 
+    // 忌口那一栏的入口。放在列表上方、与「已停用」同一处：用户是在列表顶上发现
+    // "牛奶怎么不见了"的，不是在列表底下。
+    if (uiState.restrictedCount > 0) {
+        FilterChip(
+            selected = uiState.showRestricted,
+            onClick = { viewModel.onToggleRestricted() },
+            label = {
+                Text(text = stringResource(R.string.chip_food_restricted_count, uiState.restrictedCount))
+            },
+        )
+    }
+
     if (uiState.nothingToShow) {
         Text(
             text = stringResource(
@@ -243,6 +255,46 @@ private fun FoodListSection(
             // 落单的那格补一个占位：否则最后一条会独占整行宽度，看起来像另一种排版。
             if (rowFoods.size < GRID_COLUMNS) {
                 Spacer(modifier = Modifier.weight(1f))
+            }
+        }
+    }
+
+    // 命中忌口的：沉到底部单独一栏，而不是在原位置打个折。
+    // 为什么单独一栏：混在列表里"看起来能挑"，而这一栏的全部意义就是"这些我劝你别挑"。
+    if (uiState.visibleRestrictedFoods.isNotEmpty()) {
+        Text(
+            text = stringResource(R.string.food_restricted_header),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.fillMaxWidth().padding(top = IronHabitSpacing.md),
+        )
+        // 库里只有少数条目标了忌口类别，没标的一条都挡不住 —— 这句必须跟着这一段出现。
+        Text(
+            text = stringResource(R.string.food_restricted_disclaimer),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        uiState.visibleRestrictedFoods.chunked(GRID_COLUMNS).forEach { rowFoods ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.md),
+            ) {
+                rowFoods.forEach { food ->
+                    if (onPick != null) {
+                        FoodPickCard(modifier = Modifier.weight(1f), food = food, onPick = onPick)
+                    } else {
+                        FoodCard(
+                            modifier = Modifier.weight(1f),
+                            food = food,
+                            onEdit = { viewModel.onOpenEdit(food) },
+                            onDeactivate = { viewModel.onDeactivate(food.id) },
+                        )
+                    }
+                }
+                if (rowFoods.size < GRID_COLUMNS) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
             }
         }
     }
