@@ -1986,7 +1986,8 @@ jobs:
           fi
           # 联网一期（2026-09-15）：INTERNET 已放行，仅限 AI 教练（默认关闭）。
           # 权限白名单 = 当前 AndroidManifest 实际权限集（已核实）；出现白名单之外的权限即失败
-          allowed="android\.permission\.(INTERNET|SCHEDULE_EXACT_ALARM|USE_EXACT_ALARM|POST_NOTIFICATIONS|RECEIVE_BOOT_COMPLETED|VIBRATE)"
+          # USE_EXACT_ALARM 已于 2026-09-27 从白名单与清单里一并删掉（见 android-ci.yml 同处的说明）。
+          allowed="android\.permission\.(INTERNET|SCHEDULE_EXACT_ALARM|POST_NOTIFICATIONS|RECEIVE_BOOT_COMPLETED|VIBRATE)"
           if grep -o "android\.permission\.[A-Z_]*" app/src/main/AndroidManifest.xml \
              | sort -u | grep -vE "^${allowed}$"; then
             echo "::error::发现白名单之外的权限声明，不得新增云服务/账号/同步类权限"

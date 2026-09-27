@@ -72,7 +72,9 @@ jobs:
             exit 1
           fi
           echo "权限白名单校验：$MERGED_MANIFEST"
-          ALLOWED='android.permission.schedule_exact_alarm|android.permission.use_exact_alarm|android.permission.post_notifications|android.permission.receive_boot_completed|android.permission.vibrate|android.permission.internet'
+          # USE_EXACT_ALARM 刻意不在白名单里（2026-09-27 删）：那是 Play 只发给闹钟/日历类应用的特殊权限，
+          # 本 App 的提醒是纪律提示，晚几分钟不影响主功能；重新声明它应当让 CI 红，而不是被放行。
+          ALLOWED='android.permission.schedule_exact_alarm|android.permission.post_notifications|android.permission.receive_boot_completed|android.permission.vibrate|android.permission.internet'
           # 只统计 `<uses-permission>`（App 真正「申请」的权限）。
           # 刻意**不**统计组件上的 `android:permission=` 属性——那是访问守卫（声明
           # 「谁才有资格调用我」），不赋予 App 任何能力，语义与 uses-permission 相反。
