@@ -84,6 +84,8 @@ class StringResourcePlaceholderContractTest {
         entry("dialog_delete_habit_message", ArgKind.STRING) // DisciplineScreen 删除确认框（habit.name）
         entry("dialog_delete_body_metric_message", ArgKind.STRING, ArgKind.STRING) // BodyMetricsScreen 删除确认框（日期 · 值+单位）
         entry("dialog_copy_next_week_message", ArgKind.STRING) // TodayScreen 复制到下周确认框（rowCount.toString()）
+        entry("meal_slot_taken_hint", ArgKind.STRING) // MealEditSheet 被占餐次 chip 灰掉后的说明（实参：餐次名拼接串）
+        entry("meal_slot_deleted_hint", ArgKind.STRING) // MealEditSheet 选中"软删过的那一格"时的后果说明（实参：餐次名）
         entry("hint_repeat_plan", ArgKind.STRING) // TodayScreen 模板出口行（repeatPlanRowCount.toString()）
         entry("label_streak_best", ArgKind.NUMERIC) // TodayBento（streak.best）
         entry("label_streak_days_value", ArgKind.NUMERIC) // TodayBento hero 磁贴（streak.current，displaySmall 那一行）

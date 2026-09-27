@@ -7,7 +7,9 @@ import com.ironhabit.app.domain.model.Meal
 import com.ironhabit.app.domain.model.MealIntake
 import com.ironhabit.app.domain.model.MealItem
 import com.ironhabit.app.domain.model.MealTotals
+import com.ironhabit.app.domain.model.MealType
 import com.ironhabit.app.domain.model.StreakInfo
+import com.ironhabit.app.domain.usecase.MealSlotState
 import com.ironhabit.app.domain.model.TodayPlanItem
 import com.ironhabit.app.domain.model.WeeklyReview
 
@@ -61,6 +63,13 @@ data class TodayUiState(
     val editingItemId: Long? = null,
     /** 正在编辑的那一餐；非 `null` 时页面渲染编辑弹层（未来日只读态不渲染）。 */
     val editingMeal: Meal? = null,
+    /**
+     * 打开 [editingMeal] 弹层时那一天的餐次槽位占用（哪颗 chip 能点、灰了要说哪句话）。
+     *
+     * 只在弹层打开期间有意义：`MealEditSheet` 靠它把"点了必然撞唯一索引"的那颗灰掉，
+     * 见 `domain/usecase/GetMealSlotStatesUseCase.kt`。
+     */
+    val editingMealSlots: Map<MealType, MealSlotState> = emptyMap(),
     val completedCount: Int = 0,
     val totalCount: Int = 0,
     val trainingStreak: StreakInfo = StreakInfo(0, 0, null),

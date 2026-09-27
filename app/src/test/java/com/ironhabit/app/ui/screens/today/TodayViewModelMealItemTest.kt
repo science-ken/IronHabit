@@ -171,6 +171,8 @@ class TodayViewModelMealItemTest {
             upsertMeal = upsertMeal,
             addMealItem = addMealItem,
             changePortion = changePortion,
+            // 「编辑这一餐」弹层要读槽位占用；本组用例不验证它，给空图即可。
+            getMealSlotStates = mockk<com.ironhabit.app.domain.usecase.GetMealSlotStatesUseCase>(relaxed = true),
             mealItemRepository = mealItemRepository,
             checkInRepository = checkInRepository,
             planRepository = planRepository,

@@ -160,12 +160,39 @@ interface MealDao {
      *
      * 先按主键 `id` 匹配（编辑已有行），未命中再按 `(日期, 餐次)` 槽位兜底（**含软删行 → 复活**）；
      * 置 `is_user_edited = 1`、`is_active = 1`，并**保留原完成勾选与创建时间**（编辑内容不重置打卡）。
+     *
+     * 改餐次时目标槽位已被占的两种情况，处理方式**不一样**（审查报告 P2-1）：
+     * - 占位的是**软删行** → 内容搬进那一行并复活它，原来那一行改成软删。
+     *   弹层这时已经明说"改过来会把你删掉的那一餐恢复并替换"，这里按那句兑现；
+     *   两边都留软删/生效两行，是为了保住各自"别再给我重新排这一餐"的记忆
+     *   （硬删掉那条占位行的话，下次生成饮食又会把同一餐排回来）。
+     * - 占位的是**另一条活着的餐** → 不特殊处理，让它撞 `UNIQUE(date_epoch_day, meal_type)`。
+     *   界面上那颗 chip 已经灰掉，走到这里只剩竞态（两个人同时改），
+     *   由 `TodayViewModel` 落 `error_duplicate_meal` 一句准话。
      */
     @Transaction
     suspend fun upsertUser(entity: MealEntity): Long {
         if (entity.id != 0L) {
             val byId = getById(entity.id)
             if (byId != null) {
+                val occupant: MealEntity? = getByDateAndType(entity.dateEpochDay, entity.mealType)
+                if (occupant != null && occupant.id != byId.id && !occupant.isActive) {
+                    update(
+                        occupant.copy(
+                            itemsText = entity.itemsText,
+                            kcal = entity.kcal,
+                            proteinG = entity.proteinG,
+                            sortOrder = entity.sortOrder,
+                            isUserEdited = true,
+                            isActive = true,
+                            // 「吃了这餐」跟着内容走：它是这一餐的状态，不是槽位的。
+                            isCompleted = byId.isCompleted,
+                            createdAt = occupant.createdAt,
+                        )
+                    )
+                    softDelete(byId.id)
+                    return occupant.id
+                }
                 update(
                     entity.copy(
                         id = byId.id,

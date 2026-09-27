@@ -31,6 +31,7 @@ import com.ironhabit.app.R
 import com.ironhabit.app.domain.model.InputLimits
 import com.ironhabit.app.domain.model.Meal
 import com.ironhabit.app.domain.model.MealType
+import com.ironhabit.app.domain.usecase.MealSlotState
 import com.ironhabit.app.ui.components.mealTypeLabelRes
 import com.ironhabit.app.ui.theme.IronHabitSpacing
 
@@ -46,12 +47,16 @@ import com.ironhabit.app.ui.theme.IronHabitSpacing
  * - 热量 / 蛋白质：必须能解析，且落在 [InputLimits] 的区间内（不合法则禁用保存并提示）。
  *
  * @param meal 正在编辑的那一餐（打开弹层时的快照）
+ * @param slotStates 该日各餐次槽位的占用情况（决定哪颗 chip 能点，见 [MealSlotState]）。
+ *        缺省全 `FREE` 只用于预览/测试 —— 真实调用方必须给，否则四颗又全可点，
+ *        等于把"点了必然报错"那条路原样留着。
  * @param onSubmit 提交：餐次 / 已清洗条目 / 热量 / 蛋白质
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MealEditSheet(
     meal: Meal,
+    slotStates: Map<MealType, MealSlotState>,
     onDismissRequest: () -> Unit,
     onSubmit: (mealType: MealType, items: List<String>, kcal: Int, proteinG: Double) -> Unit,
     modifier: Modifier = Modifier,
@@ -112,10 +117,40 @@ fun MealEditSheet(
                 MealType.entries.forEach { type ->
                     FilterChip(
                         selected = mealType == type,
+                        // 被另一条活着的餐占着的槽位**不给点**：一天四餐齐全时点它必然撞
+                        // `UNIQUE(date_epoch_day, meal_type)`，以前的形状是"让用户点一下,
+                        // 再回头读一句报错"（审查报告 P2-1）。
+                        enabled = slotStates[type] != MealSlotState.TAKEN,
                         onClick = { mealType = type },
                         label = { Text(text = stringResource(mealTypeLabelRes(type))) },
                     )
                 }
+            }
+
+            // 灰掉的那颗必须说清为什么灰：只有灰 chip 没有解释，用户读到的是"这 App 点不动"。
+            // 标签先整体取一张表：`joinToString` 的 transform 不是 inline，
+            // 直接把 `stringResource` 写进去编译不过（Compose 调用只能在 inline/Composable 上下文里）。
+            val slotLabels: Map<MealType, String> =
+                MealType.entries.associateWith { type -> stringResource(mealTypeLabelRes(type)) }
+            val takenLabels: String = MealType.entries
+                .filter { type -> slotStates[type] == MealSlotState.TAKEN }
+                .joinToString(separator = "、") { type -> slotLabels.getValue(type) }
+            if (takenLabels.isNotEmpty()) {
+                Text(
+                    text = stringResource(R.string.meal_slot_taken_hint, takenLabels),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            // 软删行也占槽，而它在列表里**看不见** —— 这一格允许点，但要点完当场说清后果：
+            // 改过来会把那顿被删的餐恢复并换成现在的内容（`MealDao.upsertUser` 里那一段兑现它）。
+            if (slotStates[mealType] == MealSlotState.DELETED) {
+                Text(
+                    text = stringResource(R.string.meal_slot_deleted_hint, slotLabels.getValue(mealType)),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.tertiary,
+                )
             }
 
             OutlinedTextField(

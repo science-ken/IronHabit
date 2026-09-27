@@ -17,6 +17,7 @@ import com.ironhabit.app.domain.usecase.DeleteMealUseCase
 import com.ironhabit.app.domain.usecase.DetailedCheckInUseCase
 import com.ironhabit.app.domain.usecase.GenerateDietPlanUseCase
 import com.ironhabit.app.domain.usecase.GenerateTrainingPlanUseCase
+import com.ironhabit.app.domain.usecase.GetMealSlotStatesUseCase
 import com.ironhabit.app.domain.usecase.GetTodayMealsUseCase
 import com.ironhabit.app.domain.usecase.GetTodayOverviewUseCase
 import com.ironhabit.app.domain.usecase.QuickCheckInUseCase
@@ -26,6 +27,7 @@ import com.ironhabit.app.domain.usecase.ToggleMealUseCase
 import com.ironhabit.app.domain.usecase.ToggleSetUseCase
 import com.ironhabit.app.domain.usecase.UndoCheckInUseCase
 import com.ironhabit.app.domain.usecase.UpsertMealUseCase
+import com.ironhabit.app.domain.usecase.MealSlotState
 import com.ironhabit.app.domain.util.DateUtils
 import com.ironhabit.app.test.MainDispatcherRule
 import com.ironhabit.app.test.todayClockFor
@@ -41,6 +43,7 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -55,6 +58,8 @@ class TodayViewModelMealEditTest {
     val mainDispatcherRule = MainDispatcherRule()
 
     private val getTodayOverview = mockk<GetTodayOverviewUseCase>()
+    /** 「编辑这一餐」弹层的槽位占用来源：默认给空图（= 四颗都可点），需要时各测试自己改桩。 */
+    private val getMealSlotStates = mockk<GetMealSlotStatesUseCase>(relaxed = true)
     private val quickCheckIn = mockk<QuickCheckInUseCase>(relaxed = true)
     private val detailedCheckIn = mockk<DetailedCheckInUseCase>(relaxed = true)
     private val undoCheckIn = mockk<UndoCheckInUseCase>(relaxed = true)
@@ -132,6 +137,8 @@ class TodayViewModelMealEditTest {
             // 本用例只验证「编辑这一餐」弹层：条目相关的协作者给静默假实现即可。
             addMealItem = mockk<com.ironhabit.app.domain.usecase.AddMealItemUseCase>(relaxed = true),
             changePortion = mockk<com.ironhabit.app.domain.usecase.ChangeMealItemPortionUseCase>(relaxed = true),
+            // 「编辑这一餐」弹层要读槽位占用；本组用例不验证它，给空图即可。
+            getMealSlotStates = getMealSlotStates,
             mealItemRepository = mockk<com.ironhabit.app.domain.repository.MealItemRepository>(relaxed = true),
             checkInRepository = checkInRepository,
             planRepository = planRepository,
@@ -154,6 +161,40 @@ class TodayViewModelMealEditTest {
         viewModel.onDismissMealEditor()
         assertNull("取消后应关闭弹层", viewModel.uiState.value.editingMeal)
     }
+
+    /**
+     * 打开弹层要顺手读一次槽位占用（审查报告 P2-1）。
+     *
+     * 判据本身在 `MealSlotStatesTest`，这一条钉的是**接线**：读的是**所选日**、
+     * 排他 id 是**正在编辑的那一餐**，结果落到 `editingMealSlots` 供弹层灰掉 chip；
+     * 关闭时要一起清掉（否则下次打开会先闪一下上一天的占用）。
+     */
+    @Test
+    fun openingTheEditorLoadsSlotOccupancyForTheSelectedDay() =
+        runTest(mainDispatcherRule.testDispatcher) {
+            val slots = mapOf(
+                MealType.LUNCH to MealSlotState.TAKEN,
+                MealType.SNACK to MealSlotState.DELETED,
+            )
+            coEvery { getMealSlotStates(today, excludeMealId = 77L) } returns slots
+            val viewModel = newViewModel()
+            advanceUntilIdle()
+
+            viewModel.onOpenMealEditor(meal)
+            advanceUntilIdle()
+
+            assertEquals(
+                "弹层拿不到占用就没法灰掉「点了必然报错」的那颗 chip",
+                slots, viewModel.uiState.value.editingMealSlots,
+            )
+
+            viewModel.onDismissMealEditor()
+            advanceUntilIdle()
+            assertTrue(
+                "关闭弹层要把占用一起清掉",
+                viewModel.uiState.value.editingMealSlots.isEmpty(),
+            )
+        }
 
     @Test
     fun saveEdit_forwardsContent_andClosesEditor() = runTest(mainDispatcherRule.testDispatcher) {

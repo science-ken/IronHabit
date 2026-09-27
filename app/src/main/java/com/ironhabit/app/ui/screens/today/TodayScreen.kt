@@ -442,6 +442,7 @@ fun TodayScreen(
     if (editingMeal != null && !isFutureDay) {
         MealEditSheet(
             meal = editingMeal,
+            slotStates = uiState.editingMealSlots,
             onDismissRequest = viewModel::onDismissMealEditor,
             onSubmit = { mealType, items, kcal, proteinG ->
                 viewModel.onSaveMealEdit(

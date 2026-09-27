@@ -25,7 +25,9 @@ import com.ironhabit.app.domain.usecase.ChangeMealItemPortionUseCase
 import com.ironhabit.app.domain.usecase.DeleteMealUseCase
 import com.ironhabit.app.domain.usecase.DetailedCheckInUseCase
 import com.ironhabit.app.domain.usecase.GenerateDietPlanUseCase
+import com.ironhabit.app.domain.usecase.GetMealSlotStatesUseCase
 import com.ironhabit.app.domain.usecase.GenerateTrainingPlanUseCase
+import com.ironhabit.app.domain.usecase.MealSlotState
 import com.ironhabit.app.domain.usecase.PlanPreview
 import com.ironhabit.app.domain.usecase.PlanPreviewHolder
 import com.ironhabit.app.domain.usecase.GeneratedPlanSummary
@@ -88,6 +90,7 @@ class TodayViewModel @Inject constructor(
     private val planPreviewHolder: PlanPreviewHolder,
     private val deleteMeal: DeleteMealUseCase,
     private val upsertMeal: UpsertMealUseCase,
+    private val getMealSlotStates: GetMealSlotStatesUseCase,
     private val addMealItem: AddMealItemUseCase,
     private val changePortion: ChangeMealItemPortionUseCase,
     private val mealItemRepository: MealItemRepository,
@@ -429,12 +432,23 @@ class TodayViewModel @Inject constructor(
      * 保存走 [onSaveMealEdit]：写库成功后才关闭弹层。
      */
     fun onOpenMealEditor(meal: Meal) {
-        _uiState.update { state -> state.copy(editingMeal = meal) }
+        _uiState.update { state -> state.copy(editingMeal = meal, editingMealSlots = emptyMap()) }
+        viewModelScope.launch {
+            // 槽位占用要在**打开这一刻**读一次（含软删行）：弹层靠它把"点了必然撞唯一索引"
+            // 的那颗餐次 chip 灰掉。读失败就留空图 = 四颗都可点 = 回到老行为，
+            // 而不是把整个编辑入口锁死（宁可退回旧状，也不要新挡路）。
+            val slots: Map<MealType, MealSlotState> = runCatching {
+                getMealSlotStates(epochDay = currentEpochDay(), excludeMealId = meal.id)
+            }.getOrDefault(emptyMap())
+            _uiState.update { state ->
+                if (state.editingMeal?.id == meal.id) state.copy(editingMealSlots = slots) else state
+            }
+        }
     }
 
     /** 关闭编辑弹层（取消编辑，不改任何数据）。 */
     fun onDismissMealEditor() {
-        _uiState.update { state -> state.copy(editingMeal = null) }
+        _uiState.update { state -> state.copy(editingMeal = null, editingMealSlots = emptyMap()) }
     }
 
     /**
