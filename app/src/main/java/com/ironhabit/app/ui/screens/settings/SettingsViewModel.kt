@@ -19,6 +19,7 @@ import com.ironhabit.app.domain.repository.BodyMetricRepository
 import com.ironhabit.app.domain.repository.SettingsRepository
 import com.ironhabit.app.domain.usecase.ScheduleReminderUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.util.Locale
 import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -404,8 +405,16 @@ class SettingsViewModel @Inject constructor(
     }
 }
 
-/** `HH:mm`（纯数字，无硬编码中文）。 */
-private fun formatTime(hour: Int, minute: Int): String = "%02d:%02d".format(hour, minute)
+/**
+ * `HH:mm`（纯数字，无硬编码中文）。
+ *
+ * 必须钉 `Locale.ROOT`：`String.format` 的默认重载按**设备语言**渲染数字，
+ * 在阿拉伯语一类 locale 下 `07:30` 会变成当地数字（审查报告 P3-33），
+ * 而这一串同时出现在设置页正文与保存后的 Snackbar 里。
+ * 时间读数不是本地化文案 —— 全 App 它只该有一种写法。
+ */
+private fun formatTime(hour: Int, minute: Int): String =
+    String.format(Locale.ROOT, "%02d:%02d", hour, minute)
 
 /** [AppSettings] → [SettingsUiState]（档案 / 体重 / 瞬态字段由 ViewModel 维护）。 */
 private fun AppSettings.toUiState(): SettingsUiState = SettingsUiState(

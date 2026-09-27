@@ -99,11 +99,24 @@ class BuiltInFoodsDataTest {
         BuiltInFoods.toDomain(presets) // 未知标签会在这里抛 IllegalArgumentException
     }
 
+    /**
+     * 「PEANUT」这个词表定义覆盖到的行，库里必须真的带上标签。
+     *
+     * 词表定义在 `BuiltInMealTemplates` 的忌口说明里：**花生、核桃、杏仁等坚果类**。
+     * 2026-09-25 那份审查报告点出库里核桃仁/杏仁/腰果三条是空标签 —— 于是用户勾了
+     * 忌口「花生/坚果」之后，外部 AI 计划里的杏仁行不会被这道闸挡下
+     * （`ExternalPlanDocumentParser` 是拿 `food.dietaryTags ∩ 忌口` 判的）。
+     * 模板那侧的核桃/杏仁一直都带标签，两侧不该两种口径。
+     *
+     * ⚠️ 这条闸是**尽力而为**，界面上也这么写着（`food_restricted_disclaimer`：
+     * 「没有标注的食物不代表安全」）—— 葵花籽仁/黑芝麻这类种子刻意留在标签外，
+     * 它们不在词表那句「坚果类」的措辞里。
+     */
     @Test
     fun peanutRowsCarryThePeanutTag() {
-        val peanut = presets.filter { it.name.contains("花生") }
-        assertTrue("内置库里有花生条目却没有 PEANUT 标签，忌口过滤会放行它", peanut.isNotEmpty())
-        peanut.forEach {
+        val nuts = presets.filter { preset -> NUT_NAMES.any { name -> preset.name.contains(name) } }
+        assertTrue("内置库里有花生/坚果条目却没有 PEANUT 标签，忌口过滤会放行它", nuts.isNotEmpty())
+        nuts.forEach {
             assertTrue("「${it.name}」缺 PEANUT 标签", it.dietaryTags.contains("PEANUT"))
         }
     }
@@ -140,5 +153,11 @@ class BuiltInFoodsDataTest {
 
         /** 真实食物数据里热量与宏量的正常偏差上限（纤维、有机酸、酒精造成）。 */
         const val MAX_DEVIATION: Double = 0.12
+
+        /**
+         * 词表那句「花生、核桃、杏仁等坚果类」点到的名字（定义见 `BuiltInMealTemplates`）。
+         * 种子类（葵花籽仁、黑芝麻）刻意不在内 —— 那不是那句话覆盖的东西。
+         */
+        val NUT_NAMES: List<String> = listOf("花生", "核桃", "杏仁", "腰果")
     }
 }

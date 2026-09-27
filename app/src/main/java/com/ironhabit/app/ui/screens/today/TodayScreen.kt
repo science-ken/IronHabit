@@ -326,7 +326,14 @@ fun TodayScreen(
                         SectionTitle(text = stringResource(R.string.title_today_meals))
                         // 入口放在**标题正下方**（不是弹层底部）：半展开时底部那行压根不被渲染。
                         // 也在 if/else 外面 —— 一条餐都没生成的空日里同样要能进库。
-                        FoodLibraryEntry(onOpen = { showFoodLibrary = true })
+                        // 食物库是第二层弹层：先收掉清单（同上面几处 —— 两个 ModalBottomSheet 不能叠，
+                        // 叠了之后返回键收起哪一层都说不清）。
+                        FoodLibraryEntry(
+                            onOpen = {
+                                sheetTarget = null
+                                showFoodLibrary = true
+                            },
+                        )
                         if (uiState.meals.isEmpty()) {
                             EmptyState(
                                 text = stringResource(R.string.empty_today_meals),
@@ -350,7 +357,11 @@ fun TodayScreen(
                                         viewModel.onOpenMealEditor(meal)
                                     },
                                     onDelete = { viewModel.onDeleteMeal(meal) },
-                                    onAddFood = { viewModel.onOpenFoodPicker(meal) },
+                                    // 挑菜用的食物库同样是第二层：先收掉这一餐的清单。
+                                    onAddFood = {
+                                        sheetTarget = null
+                                        viewModel.onOpenFoodPicker(meal)
+                                    },
                                     // 与「编辑这一餐」同一套路：第二层弹层先收掉清单。
                                     onEditItem = { item ->
                                         sheetTarget = null

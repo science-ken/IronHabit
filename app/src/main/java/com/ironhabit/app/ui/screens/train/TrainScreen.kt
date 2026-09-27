@@ -4,6 +4,7 @@ import androidx.annotation.StringRes
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -147,27 +148,39 @@ fun TrainScreen(
                 )
             }
 
-            selectedTab == TrainTab.PLAN -> PlanSection(
-                uiState = uiState,
-                onSelectDay = viewModel::onSelectDay,
-                onDeletePlan = viewModel::onDeletePlan,
-                onResetPlan = viewModel::onResetPlan,
-                onAddPlan = { onAddPlan(uiState.selectedDay) },
-                onEditPlan = { planId -> onEditPlan(planId, uiState.selectedDay) },
-            )
+            /* 三个分段的内容区都要吃**剩下的高度**，不是整个屏幕的高度。
+               分段条本身占 ~40dp + 一处 spacing，而它们内部写的是 `fillMaxSize()`
+               —— 于是容器底边落到屏幕外约 36dp，最后那一截内容**永远滚不出来**
+               （审查报告 P2-10）。这里在 `Column` 的作用域里给一个 `weight(1f)` 的盒子，
+               内部那个 `fillMaxSize()` 就正好等于剩余高度，改一处即三个分段同时修好。
+               口径与今日页 `TodayScreen` 的 `weight(1f)` 一致。 */
+            selectedTab == TrainTab.PLAN -> Box(modifier = Modifier.weight(1f)) {
+                PlanSection(
+                    uiState = uiState,
+                    onSelectDay = viewModel::onSelectDay,
+                    onDeletePlan = viewModel::onDeletePlan,
+                    onResetPlan = viewModel::onResetPlan,
+                    onAddPlan = { onAddPlan(uiState.selectedDay) },
+                    onEditPlan = { planId -> onEditPlan(planId, uiState.selectedDay) },
+                )
+            }
 
-            selectedTab == TrainTab.LIBRARY -> LibrarySection(
-                uiState = uiState,
-                onAddExercise = onAddExercise,
-                onOpenExercise = onOpenExercise,
-                onOpenAddToPlan = viewModel::onOpenAddToPlanSheet,
-                onAdoptSuggestion = viewModel::onAdoptSuggestion,
-            )
+            selectedTab == TrainTab.LIBRARY -> Box(modifier = Modifier.weight(1f)) {
+                LibrarySection(
+                    uiState = uiState,
+                    onAddExercise = onAddExercise,
+                    onOpenExercise = onOpenExercise,
+                    onOpenAddToPlan = viewModel::onOpenAddToPlanSheet,
+                    onAdoptSuggestion = viewModel::onAdoptSuggestion,
+                )
+            }
 
-            else -> HistorySection(
-                history = uiState.history,
-                onOpenHistory = onOpenHistory,
-            )
+            else -> Box(modifier = Modifier.weight(1f)) {
+                HistorySection(
+                    history = uiState.history,
+                    onOpenHistory = onOpenHistory,
+                )
+            }
         }
     }
 

@@ -75,6 +75,7 @@ import com.ironhabit.app.ui.components.equipmentLabelRes
 import com.ironhabit.app.ui.components.dietRestrictionLabelRes
 import com.ironhabit.app.ui.components.injuryLabelRes
 import com.ironhabit.app.ui.theme.IronHabitSpacing
+import java.util.Locale
 
 /**
  * 「设置」页：主题 / 单位 / 我的档案 / 每日提醒（含精确闹钟与通知权限引导）/ 隐私 / 版本 / 备份入口。
@@ -856,8 +857,16 @@ private fun showTimePicker(
     ).show()
 }
 
-/** `HH:mm`（纯数字，无硬编码中文）。 */
-private fun formatTime(hour: Int, minute: Int): String = "%02d:%02d".format(hour, minute)
+/**
+ * `HH:mm`（纯数字，无硬编码中文）。
+ *
+ * 必须钉 `Locale.ROOT`：`String.format` 的默认重载按**设备语言**渲染数字，
+ * 在阿拉伯语一类 locale 下 `07:30` 会变成当地数字（审查报告 P3-33），
+ * 而这一串同时出现在设置页正文与保存后的 Snackbar 里。
+ * 时间读数不是本地化文案 —— 全 App 它只该有一种写法。
+ */
+private fun formatTime(hour: Int, minute: Int): String =
+    String.format(Locale.ROOT, "%02d:%02d", hour, minute)
 
 /** 是否已授予通知权限（API 33+ 需运行时权限；低版本视为已授予）。 */
 private fun isNotificationGranted(context: Context): Boolean {
