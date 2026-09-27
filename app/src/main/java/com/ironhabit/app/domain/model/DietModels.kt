@@ -51,6 +51,13 @@ data class MealTotals(
  */
 data class TodayMeals(
     val meals: List<Meal> = emptyList(),
+    /**
+     * 该日被软删的餐（`is_active = 0`）—— 不在 [meals] 里，也不参与合计/摄入。
+     *
+     * 带出来只为了一个入口：「已删除 N 条 · 恢复」。库里一直留着这些行，
+     * 以前界面上却再也看不见，删一下就是单向门。
+     */
+    val deletedMeals: List<Meal> = emptyList(),
     val totals: MealTotals = MealTotals(),
     val items: List<MealItem> = emptyList(),
     val intake: MealIntake = MealIntake(0, 0.0, 0.0, 0.0, 0, emptySet()),

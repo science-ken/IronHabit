@@ -18,6 +18,13 @@ interface MealRepository {
     /** 观察某日启用餐列表（`is_active = 1`），按 `sortOrder` 升序。 */
     fun observeMeals(epochDay: Long): Flow<List<Meal>>
 
+    /**
+     * 某日的全部餐行，**含软删行**（`is_active = 0`）。
+     *
+     * 只给「今日饮食」的「已删除 N 条 · 恢复」用 —— 软删的行不该是单向门。
+     */
+    fun observeMealsIncludingInactive(epochDay: Long): Flow<List<Meal>>
+
     /** 观察某日合计（已摄入 / 计划）。空集时 `COALESCE` 兜底为 0。 */
     fun observeTotals(epochDay: Long): Flow<MealTotals>
 
@@ -58,4 +65,7 @@ interface MealRepository {
 
     /** 软删除一餐（`isActive = false` + `isUserEdited = true`），**保留唯一索引槽位**。 */
     suspend fun delete(id: Long)
+
+    /** 恢复一餐（[delete] 的反向操作）：只翻 `is_active`，不动 `is_user_edited`。 */
+    suspend fun restore(id: Long)
 }

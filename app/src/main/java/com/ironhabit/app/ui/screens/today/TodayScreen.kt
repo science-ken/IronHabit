@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.SelfImprovement
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -34,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ironhabit.app.R
+import com.ironhabit.app.domain.model.Meal
 import com.ironhabit.app.domain.model.TodayPlanItem
 import com.ironhabit.app.domain.util.DateUtils
 import com.ironhabit.app.ui.components.DietTotalsBar
@@ -47,6 +49,7 @@ import com.ironhabit.app.ui.components.MealItemEditSheet
 import com.ironhabit.app.ui.components.PlanDateStrip
 import com.ironhabit.app.ui.components.SkeletonCard
 import com.ironhabit.app.ui.components.StatusNotice
+import com.ironhabit.app.ui.components.mealTypeLabelRes
 import com.ironhabit.app.ui.screens.checkin.CheckInSheet
 import com.ironhabit.app.ui.screens.food.FoodLibraryEntry
 import com.ironhabit.app.ui.screens.food.FoodLibrarySheet
@@ -101,6 +104,8 @@ fun TodayScreen(
     // 所以不复用 sheetTarget：混进去就要给 TodayUiState 加字段，
     // 而那个 VM 的 applyData 是逐字段手写复制的，本项目已经漏抄过三次。
     var showFoodLibrary by remember { mutableStateOf(false) }
+    /** 「移除这餐」的待确认那一餐：非 `null` 时弹确认框（点图标本身不写库）。 */
+    var mealToDelete by remember { mutableStateOf<Meal?>(null) }
 
     // 未来日只读：所选日 > 今天（`todayEpochDay` == 0 表示尚未加载，不判定）。
     val isFutureDay: Boolean =
@@ -356,7 +361,9 @@ fun TodayScreen(
                                         sheetTarget = null
                                         viewModel.onOpenMealEditor(meal)
                                     },
-                                    onDelete = { viewModel.onDeleteMeal(meal) },
+                                    // 只挂"待确认"，不直接删：这个图标没有文字，
+                                    // 一按就没了一餐、事后只有一句「已移除」是说不清的。
+                                    onDelete = { mealToDelete = meal },
                                     // 挑菜用的食物库同样是第二层：先收掉这一餐的清单。
                                     onAddFood = {
                                         sheetTarget = null
@@ -383,6 +390,34 @@ fun TodayScreen(
                                 enabled = !isFutureDay,
                             ) {
                                 Text(text = stringResource(R.string.action_regenerate_diet))
+                            }
+                        }
+
+                        // 已移除的餐：软删的行一直在库里，以前只是没有任何地方能再看见它们
+                        // —— 删一下就是一扇单向门（习惯、食物库都补过这一格，饮食漏了）。
+                        // 刻意放在 `if (meals.isEmpty())` 外面：一餐都没了的那种状态，
+                        // 空态里不能有恢复入口，否则"删光 → 找不回来"又成立一次。
+                        // 文案复用 chip_habit_deleted_count（它就是通用的「已删除 N 条」）。
+                        if (uiState.deletedMeals.isNotEmpty()) {
+                            FilterChip(
+                                selected = uiState.showDeletedMeals,
+                                onClick = viewModel::onToggleDeletedMeals,
+                                label = {
+                                    Text(
+                                        text = stringResource(
+                                            R.string.chip_habit_deleted_count,
+                                            uiState.deletedMeals.size,
+                                        ),
+                                    )
+                                },
+                            )
+                            if (uiState.showDeletedMeals) {
+                                uiState.visibleDeletedMeals.forEach { deleted ->
+                                    MealDeletedRow(
+                                        meal = deleted,
+                                        onRestore = { viewModel.onRestoreMeal(deleted) },
+                                    )
+                                }
                             }
                         }
                     }
@@ -418,6 +453,21 @@ fun TodayScreen(
     }
 
     // 补录弹层：未来日只读，不弹（双保险：卡片入口已禁用）。
+    // 「移除这餐」先要一次确认：这一按会拿走一整天里的一个餐次槽位，
+    // 而入口是卡片右上角一个**没有文字**的图标 —— 事先不报出是哪一餐，
+    // 事后只有一句「已移除这餐」，谁也说不清少的是哪顿（产品口径：覆盖前必确认）。
+    val pendingMeal: Meal? = mealToDelete
+    if (pendingMeal != null) {
+        RemoveMealConfirmDialog(
+            meal = pendingMeal,
+            onConfirm = {
+                mealToDelete = null
+                viewModel.onDeleteMeal(pendingMeal)
+            },
+            onDismiss = { mealToDelete = null },
+        )
+    }
+
     val currentSheetItem = sheetItem
     if (currentSheetItem != null && !isFutureDay) {
         CheckInSheet(
@@ -661,6 +711,80 @@ private fun CopyNextWeekConfirmDialog(
         confirmButton = {
             TextButton(onClick = onConfirm) {
                 Text(text = stringResource(R.string.action_copy))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(text = stringResource(R.string.action_cancel))
+            }
+        },
+    )
+}
+
+
+/** 已移除那一餐的恢复行：报出是哪一餐、大概多少热量，右边一颗「恢复」。 */
+@Composable
+private fun MealDeletedRow(
+    meal: Meal,
+    onRestore: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = IronHabitSpacing.xs),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = stringResource(mealTypeLabelRes(meal.mealType)),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = stringResource(R.string.label_meal_removed_summary),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        TextButton(onClick = onRestore) {
+            Text(text = stringResource(R.string.action_restore))
+        }
+    }
+}
+
+/**
+ * 「移除这餐」的确认框（产品口径：用户数据一律软删、**覆盖前必确认**）。
+ *
+ * 正文必须报出是哪一餐、大概多少热量，并说清两件事：
+ * 重新生成不会再排它（`is_user_edited` 被置上了）、以及**在「已删除」里可以恢复**。
+ * 少了后半句，这个入口对使用者就是一扇单向门。
+ */
+@Composable
+private fun RemoveMealConfirmDialog(
+    meal: Meal,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(text = stringResource(R.string.dialog_remove_meal_title)) },
+        text = {
+            Text(
+                text = stringResource(
+                    R.string.dialog_remove_meal_message,
+                    stringResource(mealTypeLabelRes(meal.mealType)),
+                    meal.kcal,
+                ),
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onConfirm()
+                },
+            ) {
+                Text(text = stringResource(R.string.action_remove_meal))
             }
         },
         dismissButton = {

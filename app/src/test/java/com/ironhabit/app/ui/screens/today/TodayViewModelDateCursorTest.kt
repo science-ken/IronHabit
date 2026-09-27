@@ -150,6 +150,7 @@ class TodayViewModelDateCursorTest {
             generateDietPlan = generateDietPlan,
             generateTrainingPlan = mockk<GenerateTrainingPlanUseCase>(relaxed = true),
             deleteMeal = deleteMeal,
+            restoreMeal = mockk<com.ironhabit.app.domain.usecase.RestoreMealUseCase>(relaxed = true),
             upsertMeal = upsertMeal,
             // 本用例只验证日期游标：条目相关的协作者给静默假实现即可。
             addMealItem = mockk<com.ironhabit.app.domain.usecase.AddMealItemUseCase>(relaxed = true),

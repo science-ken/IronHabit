@@ -36,6 +36,11 @@ class MealRepositoryImpl @Inject constructor(
             .map { entities -> entities.map(MealMapper::toDomain) }
             .flowOn(ioDispatcher)
 
+    override fun observeMealsIncludingInactive(epochDay: Long): Flow<List<Meal>> =
+        mealDao.observeByDateIncludingInactive(epochDay)
+            .map { entities -> entities.map(MealMapper::toDomain) }
+            .flowOn(ioDispatcher)
+
     override suspend fun dietTally(todayEpochDay: Long): DietTally {
         val raw: DietTallyRaw = mealDao.dietTally(todayEpochDay)
         return DietTally(
@@ -85,5 +90,9 @@ class MealRepositoryImpl @Inject constructor(
     override suspend fun delete(id: Long) {
         // 软删除：保留唯一索引槽位 + 阻止重新生成复活。
         mealDao.softDelete(id)
+    }
+
+    override suspend fun restore(id: Long) {
+        mealDao.restore(id)
     }
 }

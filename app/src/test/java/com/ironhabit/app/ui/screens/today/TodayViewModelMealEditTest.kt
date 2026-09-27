@@ -20,6 +20,7 @@ import com.ironhabit.app.domain.usecase.GenerateTrainingPlanUseCase
 import com.ironhabit.app.domain.usecase.GetMealSlotStatesUseCase
 import com.ironhabit.app.domain.usecase.GetTodayMealsUseCase
 import com.ironhabit.app.domain.usecase.GetTodayOverviewUseCase
+import com.ironhabit.app.domain.usecase.RestoreMealUseCase
 import com.ironhabit.app.domain.usecase.QuickCheckInUseCase
 import com.ironhabit.app.domain.usecase.SetRpeUseCase
 import com.ironhabit.app.domain.usecase.ToggleHabitUseCase
@@ -60,6 +61,7 @@ class TodayViewModelMealEditTest {
     private val getTodayOverview = mockk<GetTodayOverviewUseCase>()
     /** 「编辑这一餐」弹层的槽位占用来源：默认给空图（= 四颗都可点），需要时各测试自己改桩。 */
     private val getMealSlotStates = mockk<GetMealSlotStatesUseCase>(relaxed = true)
+    private val restoreMeal = mockk<RestoreMealUseCase>()
     private val quickCheckIn = mockk<QuickCheckInUseCase>(relaxed = true)
     private val detailedCheckIn = mockk<DetailedCheckInUseCase>(relaxed = true)
     private val undoCheckIn = mockk<UndoCheckInUseCase>(relaxed = true)
@@ -108,10 +110,13 @@ class TodayViewModelMealEditTest {
         proteinG = 35.0,
     )
 
-    private fun newViewModel(): TodayViewModel {
+    /** @param todayMeals 需要验证别的餐组合（比如带软删行）时由调用方给，默认只有那一条生效餐。 */
+    private fun newViewModel(
+        todayMeals: TodayMeals = TodayMeals(meals = listOf(meal)),
+    ): TodayViewModel {
         every { getTodayOverview.invoke(today) } returns flowOf(TodayOverview(dateEpochDay = today))
         every { getTodayOverview.invoke(pastDay) } returns flowOf(TodayOverview(dateEpochDay = pastDay))
-        every { getTodayMeals.invoke(today) } returns flowOf(TodayMeals(meals = listOf(meal)))
+        every { getTodayMeals.invoke(today) } returns flowOf(todayMeals)
         every { getTodayMeals.invoke(pastDay) } returns flowOf(TodayMeals())
         every { planRepository.observePlannedWeekdays() } returns flowOf(emptyList())
         // P3：今日页会读「每周相同」那份是否存在（开关状态）。
@@ -133,6 +138,7 @@ class TodayViewModelMealEditTest {
             generateDietPlan = generateDietPlan,
             generateTrainingPlan = mockk<GenerateTrainingPlanUseCase>(relaxed = true),
             deleteMeal = deleteMeal,
+            restoreMeal = restoreMeal,
             upsertMeal = upsertMeal,
             // 本用例只验证「编辑这一餐」弹层：条目相关的协作者给静默假实现即可。
             addMealItem = mockk<com.ironhabit.app.domain.usecase.AddMealItemUseCase>(relaxed = true),
@@ -195,6 +201,43 @@ class TodayViewModelMealEditTest {
                 viewModel.uiState.value.editingMealSlots.isEmpty(),
             )
         }
+
+    /**
+     * 恢复一餐：只把 id 交给用例，并把「已恢复」说回去。
+     *
+     * 这一格存在的理由是软删的语义 —— 行一直在库里，缺的从来不是数据，是入口。
+     */
+    @Test
+    fun restoreMeal_forwardsIdAndSaysRestored() = runTest(mainDispatcherRule.testDispatcher) {
+        coEvery { restoreMeal(77L) } returns Unit
+        val viewModel = newViewModel()
+        advanceUntilIdle()
+
+        viewModel.onRestoreMeal(meal)
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { restoreMeal(77L) }
+        assertEquals(R.string.msg_restored, viewModel.uiState.value.snackbarRes)
+    }
+
+    /** 「已删除 N 条」的展开门控：收起时界面拿不到那几行，展开才交出去。 */
+    @Test
+    fun deletedMealsGateBehindTheToggle() = runTest(mainDispatcherRule.testDispatcher) {
+        val deleted = meal.copy(id = 88L, mealType = MealType.SNACK, isActive = false)
+        val viewModel = newViewModel(
+            TodayMeals(meals = listOf(meal), deletedMeals = listOf(deleted)),
+        )
+        advanceUntilIdle()
+
+        assertEquals("软删的餐要带出来，否则删完就找不回来了", listOf(deleted), viewModel.uiState.value.deletedMeals)
+        assertTrue("默认收起", viewModel.uiState.value.visibleDeletedMeals.isEmpty())
+
+        viewModel.onToggleDeletedMeals()
+        assertEquals("展开后交出那几行", listOf(deleted), viewModel.uiState.value.visibleDeletedMeals)
+
+        viewModel.onToggleDeletedMeals()
+        assertTrue("再点收回", viewModel.uiState.value.visibleDeletedMeals.isEmpty())
+    }
 
     @Test
     fun saveEdit_forwardsContent_andClosesEditor() = runTest(mainDispatcherRule.testDispatcher) {

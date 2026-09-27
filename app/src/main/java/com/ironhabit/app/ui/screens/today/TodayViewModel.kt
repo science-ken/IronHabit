@@ -23,6 +23,7 @@ import com.ironhabit.app.domain.usecase.AddMealItemResult
 import com.ironhabit.app.domain.usecase.AddMealItemUseCase
 import com.ironhabit.app.domain.usecase.ChangeMealItemPortionUseCase
 import com.ironhabit.app.domain.usecase.DeleteMealUseCase
+import com.ironhabit.app.domain.usecase.RestoreMealUseCase
 import com.ironhabit.app.domain.usecase.DetailedCheckInUseCase
 import com.ironhabit.app.domain.usecase.GenerateDietPlanUseCase
 import com.ironhabit.app.domain.usecase.GetMealSlotStatesUseCase
@@ -89,6 +90,7 @@ class TodayViewModel @Inject constructor(
     private val generateTrainingPlan: GenerateTrainingPlanUseCase,
     private val planPreviewHolder: PlanPreviewHolder,
     private val deleteMeal: DeleteMealUseCase,
+    private val restoreMeal: RestoreMealUseCase,
     private val upsertMeal: UpsertMealUseCase,
     private val getMealSlotStates: GetMealSlotStatesUseCase,
     private val addMealItem: AddMealItemUseCase,
@@ -157,6 +159,7 @@ class TodayViewModel @Inject constructor(
                             )
                             overview.toUiState().copy(
                                 meals = meals.meals,
+                                deletedMeals = meals.deletedMeals,
                                 mealTotals = meals.totals,
                                 mealItems = meals.items,
                                 mealIntake = meals.intake,
@@ -319,10 +322,34 @@ class TodayViewModel @Inject constructor(
     }
 
     /** 删除这餐（软删除：`is_active = 0` + `is_user_edited = 1`，不会被重新生成复活）。 */
+    /**
+     * 移除一餐（软删）。
+     *
+     * ⚠️ 调用前必须过确认框（`TodayScreen` 里的 `mealToDelete`）：这一按会把那一餐从清单里
+     * 拿走，而用户点的是卡片右上角一个没有文字的图标 —— 事先不报出是哪一餐，
+     * 事后只有一句「已移除」，谁也说不清少的是哪顿。
+     */
     fun onDeleteMeal(meal: Meal) {
         performWrite(
             baseSnackbarRes = R.string.msg_meal_removed,
             block = { deleteMeal(meal.id) },
+        )
+    }
+
+    /** 展开 / 收起「已删除 N 条」。 */
+    fun onToggleDeletedMeals() {
+        _uiState.update { state -> state.copy(showDeletedMeals = !state.showDeletedMeals) }
+    }
+
+    /**
+     * 恢复一餐（[onDeleteMeal] 的反向操作）。
+     *
+     * 只翻 `is_active`：id 不变，所以挂在它下面的条目与「吃了这餐」的勾选原样接上。
+     */
+    fun onRestoreMeal(meal: Meal) {
+        performWrite(
+            baseSnackbarRes = R.string.msg_restored,
+            block = { restoreMeal(meal.id) },
         )
     }
 
@@ -782,6 +809,11 @@ class TodayViewModel @Inject constructor(
                 plans = data.plans,
                 habits = data.habits,
                 meals = data.meals,
+                // 同上：软删的那几餐也要搬。漏掉的表现不是崩溃、不是红灯，
+                // 而是「已删除 N 条」那颗 chip 永远不出现 —— 单向门原样留着。
+                // 钉住它的是 `TodayViewModelMealEditTest.deletedMealsGateBehindTheToggle`
+                // （走真实 VM，不是只看数据流那一层）。
+                deletedMeals = data.deletedMeals,
                 mealTotals = data.mealTotals,
                 // ⚠️ 这两个必须一起搬。`applyData` 是逐字段手写复制的，
                 // 漏一个就会被静默钉回默认值 —— 表现是"记了条目但数字不动"，

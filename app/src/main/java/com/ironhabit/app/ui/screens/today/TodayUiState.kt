@@ -46,6 +46,13 @@ data class TodayUiState(
     val plans: List<TodayPlanItem> = emptyList(),
     val habits: List<HabitItem> = emptyList(),
     val meals: List<Meal> = emptyList(),
+    /**
+     * 所选日被软删的餐（`is_active = 0`）：不在 [meals] 里、不参与合计与摄入，
+     * 只为了一个入口 —— 下面的「已删除 N 条 · 恢复」。
+     */
+    val deletedMeals: List<Meal> = emptyList(),
+    /** 是否展开已删除那一段。展开判据收在 [visibleDeletedMeals]，不放界面层。 */
+    val showDeletedMeals: Boolean = false,
     val mealTotals: MealTotals = MealTotals(),
     val dietTarget: DietTarget = DietTarget(),
     /**
@@ -142,4 +149,9 @@ data class TodayUiState(
     val errorRes: Int? = null,
     val snackbarRes: Int? = null,
     val snackbarArgs: List<String> = emptyList(),
-)
+) {
+
+    /** 收起时长度为 0（不渲染那一段）；展开时才交出 [deletedMeals]。 */
+    val visibleDeletedMeals: List<Meal>
+        get() = if (showDeletedMeals) deletedMeals else emptyList()
+}

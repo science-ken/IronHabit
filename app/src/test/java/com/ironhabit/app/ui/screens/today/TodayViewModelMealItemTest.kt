@@ -168,6 +168,7 @@ class TodayViewModelMealItemTest {
             generateTrainingPlan = mockk<GenerateTrainingPlanUseCase>(relaxed = true),
             planPreviewHolder = PlanPreviewHolder(),
             deleteMeal = deleteMeal,
+            restoreMeal = mockk<com.ironhabit.app.domain.usecase.RestoreMealUseCase>(relaxed = true),
             upsertMeal = upsertMeal,
             addMealItem = addMealItem,
             changePortion = changePortion,

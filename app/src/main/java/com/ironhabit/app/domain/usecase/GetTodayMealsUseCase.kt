@@ -33,7 +33,9 @@ class GetTodayMealsUseCase @Inject constructor(
 ) {
 
     operator fun invoke(epochDay: Long): Flow<TodayMeals> {
-        val mealsFlow = mealRepository.observeMeals(epochDay)
+        // 读**含软删行**的全量：软删的那几餐要能被界面看见并恢复（见 TodayMeals.deletedMeals）。
+        // 下面的合计/摄入仍然只用 active 那一份，口径不动。
+        val mealsFlow = mealRepository.observeMealsIncludingInactive(epochDay)
         val totalsFlow = mealRepository.observeTotals(epochDay)
         val itemsFlow = mealItemRepository.observeByDate(epochDay)
         // 餐与条目必须**成对**送进下面的 combine：实际摄入的算法是"以餐为轴"的
@@ -57,10 +59,13 @@ class GetTodayMealsUseCase @Inject constructor(
             weightFlow,
             isTrainingDayFlow,
         ) { mealsAndItems, totals, profile, weightKg, isTrainingDay ->
-            val meals: List<Meal> = mealsAndItems.first
+            val allMeals: List<Meal> = mealsAndItems.first
+            val meals: List<Meal> = allMeals.filter { meal -> meal.isActive }
+            val deletedMeals: List<Meal> = allMeals.filter { meal -> !meal.isActive }
             val items: List<MealItem> = mealsAndItems.second
             TodayMeals(
                 meals = meals,
+                deletedMeals = deletedMeals,
                 totals = totals,
                 items = items,
                 // 实际摄入走 MealIntakeCalculator 这一处：明细优先，

@@ -30,6 +30,17 @@ interface MealDao {
     fun observeByDate(epochDay: Long): Flow<List<MealEntity>>
 
     /**
+     * 观察某日**全部**餐行（含 `is_active = 0` 的软删行），按 `sort_order` 升序。
+     *
+     * 只给「今日饮食」那一段的「已删除 N 条 · 恢复」用：软删行一直在库里，
+     * 以前界面上没有任何地方能再看见它们 —— 删一下就是一扇单向门
+     * （习惯与食物库都补过这一格，饮食漏了）。
+     * 合计 / 摄入 / 台账那几条查询**不改口径**，仍然只看生效行。
+     */
+    @Query("SELECT * FROM meals WHERE date_epoch_day = :epochDay ORDER BY sort_order")
+    fun observeByDateIncludingInactive(epochDay: Long): Flow<List<MealEntity>>
+
+    /**
      * 「我的」页饮食台账那一行要的四个数，一次读回。
      *
      * 与 `dev.sh q` 里跑的是同一句，界面上每个数都能这样复现：
@@ -106,6 +117,19 @@ interface MealDao {
     /** 软删除：保留唯一索引槽位 + 阻止重新生成复活。**禁止用 `DELETE`**（§2.3）。 */
     @Query("UPDATE meals SET is_active = 0, is_user_edited = 1 WHERE id = :id")
     suspend fun softDelete(id: Long)
+
+    /**
+     * 恢复一餐（[softDelete] 的反向操作）：只翻 `is_active`。
+     *
+     * `is_user_edited` 保持 1 —— 这餐确实被用户动过，重新生成仍要跳过它，
+     * 否则"我删过又恢复回来"的那份内容会被 AI 覆盖掉。
+     *
+     * 不会撞 `UNIQUE(date_epoch_day, meal_type)`：所有 upsert 走的都是
+     * "按槽位找到软删行就复活它"（见 [getByDateAndType]），所以同一 `(日期, 餐次)`
+     * 不可能同时存在另一条生效行。
+     */
+    @Query("UPDATE meals SET is_active = 1 WHERE id = :id")
+    suspend fun restore(id: Long)
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(entity: MealEntity): Long

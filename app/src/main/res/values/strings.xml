@@ -877,6 +877,12 @@
     <string name="label_meal_kcal">%1$d kcal · 蛋白 %2$dg</string>
     <string name="action_delete_meal">移除这餐</string>
     <string name="msg_meal_removed">已移除这餐</string>
+    <string name="action_remove_meal">移除</string>
+    <!-- 「移除这餐」的确认框：入口是一个没有文字的图标，所以正文必须报出是哪一餐、
+         并说清"在已删除里可以恢复" —— 少了后半句，这个入口就是单向门。 -->
+    <string name="dialog_remove_meal_title">移除这一餐？</string>
+    <string name="dialog_remove_meal_message">「%1$s」（约 %2$d kcal）会从这个清单里移走，重新生成也不会再排它；在「已删除」里可以恢复</string>
+    <string name="label_meal_removed_summary">已移除 · 恢复后会回到这一天的清单</string>
     <!-- 编辑一餐（产品基线的「编辑一餐内容」入口） -->
     <string name="action_edit_meal">编辑这餐</string>
     <string name="title_edit_meal">编辑这一餐</string>
