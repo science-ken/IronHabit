@@ -40,8 +40,8 @@ android {
         applicationId = "com.ironhabit.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = 22
-        versionName = "2.0.11"
+        versionCode = 23
+        versionName = "2.0.12"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
     }
