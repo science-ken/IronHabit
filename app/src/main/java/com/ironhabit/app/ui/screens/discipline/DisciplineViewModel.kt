@@ -14,7 +14,7 @@ import com.ironhabit.app.domain.usecase.DeleteHabitUseCase
 import com.ironhabit.app.domain.usecase.GetHeatmapUseCase
 import com.ironhabit.app.domain.usecase.RestoreHabitUseCase
 import com.ironhabit.app.domain.usecase.ToggleHabitUseCase
-import com.ironhabit.app.domain.util.DateUtils
+import com.ironhabit.app.domain.util.TodayClock
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -31,9 +31,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.datetime.Clock
 import kotlinx.datetime.LocalDate
-import kotlinx.datetime.TimeZone
 
 /**
  * 「自律」页 ViewModel：习惯列表 + 热力图 + 本月小结。
@@ -53,8 +51,7 @@ class DisciplineViewModel @Inject constructor(
     private val habitRepository: HabitRepository,
     private val checkInRepository: CheckInRepository,
     private val calculateStreak: CalculateStreakUseCase,
-    private val clock: Clock,
-    private val timeZone: TimeZone,
+    private val todayClock: TodayClock,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DisciplineUiState())
@@ -109,8 +106,16 @@ class DisciplineViewModel @Inject constructor(
                 )
             }
 
-    private val dataState: StateFlow<DisciplineUiState> = retryTrigger
-        .flatMapLatest {
+    /**
+     * 换天与重试共用一条通道：[TodayClock.epochDay] 一发射就整条重订阅，
+     * 里面那几处 `todayEpochDay()` 于是都读到新的一天。
+     *
+     * 少了这一半的话，"跨午夜后没人写库 → 游标冻结在昨天"仍然成立（审查报告 P2-4）：
+     * 习惯勾选写的是 `uiState.dateEpochDay`，而它只在数据发射时才重算。
+     */
+    private val dataState: StateFlow<DisciplineUiState> =
+        combine(retryTrigger, todayClock.epochDay) { _, today: Long -> today }
+            .flatMapLatest {
             combine(
                 habitItemsFlow,
                 deletedHabitsFlow,
@@ -217,7 +222,8 @@ class DisciplineViewModel @Inject constructor(
         showDeleted = local.showDeleted,
     )
 
-    private fun todayEpochDay(): Long = DateUtils.todayEpochDay(clock, timeZone)
+    /** 同步取当下（写库与展示都用它，不再自己算）。 */
+    private fun todayEpochDay(): Long = todayClock.todayEpochDay()
 
     /** 本月 1 日的 epochDay。 */
     private fun monthStartEpochDay(): Long {

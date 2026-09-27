@@ -14,6 +14,7 @@ import com.ironhabit.app.domain.repository.SettingsRepository
 import com.ironhabit.app.domain.usecase.GetProfileLedgerUseCase
 import com.ironhabit.app.domain.usecase.GetTodayOverviewUseCase
 import com.ironhabit.app.domain.util.DateUtils
+import com.ironhabit.app.domain.util.TodayClock
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -29,8 +30,6 @@ import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.datetime.Clock
-import kotlinx.datetime.TimeZone
 
 /**
  * 「我的」页 ViewModel：首屏四个数字 + 「身体档案」概要（只读）。
@@ -58,8 +57,7 @@ class ProfileViewModel @Inject constructor(
     private val bodyMetricRepository: BodyMetricRepository,
     private val getTodayOverview: GetTodayOverviewUseCase,
     private val getProfileLedger: GetProfileLedgerUseCase,
-    private val clock: Clock,
-    private val timeZone: TimeZone,
+    private val todayClock: TodayClock,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProfileUiState())
@@ -68,9 +66,14 @@ class ProfileViewModel @Inject constructor(
     /** 数据流重订阅触发器（失败重试）：自增即让下面的聚合流整体重订阅一次。 */
     private val retryTrigger = MutableStateFlow(0L)
 
-    private val dataState: StateFlow<ProfileUiState> = retryTrigger
-        .flatMapLatest {
-            val today: Long = DateUtils.todayEpochDay(clock, timeZone)
+    /**
+     * 换天与重试共用一条通道：[TodayClock.epochDay] 一发射就整条重订阅，
+     * 于是"今天"不再停在订阅那一刻（审查报告 P2-6 的另一半 —— 这里以前只在
+     * 重订阅时重读时钟，App 一直开着跨 00:00 时档案页的窗口会滞后一天）。
+     */
+    private val dataState: StateFlow<ProfileUiState> =
+        combine(retryTrigger, todayClock.epochDay) { _, today: Long -> today }
+            .flatMapLatest { today: Long ->
             val weekStart: Long = DateUtils.weekStartMon1(today)
 
             combine(

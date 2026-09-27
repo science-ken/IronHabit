@@ -37,6 +37,14 @@ class PlanRepositoryImpl @Inject constructor(
     /** 「现在」所在周的周一（P3：默认读哪一周的计划）。 */
     private fun currentWeekStart(): Long = DateUtils.weekStartMon1(DateUtils.todayEpochDay(clock, timeZone))
 
+    /**
+     * 某一天"这一周"的排课。
+     *
+     * ⚠️ [currentWeekStart] 是在**本函数被调用的那一刻**算好、焊进返回的 Flow 的：
+     * Flow 自己不会跨周刷新。消费者要在换周时重新订阅一次 —— 现在这么做的是
+     * `TrainViewModel.plansFlow`（combine 了 `weekStartFlow`）。
+     * 少了那一步，App 开着跨过周一 00:00 就会"展示上周那天、写进本周那天"。
+     */
     override fun observePlansForDay(dayOfWeek: Int): Flow<List<WeekPlan>> =
         observeEffectivePlanForDay(dayOfWeek, currentWeekStart())
 

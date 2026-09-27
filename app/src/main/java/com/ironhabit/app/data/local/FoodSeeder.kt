@@ -4,10 +4,12 @@ import android.content.Context
 import android.util.Log
 import androidx.room.withTransaction
 import com.ironhabit.app.data.local.dao.FoodDao
+import com.ironhabit.app.data.local.entity.FoodEntity
 import com.ironhabit.app.data.mapper.FoodMapper
 import com.ironhabit.app.data.preset.BuiltInFoods
 import com.ironhabit.app.di.IoDispatcher
 import com.ironhabit.app.domain.model.Food
+import com.ironhabit.app.domain.model.FoodSource
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -56,15 +58,27 @@ class FoodSeeder @Inject constructor(
 
         database.withTransaction {
             var inserted = 0
+            var tagsBackfilled = 0
             for (food in presets) {
-                if (foodDao.getByName(food.name) != null) continue
-                val (entity, servings) = FoodMapper.toEntity(food)
-                val foodId: Long = foodDao.insert(entity)
-                if (servings.isNotEmpty()) {
-                    foodDao.insertServings(servings.map { serving -> serving.copy(foodId = foodId) })
+                val existing: FoodEntity? = foodDao.getByName(food.name)
+                if (existing == null) {
+                    val (entity, servings) = FoodMapper.toEntity(food)
+                    val foodId: Long = foodDao.insert(entity)
+                    if (servings.isNotEmpty()) {
+                        foodDao.insertServings(servings.map { serving -> serving.copy(foodId = foodId) })
+                    }
+                    inserted++
+                    continue
                 }
-                inserted++
+                // 同名行**不整体跳过**了：忌口标签这一列要随数据源补一次空，
+                // 否则补标只对新装机生效，老用户库里的核桃仁永远是空标签（判据见下面那个函数）。
+                val presetTags: String? = FoodMapper.toEntity(food).first.dietaryTags
+                if (fillsInMissingBuiltInTags(existing, presetTags)) {
+                    foodDao.update(existing.copy(dietaryTags = presetTags))
+                    tagsBackfilled++
+                }
             }
+            if (tagsBackfilled > 0) Log.i(TAG, "内置食物的忌口标签补空：$tagsBackfilled 条")
             Log.i(TAG, "内置食物库播种完成：新增 $inserted / 共 ${presets.size} 条")
             inserted
         }
@@ -74,3 +88,22 @@ class FoodSeeder @Inject constructor(
         const val TAG: String = "FoodSeeder"
     }
 }
+
+/**
+ * 「内置行的忌口标签只补一次空」的判据（纯函数，为了能在 JVM 里把边界钉死）。
+ *
+ * 为什么需要它：忌口标签是**安全判据**（外部 AI 计划导入时按它整条挡住），
+ * 而它抄在 `assets/foods.json` 里。`FoodSeeder` 原本对同名行是"整个跳过"，
+ * 于是 2026-09-27 给核桃仁/杏仁/腰果补上的 `PEANUT` 只会落到**新装机**上 ——
+ * 老用户库里的这三条仍是空标签，勾了「花生/坚果」照样放行。
+ * 真机实测就是这个形状：`select dietary_tags from foods where name = '核桃仁'` → `NULL`。
+ *
+ * 三条边界，一条都不能松：
+ * 1. 库里已有标签**一律不动** —— 那不是"缺"，那是有人（用户或数据）已经标过；
+ * 2. 只碰内置行：自建与外部 AI 建的条目由用户自己负责（表单里那组 chip 就是给他的）；
+ * 3. 只写 `dietary_tags` 一列，其余字段按库里那行原样留着（调用方 `copy` 自 existing）。
+ */
+internal fun fillsInMissingBuiltInTags(existing: FoodEntity, presetTags: String?): Boolean =
+    existing.source == FoodSource.BUILT_IN.name &&
+        existing.dietaryTags.isNullOrEmpty() &&
+        !presetTags.isNullOrEmpty()

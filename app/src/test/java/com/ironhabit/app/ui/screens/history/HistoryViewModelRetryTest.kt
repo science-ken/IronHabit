@@ -6,7 +6,9 @@ import com.ironhabit.app.domain.repository.CheckInRepository
 import com.ironhabit.app.domain.repository.ExerciseRepository
 import com.ironhabit.app.domain.repository.StatsRepository
 import com.ironhabit.app.domain.usecase.GetHeatmapUseCase
+import com.ironhabit.app.domain.util.TodayClock
 import com.ironhabit.app.test.MainDispatcherRule
+import com.ironhabit.app.test.todayClockFor
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -20,6 +22,8 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
 import org.junit.Rule
 import org.junit.Test
@@ -46,16 +50,33 @@ class HistoryViewModelRetryTest {
     private val exerciseRepository = mockk<ExerciseRepository>(relaxed = true)
     private val getHeatmap = mockk<GetHeatmapUseCase>(relaxed = true)
     private val statsRepository = mockk<StatsRepository>(relaxed = true)
-    private val clock = mockk<Clock>()
+    /*
+     * 时钟用**普通假实现 + 一个可拨的 var**，不用 mockk：`TodayClock` 在自己的构造里就会
+     * 读一次 `now()`，而字段初始化早于测试体里登记的桩 —— 实测报
+     * "no answer found for Clock.now()"。拨时间也就是一行赋值。
+     */
+    private var nowMillis: Long = NOW_MILLIS
+
+    private val clock: Clock = object : Clock {
+        override fun now(): Instant = Instant.fromEpochMilliseconds(nowMillis)
+    }
+
+    /** 轮询必须挂在真实调度器上（`TestScope` 会把 `runTest` 挂死，见 helper 的 KDoc）。 */
+    private val todayClock: TodayClock by lazy { todayClockFor(clock, TimeZone.UTC) }
 
     private fun viewModel(): HistoryViewModel = HistoryViewModel(
         checkInRepository = checkInRepository,
         exerciseRepository = exerciseRepository,
         getHeatmap = getHeatmap,
         statsRepository = statsRepository,
-        clock = clock,
-        timeZone = TimeZone.UTC,
+        todayClock = todayClock,
     )
+
+    private fun stubQuietDependencies() {
+        every { exerciseRepository.observeActive() } returns flowOf(emptyList())
+        coEvery { getHeatmap(any()) } returns emptyList()
+        coEvery { statsRepository.completionRate(any(), any()) } returns 0f
+    }
 
     /** 一次读库失败、一次给出当天记录：重新登记桩就等于"这一次订阅要读到什么"。 */
     private fun stubObserveBetween(shouldFail: Boolean) {
@@ -69,10 +90,7 @@ class HistoryViewModelRetryTest {
 
     @Test
     fun retryResubscribesTheFailedFlowAndClearsTheError() = runTest {
-        every { clock.now() } returns Instant.fromEpochMilliseconds(NOW_MILLIS)
-        every { exerciseRepository.observeActive() } returns flowOf(emptyList())
-        coEvery { getHeatmap(any()) } returns emptyList()
-        coEvery { statsRepository.completionRate(any(), any()) } returns 0f
+        stubQuietDependencies()
         stubObserveBetween(shouldFail = true)
 
         val viewModel = viewModel()
@@ -94,8 +112,35 @@ class HistoryViewModelRetryTest {
         assertEquals(1, state.days.single().items.size)
     }
 
+    /**
+     * 页面开着跨过 00:00：列表的窗口必须跟着挪（审查报告 P2-6）。
+     *
+     * 旧写法把 `observeBetween(起点, 今天)` 的两个参数在订阅那一刻算死，于是同一屏里
+     * 热力图与完成率（每次发射重读时钟）有"今天"，下面的列表却没有 —— 用户读成"今天没记录"。
+     * 真机上是 `TodayClock` 的 30 秒轮询自己发射，这里直接 `refresh()` 复现同一步。
+     */
+    @Test
+    fun theListWindowFollowsMidnightWhileThePageStaysOpen() = runTest {
+        stubQuietDependencies()
+        val windowEnds = mutableListOf<Long>()
+        every { checkInRepository.observeBetween(any(), capture(windowEnds)) } returns flowOf(emptyList())
+
+        viewModel()
+        advanceUntilIdle()
+        assertEquals("首次订阅取一次窗口", 1, windowEnds.size)
+        val firstDay: Long = windowEnds.single()
+
+        nowMillis += MILLIS_PER_DAY
+        todayClock.refresh()
+        advanceUntilIdle()
+
+        assertTrue("换天后没有重新取窗口 = 列表还停在昨天的区间", windowEnds.size >= 2)
+        assertNotEquals("窗口右端必须挪到新的一天", firstDay, windowEnds.last())
+    }
+
     private companion object {
         const val EPOCH_DAY: Long = 20_724L
         const val NOW_MILLIS: Long = EPOCH_DAY * 86_400_000L
+        const val MILLIS_PER_DAY: Long = 86_400_000L
     }
 }

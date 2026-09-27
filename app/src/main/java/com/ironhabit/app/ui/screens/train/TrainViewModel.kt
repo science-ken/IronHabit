@@ -77,11 +77,21 @@ class TrainViewModel @Inject constructor(
     private val weekStartFlow: Flow<Long> =
         todayClock.epochDay.map { epochDay -> DateUtils.weekStartMon1(epochDay) }
 
-    /** 所选星期的计划（携带 day 以便区分新旧）。 */
+    /**
+     * 所选星期的计划（携带 day 以便区分新旧）。
+     *
+     * ⚠️ 必须跟着 [weekStartFlow] 一起重订阅：`observePlansForDay` 在**调用那一刻**就把
+     * "本周"焊进了查询参数（见 `PlanRepositoryImpl.observePlansForDay`），而 [selectedDay]
+     * 在用户手动选过星期之后刻意不再自己动（他可能正在回看某一天）。于是 App 开着跨过
+     * 周一 00:00 之后，日视图仍展示**上一周**那个星期几的排课，而同屏「+」写进去的是本周
+     * —— "看到上周三、点一下写进本周三"（审查报告 V2-P3-7）。
+     * 加上这一维，读与写用的是同一个"这一周"。
+     */
     private val plansFlow: Flow<Pair<Int, List<WeekPlan>>> =
-        selectedDay.flatMapLatest { day ->
-            planRepository.observePlansForDay(day).map { plans -> day to plans }
-        }
+        combine(selectedDay, weekStartFlow) { day: Int, _: Long -> day }
+            .flatMapLatest { day ->
+                planRepository.observePlansForDay(day).map { plans -> day to plans }
+            }
 
     /**
      * 本周生效计划（专属优先，回落「每周相同」）→ `exerciseId → 出现的星期集合`，
