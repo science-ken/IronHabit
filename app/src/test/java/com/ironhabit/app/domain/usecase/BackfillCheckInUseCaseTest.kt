@@ -17,6 +17,8 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 
@@ -43,6 +45,16 @@ class BackfillCheckInUseCaseTest {
         timeZone = utc,
     )
 
+    @Before
+    fun noRowExistsOnThatDayYet() {
+        /*
+         * ⚠️ `relaxed = true` 对**可空返回**给的是非空链式桩，不是 null。
+         * 不登记这一条，`previous` 在测试里其实一直"存在"，
+         * 于是"新行不继承任何明细"与"旧行要继承明细"两条都测不到真值。
+         */
+        coEvery { checkInRepository.getForExerciseOnDate(any(), any()) } returns null
+    }
+
     @Test
     fun backfillWritesHistoricalEntryMarkedNotQuick() = runTest {
         val captured = slot<CheckIn>()
@@ -58,7 +70,41 @@ class BackfillCheckInUseCaseTest {
         assertEquals(3, saved.completedSets)
         assertEquals(12, saved.completedReps)
         assertFalse(saved.isQuick)
+        // 那天本来没有行：null 是"本来就没有"，不是"把明细清空了"。
+        assertNull(saved.weightKg)
+        assertNull(saved.notes)
 
         coVerify(exactly = 1) { checkInRepository.upsert(any()) }
+    }
+
+    /**
+     * 补卡弹层里**只有组×次**（审查报告 P2-2 同族）。
+     *
+     * 旧实现把重量/时长/备注写死 null，于是一天已有的"实重 90kg + 备注"会被一次补卡抹平。
+     * 弹层没提供的格子必须沿用旧行 —— 那才是"我只改了组次"这个动作的真实语义。
+     */
+    @Test
+    fun backfillKeepsDetailsTheDialogNeverAskedFor() = runTest {
+        val captured = slot<CheckIn>()
+        coEvery { checkInRepository.upsert(capture(captured)) } returns 1L
+        coEvery { checkInRepository.getForExerciseOnDate(7L, baseEpochDay) } returns CheckIn(
+            id = 42L,
+            exerciseId = 7L,
+            dateEpochDay = baseEpochDay,
+            completedSetsMask = 0b11,
+            completedReps = 10,
+            weightKg = 90f,
+            durationMinutes = 50,
+            notes = "状态一般",
+        )
+
+        useCase(exerciseId = 7L, epochDay = baseEpochDay, sets = 3, reps = 12)
+
+        val saved = captured.captured
+        assertEquals(90.0, (saved.weightKg ?: 0f).toDouble(), 0.001)
+        assertEquals(50, saved.durationMinutes)
+        assertEquals("状态一般", saved.notes)
+        assertEquals("改了的就是这次填的：组次要落新值", 12, saved.completedReps)
+        assertEquals(0b111, saved.completedSetsMask)
     }
 }

@@ -90,8 +90,17 @@ class BuildCoachContextUseCase @Inject constructor(
         // 本周计划 + 动作名（名称缺失时留空，不崩）。
         val exerciseNames: Map<Long, String> =
             exerciseRepository.observeActive().first().associate { it.id to it.name }
-        // observeAll() 只给**生效**行，且含「每周相同」模板行（weekStartEpochDay = 0）。
-        val planRows: List<WeekPlan> = planRepository.observeAll().first()
+        // 「哪一周」在本函数里只算一次：上面那份计划与下面 streak 的应做日必须是同一周，
+        // 否则同一个回答里"本周排了几天"和"本周排了什么"会互相打架。
+        val currentWeekStart: Long = BuildWeeklyReviewUseCase.weekStartOf(today)
+        // 必须按**本周**取生效行。以前这里是 `observeAll()`，而它的 SQL 只过 `is_active = 1`、
+        // 不带周条件 —— 用户只要生成/复制过第二周，"本周计划"里就混进历史各周同一动作的多条行、
+        // 早已过期的排课、以及已删动作的空名行，喂给模型的是一份重复且过期的计划（审查报告 P1-1）。
+        // `observeEffectivePlanForWeek` 才是"这一周实际要练什么"的唯一入口，
+        // 「每周相同」的模板回落规则也只在 `WeekPlanWeekResolver` 有一份，不在这里自己拼。
+        val planRows: List<WeekPlan> = planRepository.observeEffectivePlanForWeek(currentWeekStart).first()
+            // 动作已被删的行剔掉：与下面 streak 的应做日同一条判据，否则提示词里会出现没名字的动作。
+            .filter { plan -> plan.exerciseId in exerciseNames }
         val weeklyPlan: List<CoachPlanLine> = planRows
             .sortedWith(compareBy({ it.dayOfWeek }, { it.sortOrder }, { it.exerciseId }))
             .map { plan ->
@@ -119,7 +128,6 @@ class BuildCoachContextUseCase @Inject constructor(
         // `WeekPlanWeekResolver` 有一份，不能自己拼）。
         // 刻意**不用**统计窗口内各周的并集：用户改过排期时，上一周的周二会把本周的判定变严，
         // 两屏又对不上 —— 真机实测并集口径给 4 天、今日页给 6 天。
-        val currentWeekStart: Long = BuildWeeklyReviewUseCase.weekStartOf(today)
         val expectedWeekdays: Set<Int>? = planRepository
             .observeEffectivePlanForWeek(currentWeekStart).first()
             // 动作已被删的行要剔掉：与今日页 `usable` 同规则，否则应做日被虚增。

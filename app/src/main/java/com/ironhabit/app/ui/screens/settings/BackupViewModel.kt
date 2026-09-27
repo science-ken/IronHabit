@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.repository.BackupImportReport
 import com.ironhabit.app.domain.usecase.ExportDataUseCase
+import com.ironhabit.app.domain.usecase.BackupImportFailure
 import com.ironhabit.app.domain.usecase.ImportDataUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -40,13 +41,28 @@ data class BackupUiState(
  * 优先级这样排是刻意的：**"数据进去了但设置没写回" 盖过 "老备份没带饮食表"** ——
  * 前者要用户去做一件事（去设置里确认提醒时间），后者只是少恢复了一张表；
  * 两条同时命中时先说更要紧的那条，不能指望用户读完一条提示还期待下一条。
+ *
+ * 失败那一档现在按 [BackupImportFailure.Kind] 分得开（审查报告 P2-12）：用例早就知道
+ * 是"文件太大"还是"读不到文件"，可 UI 以前只看 `getOrNull()`，三种失败统统被
+ * [R.string.msg_import_failed] 那句「文件格式不正确」盖掉 —— 用户挑到一个锁住的云盘文件
+ * 或一个 200MB 的视频，得到的是一句假话，于是他会去检查 JSON 的格式。
+ * 其余异常（仓库层的解析错误等）仍然落到那句通用文案：只有这两类是面向用户的中文原因。
  */
 @StringRes
-internal fun importSnackbarRes(report: BackupImportReport?): Int = when {
-    report == null -> R.string.msg_import_failed
-    !report.settingsApplied || !report.alarmsRescheduled -> R.string.msg_import_partial_settings
-    report.dietSkipped -> R.string.msg_import_success_diet_skipped
-    else -> R.string.msg_import_success
+internal fun importSnackbarRes(report: BackupImportReport?, failure: Throwable? = null): Int = when {
+    report != null -> when {
+        !report.settingsApplied || !report.alarmsRescheduled -> R.string.msg_import_partial_settings
+        report.dietSkipped -> R.string.msg_import_success_diet_skipped
+        else -> R.string.msg_import_success
+    }
+
+    failure is BackupImportFailure && failure.kind == BackupImportFailure.Kind.FILE_TOO_LARGE ->
+        R.string.msg_import_too_large
+
+    failure is BackupImportFailure && failure.kind == BackupImportFailure.Kind.FILE_UNREADABLE ->
+        R.string.msg_import_unreadable
+
+    else -> R.string.msg_import_failed
 }
 
 /**
@@ -110,7 +126,7 @@ class BackupViewModel @Inject constructor(
                 val result = importData(uri)
                 // 备份早于 v5 时饮食四张表**没被替换**（本机记录保住了）；设置/闹钟在事务外，
                 // 也可能没写回。这些都要说出来 —— 分档规则见 `importSnackbarRes`。
-                val snackbarRes: Int = importSnackbarRes(result.getOrNull())
+                val snackbarRes: Int = importSnackbarRes(result.getOrNull(), result.exceptionOrNull())
                 _uiState.update {
                     it.copy(isBusy = false, pendingImportUri = null, snackbarRes = snackbarRes)
                 }

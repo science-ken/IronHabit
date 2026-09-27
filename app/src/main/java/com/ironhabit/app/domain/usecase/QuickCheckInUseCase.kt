@@ -50,10 +50,42 @@ class QuickCheckInUseCase @Inject constructor(
             loggedAtMillis = nowMillis,
             createdAt = nowMillis,
         )
-        checkInRepository.upsert(checkIn)
+        checkInRepository.upsert(
+            keepingLoggedDetails(checkIn, checkInRepository.getForExerciseOnDate(plan.exerciseId, epochDay)),
+        )
         exerciseRepository.bumpUsage(plan.exerciseId)
     }
 
     /** 便捷重载：直接传列表项 + 所选日。 */
     suspend operator fun invoke(item: TodayPlanItem, epochDay: Long) = invoke(item.plan, epochDay)
+
+    companion object {
+
+        /**
+         * **「用户手记的那一行，不被计划目标值改写」**（审查报告 P2-2）。
+         *
+         * 一键打卡按钮在"部分完成"的条目上仍然可点（`targetSets` 没勾满是常态），
+         * 而它构造的是**计划目标值**：`completedReps = plan.targetReps`、
+         * `weightKg = plan.targetWeightKg`、`notes = null`。原先整行覆盖上去，
+         * 用户先详细打卡记下"实际 90kg、备注腰有点顶"，再顺手点一下按钮，
+         * 备注就没了、实际重量被换成计划值 —— 而这正是唯一的真实数据来源。
+         *
+         * 只保"用户手记过"的行（`isQuick = false`）：两条都是快速打卡时（旧行 `isQuick = true`）
+         * 让新的目标值刷过去是对的（改了计划重量再点一次，理应跟着计划走）。
+         *
+         * `isQuick` 必须原样留住：它是"这行的重量是实际值还是计划复读"的**唯一判据**，
+         * 翻成 true 等于把真数据降级 —— 趋势图和渐进超负荷提示都会开始说谎。
+         */
+        private fun keepingLoggedDetails(incoming: CheckIn, existing: CheckIn?): CheckIn {
+            if (existing == null || existing.isQuick) return incoming
+            return incoming.copy(
+                completedReps = existing.completedReps,
+                weightKg = existing.weightKg,
+                durationMinutes = existing.durationMinutes,
+                notes = existing.notes,
+                rpe = existing.rpe,
+                isQuick = existing.isQuick,
+            )
+        }
+    }
 }

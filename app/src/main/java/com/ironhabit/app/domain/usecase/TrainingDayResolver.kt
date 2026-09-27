@@ -43,7 +43,12 @@ class TrainingDayResolver @Inject constructor(
         val weekday: Int = DateUtils.weekdayMon1(epochDay)
         val weekStart: Long = DateUtils.weekStartMon1(epochDay)
         return combine(
-            checkInRepository.observeByDate(epochDay).map { checkIns -> checkIns.isNotEmpty() },
+            // `completedSets > 0` 而不是 `isNotEmpty()`：取消勾选最后一组时那一行**不删**，
+            // 只把位图 XOR 成 0。按"有没有行"判，那一天会一直算训练日、热量按练日给，
+            // 而同屏那条写着"未完成"（审查报告 P2-5 第四个消费者；SQL 侧同规则见 StatsDao）。
+            checkInRepository.observeByDate(epochDay).map { checkIns ->
+                checkIns.any { checkIn -> checkIn.completedSets > 0 }
+            },
             planRepository.observeEffectivePlanForDay(weekday, weekStart).map { plans -> plans.isNotEmpty() },
             // 「今天或未来」= 那天还没过完，计划态仍然有效。跟着 TodayClock 而不是构造时快照。
             todayClock.epochDay.map { today -> epochDay >= today },

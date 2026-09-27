@@ -2,6 +2,7 @@ package com.ironhabit.app.ui.screens.settings
 
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.repository.BackupImportReport
+import com.ironhabit.app.domain.usecase.BackupImportFailure
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Test
@@ -26,8 +27,49 @@ class BackupImportMessageTest {
     )
 
     @Test
-    fun nullReportIsTheOnlyImportFailure() {
+    fun unclassifiedFailureFallsBackToTheGenericMessage() {
         assertEquals(R.string.msg_import_failed, importSnackbarRes(null))
+        assertEquals(
+            "仓库层的解析错误不属于「面向用户的那两类原因」，不许被说成「文件太大」",
+            R.string.msg_import_failed,
+            importSnackbarRes(null, IllegalStateException("JSON 缺字段")),
+        )
+    }
+
+    private fun failure(kind: BackupImportFailure.Kind) = BackupImportFailure(kind, "中文原因（只用于日志）")
+
+    /**
+     * 三种失败必须给出三句话（审查报告 P2-12）。
+     *
+     * 旧实现只看 `getOrNull()`：用例早就分清了"文件太大""读不到文件"，UI 却统统回一句
+     * 「文件格式不正确」。用户挑到一个被锁住的云盘文件，得到的是一句假话，
+     * 于是他会回头去检查 JSON 的格式。
+     */
+    @Test
+    fun eachKnownFailureGetsItsOwnSentence() {
+        assertEquals(
+            R.string.msg_import_too_large,
+            importSnackbarRes(null, failure(BackupImportFailure.Kind.FILE_TOO_LARGE)),
+        )
+        assertEquals(
+            R.string.msg_import_unreadable,
+            importSnackbarRes(null, failure(BackupImportFailure.Kind.FILE_UNREADABLE)),
+        )
+        val resources = setOf(
+            R.string.msg_import_too_large,
+            R.string.msg_import_unreadable,
+            R.string.msg_import_failed,
+        )
+        assertEquals("三档提示得是三句不同的话，撞了就等于没分档", 3, resources.size)
+    }
+
+    /** 成功那几档不受 failure 影响（表已提交时绝不能说"导入失败"）。 */
+    @Test
+    fun aSuccessfulReportIsNeverOverriddenByAFailure() {
+        assertEquals(
+            R.string.msg_import_partial_settings,
+            importSnackbarRes(report(settingsApplied = false), failure(BackupImportFailure.Kind.FILE_TOO_LARGE)),
+        )
     }
 
     @Test

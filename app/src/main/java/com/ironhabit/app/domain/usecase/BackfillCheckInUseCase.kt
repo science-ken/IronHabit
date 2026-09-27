@@ -24,10 +24,8 @@ class BackfillCheckInUseCase @Inject constructor(
     suspend operator fun invoke(exerciseId: Long, epochDay: Long, sets: Int, reps: Int) {
         val nowMillis = clock.now().toEpochMilliseconds()
         // 与详细打卡同理：该日已有勾选时保留「是哪几组」的身份，只按数量增减调整位图。
-        val previousMask = checkInRepository
-            .getForExerciseOnDate(exerciseId, epochDay)
-            ?.completedSetsMask
-            ?: 0
+        val previous: CheckIn? = checkInRepository.getForExerciseOnDate(exerciseId, epochDay)
+        val previousMask: Int = previous?.completedSetsMask ?: 0
         val checkIn = CheckIn(
             id = 0L,
             exerciseId = exerciseId,
@@ -36,9 +34,13 @@ class BackfillCheckInUseCase @Inject constructor(
             dateStartMillis = DateUtils.startOfDayMillis(epochDay, timeZone),
             completedSetsMask = CheckIn.mergedMask(count = sets, previousMask = previousMask),
             completedReps = reps,
-            weightKg = null,
-            durationMinutes = null,
-            notes = null,
+            // 补卡弹层里**只有组×次**，没有重量/时长/备注这三格。原先写死 null，
+            // 于是一天已有的"实重 90kg / 备注"会被一次补卡抹平（审查报告 P2-2 同族）：
+            // 弹层没提供的格子沿用旧行，才是"只改组次"这个动作的真实语义。
+            // 新行（previous == null）照旧是 null —— 那不是"清空"，那是"本来就没有"。
+            weightKg = previous?.weightKg,
+            durationMinutes = previous?.durationMinutes,
+            notes = previous?.notes,
             isQuick = false,
             loggedAtMillis = nowMillis,
             createdAt = nowMillis,

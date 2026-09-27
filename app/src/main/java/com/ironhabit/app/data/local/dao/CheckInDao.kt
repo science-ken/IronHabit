@@ -33,9 +33,17 @@ interface CheckInDao {
     fun observeActiveDays(): Flow<List<Long>>
 
     /** 自 `sinceEpochDay`（含）起有打卡的日期，降序（streak 输入）。 */
+    /**
+     * 从某天起「真的练过」的那些天（streak 的输入）。
+     *
+     * `completed_sets > 0` 不是可有可无的：取消勾选最后一组时本表**不删行**（见
+     * [toggleSet] 的 KDoc），留下的是"完成了 0 组"的残行。少这个条件，
+     * 用户取消勾选之后 streak 照样 +1，而同屏那条显示"未完成"（审查报告 P2-5）。
+     * 同一条口径在 `StatsDao` 的每一条计数里都守着。
+     */
     @Query(
         "SELECT DISTINCT date_epoch_day FROM check_ins " +
-            "WHERE date_epoch_day >= :sinceEpochDay ORDER BY date_epoch_day DESC"
+            "WHERE date_epoch_day >= :sinceEpochDay AND completed_sets > 0 ORDER BY date_epoch_day DESC"
     )
     fun observeActiveDaysSince(sinceEpochDay: Long): Flow<List<Long>>
 

@@ -140,6 +140,12 @@ fun parseSuggestionsJson(
                 defaultReps = (candidate.defaultReps ?: DEFAULT_REPS).coerceIn(MIN_REPS, MAX_REPS),
                 noteKey = noteKeyFor(reasonFor(remote.suggestions.firstOrNull { it.name.trim() == name })),
                 reason = reasonFor(remote.suggestions.firstOrNull { it.name.trim() == name }),
+                // 器械标注必须带上：`SuggestExercisesUseCase.adopt` 是把 `suggestion.equipment`
+                // 原样写进动作库的，漏了这一行就等于**远端那条路**收进来的动作全都没标注，
+                // 而 `LocalRuleAdvisor.equipmentAllowed` 对未标注行只能按分类粗放行 ——
+                // 只有哑铃的人会被排上需要器械的动作（审查报告 P1-2）。
+                // 本地那条路（`LocalRuleAdvisor.toSuggestion`）一直都传，两条路不该两种行为。
+                equipment = candidate.equipment,
             )
         }
 }

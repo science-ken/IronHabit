@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Update
 import com.ironhabit.app.data.local.entity.MealItemEntity
 import kotlinx.coroutines.flow.Flow
@@ -99,6 +100,19 @@ interface MealItemDao {
     /** 挪餐次（早餐记成午餐了）。只改归属，快照与 created_at 一律不动。 */
     @Query("UPDATE meal_items SET meal_id = :targetMealId, sort_order = :sortOrder WHERE id = :id")
     suspend fun moveToMeal(id: Long, targetMealId: Long, sortOrder: Int)
+
+    /**
+     * 挪到目标餐的**末尾**：取末尾序号 + 改归属，两步收在同一个事务里。
+     *
+     * 两步分开跑的时候（旧写法在 `MealItemRepositoryImpl.moveTo`，审查报告 P3-2）：
+     * 并发的第二次挪餐会读到同一个 `countByMeal` 结果 → 两行拿到同一个 `sort_order`，
+     * 列表顺序变得不可预期；而旧写法还是整行读改写，会把这一行**别的列**按陈旧快照写回去。
+     * 本方法只碰 `meal_id` 与 `sort_order` 两列，形状照 `CheckInDao.upsert` 的 `@Transaction`。
+     */
+    @Transaction
+    suspend fun moveToMealAtEnd(id: Long, targetMealId: Long) {
+        moveToMeal(id = id, targetMealId = targetMealId, sortOrder = countByMeal(targetMealId))
+    }
 
     /** 备份恢复用（调用方已在恢复事务里先 [clearAll]，无行可级联，安全）。 */
     @Query("DELETE FROM meal_items")

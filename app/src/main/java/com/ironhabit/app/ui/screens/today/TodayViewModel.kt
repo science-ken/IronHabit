@@ -471,7 +471,17 @@ class TodayViewModel @Inject constructor(
                     )
                 }
             } catch (throwable: Throwable) {
-                _uiState.update { state -> state.copy(errorRes = R.string.error_generic) }
+                // 「编辑早餐 → 餐次改成午餐」而那天已经有午餐时，`meals` 的
+                // UNIQUE(date_epoch_day, meal_type) 会抛约束冲突（软删行也占槽）。
+                // 以前这一条和真正的 IO 故障一起塌成 `error_generic`，用户看不出是撞了餐次，
+                // 只会反复点保存（审查报告 P2-1）。口径照 `AddEditPlanViewModel` 的
+                // `error_duplicate_plan`：约束冲突单独一句话，其余仍算保存失败。
+                val res: Int = if (throwable is android.database.sqlite.SQLiteConstraintException) {
+                    R.string.error_duplicate_meal
+                } else {
+                    R.string.error_generic
+                }
+                _uiState.update { state -> state.copy(errorRes = res) }
             }
         }
     }

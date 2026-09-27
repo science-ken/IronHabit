@@ -66,8 +66,10 @@ class BuildCoachContextUseCaseTest {
 
     private fun stub(meals: List<Meal>, items: List<MealItem>) {
         every { settingsRepository.profile() } returns flowOf(UserProfile())
-        every { planRepository.observeAll() } returns flowOf(emptyList())
-        // 连续天数问的是"本周排了哪几天"，走的是生效行（含模板回落），不是 observeAll。
+        // ⚠️ 这里刻意**不**登记 `planRepository.observeAll()`：提示词里那份"本周计划"
+        // 必须走周口径（下面这条），一旦谁把它改回 `observeAll()`，strict mockk 会当场炸，
+        // 而不是测试全绿、发出去的却是十周的历史计划（审查报告 P1-1）。
+        // 连续天数问的是"本周排了哪几天"，走的同样是生效行（含模板回落）。
         every { planRepository.observeEffectivePlanForWeek(any()) } returns flowOf(emptyList())
         every { exerciseRepository.observeActive() } returns flowOf(emptyList())
         every { checkInRepository.observeBetween(any(), any()) } returns flowOf(emptyList())
@@ -99,6 +101,34 @@ class BuildCoachContextUseCaseTest {
 
         assertEquals("没吃就是 0，不能拿计划冒充", 0, context.todayIntakeKcal)
         assertEquals(2200, context.todayPlanKcal)
+    }
+
+    /**
+     * 「本周训练计划摘要」必须按**本周**取生效行（审查报告 P1-1）。
+     *
+     * 旧写法是 `planRepository.observeAll()`，而它的 SQL 只过 `is_active = 1`、不带周条件：
+     * 用户只要生成或复制过第二周，发给模型的那份"本周计划"里就混着历史各周同一动作的多条行、
+     * 早就过期的排课、以及已删动作留下的空名行 —— AI 是基于一份重复且过期的计划在给建议。
+     *
+     * 两条都要钉：取数入口是**周口径**（周参数还得是本周），以及不在库里的动作不进提示词
+     * （与同函数里 streak 的应做日同一条判据，否则两份数又会互相打架）。
+     */
+    @Test
+    fun weeklyPlanUsesThisWeeksEffectiveRowsOnly() = runTest {
+        stub(meals = emptyList(), items = emptyList())
+        every { exerciseRepository.observeActive() } returns flowOf(listOf(exercise(11L)))
+        val thisWeek: Long = BuildWeeklyReviewUseCase.weekStartOf(today)
+        every { planRepository.observeEffectivePlanForWeek(thisWeek) } returns flowOf(
+            listOf(
+                plan(weekday = 1, exerciseId = 11L),
+                plan(weekday = 3, exerciseId = 99L), // 动作已被删：不该带着空名字进提示词
+            ),
+        )
+
+        val lines = useCase()().weeklyPlan
+
+        assertEquals("只留动作还在库里的那些行", listOf("动作11"), lines.map { it.exerciseName })
+        assertEquals(1, lines.single().dayOfWeek)
     }
 
     /** 只打了勾：取那餐的整餐值（粗记）。 */

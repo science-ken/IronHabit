@@ -2,6 +2,7 @@ package com.ironhabit.app.domain.ai.remote
 
 import com.ironhabit.app.data.preferences.AiCredentialsStore
 import com.ironhabit.app.domain.model.AdviceSource
+import com.ironhabit.app.domain.model.Equipment
 import com.ironhabit.app.domain.model.Exercise
 import com.ironhabit.app.domain.model.ExerciseCategory
 import com.ironhabit.app.domain.model.PlanReason
@@ -51,9 +52,14 @@ class RemoteLlmAdvisorTest {
 
     // ---------------- 测试夹具 ----------------
 
-    private fun exercise(id: Long, name: String = "ex-$id") = Exercise(
+    private fun exercise(
+        id: Long,
+        name: String = "ex-$id",
+        equipment: List<Equipment> = emptyList(),
+    ) = Exercise(
         id = id,
         name = name,
+        equipment = equipment,
         category = ExerciseCategory.BODYWEIGHT,
         muscleGroups = listOf("核心"),
         isActive = true,
@@ -289,6 +295,29 @@ class RemoteLlmAdvisorTest {
         val suggestions = parseSuggestionsJson(json, candidates, existing = emptyList())
 
         assertEquals("未知 reason 不猜 → GOAL_SUPPORT", SuggestionReason.GOAL_SUPPORT, suggestions.single().reason)
+    }
+
+    /**
+     * 远端采纳的动作必须带上**器械标注**（审查报告 P1-2）。
+     *
+     * `SuggestExercisesUseCase.adopt` 是把 `suggestion.equipment` 原样写进动作库的，
+     * 而这一路以前根本没传 → 落成默认空列表。于是"哑铃肩上推举"这类需要器械的动作
+     * 经远端收进库后变成**未标注行**，`LocalRuleAdvisor.equipmentAllowed` 对未标注行
+     * 只能按分类粗放行 —— 只有哑铃的人会被排上需要器械的动作。
+     * 本地那条路（`LocalRuleAdvisor.toSuggestion`）一直都传，两条路不该两种行为。
+     */
+    @Test
+    fun parseSuggestions_carryTheLibraryEquipmentTag() {
+        val candidates = listOf(exercise(1L, "哑铃肩上推举", equipment = listOf(Equipment.DUMBBELL)))
+        val json = """{"suggestions":[{"name":"哑铃肩上推举","reason":"shoulder"}]}"""
+
+        val suggestions = parseSuggestionsJson(json, candidates, existing = emptyList())
+
+        assertEquals(
+            "器械标注丢了 = 采纳进库后成了未标注行，器械约束静默退化",
+            listOf(Equipment.DUMBBELL),
+            suggestions.single().equipment,
+        )
     }
 
     @Test

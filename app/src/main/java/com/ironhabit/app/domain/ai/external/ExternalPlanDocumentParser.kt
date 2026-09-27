@@ -555,6 +555,13 @@ object ExternalPlanDocumentParser {
 
             val sets: Int = raw.targetSets.coerceIn(InputLimits.MIN_SETS, InputLimits.MAX_SETS)
             val reps: Int = raw.targetReps.coerceIn(InputLimits.MIN_REPS, InputLimits.MAX_REPS)
+            // 重量与 sets/reps 同口径：过一遍用户输入路径那同一个上限。
+            // 以前只过 `> 0`：模型写 99999 就原样进 `week_plans.target_weight_kg`，
+            // 而用户自己在表单里敲 501 都会被拒（审查报告 P3-17）。
+            // `NaN` 走不到钳制 —— `NaN > 0` 为 false，直接被 `takeIf` 落成 null（自重）。
+            val weightKg: Float? = raw.targetWeightKg
+                ?.takeIf { weight -> weight > 0f }
+                ?.let { weight -> InputLimits.coerceWeightKg(weight) }
             if (raw.targetSets != sets) {
                 notes += ExternalPlanNote(ExternalPlanNote.Kind.SETS_CLAMPED, dayOfWeek, name, listOf(raw.targetSets, sets))
             }
@@ -566,8 +573,8 @@ object ExternalPlanDocumentParser {
                 exerciseId = exercise.id,
                 targetSets = sets,
                 targetReps = reps,
-                // 与内置同口径：≤0 视为自重（null），不是"0 公斤"。
-                targetWeightKg = raw.targetWeightKg?.takeIf { it > 0f },
+                // ≤0 已经在上面落成 null（自重），这里只是带上钳制后的值。
+                targetWeightKg = weightKg,
                 // 时长不信模型：回本地动作库取默认时长换算（修复 C3 的同一件事）。
                 targetDurationMin = exercise.defaultDurationSec
                     ?.let { seconds -> seconds / SECONDS_PER_MINUTE }

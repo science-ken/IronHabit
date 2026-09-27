@@ -325,6 +325,10 @@
     <string name="msg_import_partial_settings">数据已导入，但提醒与偏好设置没能全部写回，请去设置里确认一遍</string>
     <string name="msg_import_success_diet_skipped">导入成功；这份备份不含食物库与饮食明细，本机饮食记录未改动</string>
     <string name="msg_import_failed">导入失败：文件格式不正确</string>
+    <!-- 选错文件的人需要先知道"错在哪一步"。以前三种失败都塌成上面那句「格式不正确」，
+         于是一个 200MB 的视频或一个被别的 App 锁住的云盘文件，都会被说成格式问题（审查报告 P2-12）。 -->
+    <string name="msg_import_too_large">导入失败：这个文件超过 64 MB，请确认选的是本 App 导出的备份 JSON</string>
+    <string name="msg_import_unreadable">导入失败：读不到这个文件，请重新选择一次（云盘/其它 App 里的文件要先下载到本机）</string>
     <string name="dialog_import_confirm_title">确认导入？</string>
     <string name="dialog_import_confirm_message">导入会覆盖当前全部数据且不可撤销，确定继续吗？</string>
 
@@ -348,6 +352,9 @@
     <string name="error_load_failed">加载失败，请重试</string>
     <string name="error_save_failed">保存失败，请重试</string>
     <string name="error_duplicate_plan">该动作已排在当天计划中，换一个或先删掉原来的</string>
+    <!-- 编辑一餐时把餐次改成另一餐已占的槽位（早餐→午餐，而那天已经有午餐）。以前塌成一句笼统的「出错了」，
+         用户不知道是"两个餐次撞了"，只会反复点保存（审查报告 P2-1）。口径照 error_duplicate_plan。 -->
+    <string name="error_duplicate_meal">这一餐已经有另一条记录了 —— 一天里每种餐只能有一条，请先删掉那一条或换一个餐次</string>
     <string name="error_name_empty">名称不能为空</string>
     <string name="error_name_exists">该名称已存在</string>
     <string name="error_invalid_number">请输入有效的数字</string>

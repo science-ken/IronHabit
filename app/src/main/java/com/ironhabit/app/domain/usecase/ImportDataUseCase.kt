@@ -15,10 +15,22 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 
 /**
+ * 导入失败里**说得出原因**的那两类。
+ *
+ * UI 按 [kind] 挑资源 id，而不是把 [message] 原样贴到界面上：直接贴 message 意味着
+ * 任何一条异常（含 SQLite 那种英文堆栈句）都会出现在用户眼前，而这条通路上真正
+ * 面向用户的中文只有这两条。仓库层抛的解析错误仍然落到通用「导入失败」。
+ */
+class BackupImportFailure(val kind: Kind, override val message: String) : Exception(message) {
+
+    enum class Kind { FILE_TOO_LARGE, FILE_UNREADABLE }
+}
+
+/**
  * 导入数据用例（架构 §3.4）。
  *
  * 从用户选择的 [Uri] 读取 JSON，交给 [BackupRepository.import] 在**事务**内整体替换写库。
- * 失败原因由仓库层以中文 `message` 返回，本用例原样透传（UI 不暴露英文/堆栈）。
+ * 失败原因用 [BackupImportFailure] 标明是哪一类，UI 据此选文案（不暴露英文/堆栈）。
  */
 class ImportDataUseCase @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -31,11 +43,13 @@ class ImportDataUseCase @Inject constructor(
             // 第一道闸：provider 报了大小就先判（不报的走第二道）。
             val reportedSize: Long = querySize(uri)
             if (reportedSize > MAX_BYTES) {
-                throw IllegalArgumentException(ERROR_TOO_LARGE)
+                throw BackupImportFailure(BackupImportFailure.Kind.FILE_TOO_LARGE, ERROR_TOO_LARGE)
             }
             val json: String = context.contentResolver.openInputStream(uri)?.use { input ->
                 readCapped(input)
-            } ?: return@withContext Result.failure(IllegalArgumentException(ERROR_OPEN_FILE))
+            } ?: return@withContext Result.failure(
+                BackupImportFailure(BackupImportFailure.Kind.FILE_UNREADABLE, ERROR_OPEN_FILE),
+            )
 
             backupRepository.import(json)
         } catch (cancellation: CancellationException) {
@@ -62,7 +76,9 @@ class ImportDataUseCase @Inject constructor(
             if (read < 0) break
             output.write(chunk, 0, read)
             total += read
-            if (total > MAX_BYTES) throw IllegalArgumentException(ERROR_TOO_LARGE)
+            if (total > MAX_BYTES) {
+                throw BackupImportFailure(BackupImportFailure.Kind.FILE_TOO_LARGE, ERROR_TOO_LARGE)
+            }
         }
         return output.toString(Charsets.UTF_8.name())
     }

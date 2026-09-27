@@ -55,12 +55,36 @@ class TrainingDayResolverTest {
         epochDay: Long,
         checkedIn: Boolean,
         planned: Boolean,
+        completedSetsMask: Int = 0b011,
         weekStart: Long = DateUtils.weekStartMon1(epochDay),
     ) {
+        // ⚠️ 默认带**两组**：`CheckIn()` 的 mask 默认是 0，而"有一行但完成了 0 组"
+        // 恰恰是下面 `untickingTheLastSet...` 那条要单独测的残行 —— 
+        // 早先这里用默认值当"练过了"，等于把残行当真实打卡喂给判据。
         every { checkInRepository.observeByDate(epochDay) } returns
-            flowOf(if (checkedIn) listOf(CheckIn(id = 1L, exerciseId = 7L, dateEpochDay = epochDay)) else emptyList())
+            flowOf(
+                if (checkedIn) {
+                    listOf(CheckIn(id = 1L, exerciseId = 7L, dateEpochDay = epochDay, completedSetsMask = completedSetsMask))
+                } else {
+                    emptyList()
+                }
+            )
         every { planRepository.observeEffectivePlanForDay(any(), weekStart) } returns
             flowOf(if (planned) listOf(WeekPlan(id = 3L, exerciseId = 7L, dayOfWeek = 3)) else emptyList())
+    }
+
+    /**
+     * 取消勾选最后一组之后（审查报告 P2-5）：行还在库里，只是"完成了 0 组"。
+     *
+     * 旧判据看的是**有没有行**，于是那一天仍按训练日给热量、streak 照加，
+     * 而同屏那条写着"未完成"。热量给多给少是吃进去的差别，不是显示问题。
+     */
+    @Test
+    fun untickingTheLastSetLeavesAResidueRowThatIsNotATrainingDay() = runTest {
+        val pastDay = today - 1
+        stub(epochDay = pastDay, checkedIn = true, planned = false, completedSetsMask = 0)
+
+        assertFalse("完成了 0 组的残行不算练过", resolver(pastDay))
     }
 
     @Test
@@ -130,7 +154,11 @@ class TrainingDayResolverTest {
 
         val before: Boolean = resolver.observe(today).first()
         every { checkInRepository.observeByDate(today) } returns
-            flowOf(listOf(CheckIn(id = 1L, exerciseId = 7L, dateEpochDay = today)))
+            flowOf(
+                // 带一组完成：`CheckIn()` 的 mask 默认 0，而"有行但 0 组"恰好不算训练日
+                // （见 `untickingTheLastSet...`）。这条测试要的是"练完点下去"，样本得真是练过。
+                listOf(CheckIn(id = 1L, exerciseId = 7L, dateEpochDay = today, completedSetsMask = 0b1)),
+            )
         val after: Boolean = resolver.observe(today).first()
 
         assertEquals(false, before)
