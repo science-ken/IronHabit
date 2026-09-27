@@ -3,6 +3,7 @@ package com.ironhabit.app.data.notification
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import com.ironhabit.app.di.ApplicationScope
 import com.ironhabit.app.domain.repository.HabitRepository
 import com.ironhabit.app.domain.repository.ReminderScheduler
@@ -19,7 +20,8 @@ import kotlinx.coroutines.launch
  * 1. 习惯提醒要先查一次库拿**习惯名**（通知得指认是哪一件）；
  * 2. 弹出本地通知；
  * 3. **自续期**：排「明天同一时刻」的下一次闹钟（规避 `setRepeating` 在 API 19+ 被批处理的漂移）；
- * 4. 用 `goAsync()` + `@ApplicationScope` 在后台完成查库和续期，不阻塞主线程、不使用 `GlobalScope`。
+ * 4. 用 `goAsync()` + `@ApplicationScope` 在后台完成查库和续期，不阻塞主线程、不使用 `GlobalScope`；
+ *    整段包 `catch` 只为留一行现场日志 —— 进程兜底在 `@ApplicationScope` 的 handler 上。
  *
  * 两条**不续排**的出口，都是为了让闹钟自己死掉而不是变成永久孤儿：
  * - 习惯已被删除 → 不发通知、不续排，撤掉它那个槽；
@@ -80,6 +82,10 @@ class ReminderReceiver : BroadcastReceiver() {
                         reminderScheduler.scheduleHabitNext(habit.id, hour, minute)
                     }
                 }
+            } catch (throwable: Exception) {
+                // 留现场：崩不崩由 `@ApplicationScope` 的 handler 兜，但那条日志不知道
+                // 断在哪一类提醒上。这条路径平时几小时才走一次，出问题只能靠这一行。
+                Log.w(TAG, "提醒处理失败（$typeName）", throwable)
             } finally {
                 pendingResult.finish()
             }
@@ -101,6 +107,7 @@ class ReminderReceiver : BroadcastReceiver() {
         const val EXTRA_HABIT_ID: String = "extra_reminder_habit_id"
 
         private const val INVALID_TIME: Int = -1
+        private const val TAG: String = "ReminderReceiver"
         private val HOUR_RANGE: IntRange = 0..23
         private val MINUTE_RANGE: IntRange = 0..59
 

@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -70,10 +71,19 @@ class MainActivity : ComponentActivity() {
                 if (granted) return@repeatOnLifecycle
                 if (!settingsDataStore.shouldAskNotificationPermission()) return@repeatOnLifecycle
 
-                // 先落标记再弹：无论用户选允许还是拒绝，都不会再自动弹第二次
-                settingsDataStore.markNotificationPermissionAsked()
+                // 先落标记再弹：无论用户选允许还是拒绝，都不会再自动弹第二次。
+                // 这次写盘必须接住异常：它在冷启动的 `lifecycleScope` 里，抛 IOException
+                // 的表现是"一打开就崩、且每次冷启动都崩"。
+                // 接住之后**照样弹**——标记没落上的代价只是"下次启动再问一次"，
+                // 而借此跳过申请的代价是提醒功能从此永久静默，后者更糟。
+                runCatching { settingsDataStore.markNotificationPermissionAsked() }
+                    .onFailure { Log.w(TAG, "标记「通知权限已问过」失败", it) }
                 notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
+    }
+
+    private companion object {
+        const val TAG: String = "MainActivity"
     }
 }

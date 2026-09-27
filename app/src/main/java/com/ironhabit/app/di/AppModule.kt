@@ -1,5 +1,6 @@
 package com.ironhabit.app.di
 
+import android.util.Log
 import com.ironhabit.app.BuildConfig
 import com.ironhabit.app.data.preferences.AiCredentialsStore
 import com.ironhabit.app.domain.ai.DelegatingPlanAdvisor
@@ -41,13 +42,20 @@ object AppModule {
     @DefaultDispatcher
     fun provideDefaultDispatcher(): CoroutineDispatcher = Dispatchers.Default
 
-    /** 应用级协程作用域：SupervisorJob 保证单个子任务失败不影响其它任务。 */
+    /**
+     * 应用级协程作用域：[SupervisorJob] 保证单个子任务失败不影响其它任务，
+     * [applicationCoroutineExceptionHandler] 保证失败的这一个不把进程带走。
+     */
     @Provides
     @Singleton
     @ApplicationScope
     fun provideApplicationScope(
         @IoDispatcher dispatcher: CoroutineDispatcher,
-    ): CoroutineScope = CoroutineScope(SupervisorJob() + dispatcher)
+    ): CoroutineScope = CoroutineScope(
+        SupervisorJob() + dispatcher + applicationCoroutineExceptionHandler { message, throwable ->
+            Log.e(TAG_APPLICATION_SCOPE, message, throwable)
+        },
+    )
 
     /** kotlinx-datetime 时钟（测试可替换）。 */
     @Provides
@@ -109,3 +117,6 @@ object AppModule {
         settingsRepository = settingsRepository,
     )
 }
+
+/** 未捕获协程异常兜底日志的 tag（`logcat -s` 用得上）。 */
+private const val TAG_APPLICATION_SCOPE: String = "AppScope"

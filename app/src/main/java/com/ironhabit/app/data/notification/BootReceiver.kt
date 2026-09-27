@@ -3,6 +3,7 @@ package com.ironhabit.app.data.notification
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import com.ironhabit.app.di.ApplicationScope
 import com.ironhabit.app.domain.repository.ReminderScheduler
 import dagger.hilt.android.AndroidEntryPoint
@@ -45,8 +46,14 @@ class BootReceiver : BroadcastReceiver() {
 
         val pendingResult = goAsync()
         applicationScope.launch {
+            // 崩不崩已经由 `@ApplicationScope` 的 handler 兜住，这一层管的是**现场**：
+            // 全局那条日志不会带上是哪一次广播（开机 / 更新 / 时区变更）失败了，
+            // 而"提醒没响"这类问题只差这一句就查不出来。
+            // 顺带对齐 `IronHabitApp` —— 同一个 `rescheduleAll()` 在那两处本来就包着。
             try {
                 reminderScheduler.rescheduleAll()
+            } catch (throwable: Exception) {
+                Log.w(TAG, "重排提醒失败（${intent.action}）", throwable)
             } finally {
                 pendingResult.finish()
             }
@@ -56,5 +63,7 @@ class BootReceiver : BroadcastReceiver() {
     companion object {
         /** 部分厂商 ROM 的快速开机广播。 */
         const val ACTION_QUICKBOOT_POWERON: String = "android.intent.action.QUICKBOOT_POWERON"
+
+        private const val TAG: String = "BootReceiver"
     }
 }
