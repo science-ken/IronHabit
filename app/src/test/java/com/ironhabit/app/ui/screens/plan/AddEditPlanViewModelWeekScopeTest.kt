@@ -19,7 +19,11 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
+import java.util.concurrent.atomic.AtomicLong
+import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.atStartOfDayIn
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -43,7 +47,12 @@ class AddEditPlanViewModelWeekScopeTest {
     private val exerciseRepository = mockk<ExerciseRepository>(relaxed = true)
     private val planRepository = mockk<PlanRepository>(relaxed = true)
 
-    private fun viewModel(planId: Long = 0L, week: Long? = null): AddEditPlanViewModel {
+    /** @param clock 默认沿用真实时钟；只有跨周那条测试需要拨动它。 */
+    private fun viewModel(
+        planId: Long = 0L,
+        week: Long? = null,
+        clock: Clock = Clock.System,
+    ): AddEditPlanViewModel {
         every { exerciseRepository.observeActive() } returns flowOf(emptyList())
         every { planRepository.observeAll() } returns flowOf(existingRows(planId))
         return AddEditPlanViewModel(
@@ -57,7 +66,7 @@ class AddEditPlanViewModelWeekScopeTest {
             ),
             exerciseRepository = exerciseRepository,
             planRepository = planRepository,
-            clock = Clock.System,
+            clock = clock,
             timeZone = TimeZone.UTC,
         )
     }
@@ -123,6 +132,49 @@ class AddEditPlanViewModelWeekScopeTest {
         assertEquals(OTHER_WEEK, saved.weekStartEpochDay)
         assertEquals(7L, saved.id)
     }
+
+    /**
+     * 可以拨动的时钟：这条测试要的正是"表单开着的时候跨过了周一 00:00"。
+     * 用真实时钟就只能在 UTC 午夜前后那几分钟才复现（也就是 V2-P3-9 说的 flake 窗口）。
+     */
+    private class MovingClock(startMillis: Long) : Clock {
+
+        private val current: AtomicLong = AtomicLong(startMillis)
+
+        override fun now(): Instant = Instant.fromEpochMilliseconds(current.get())
+
+        fun advanceTo(millis: Long) {
+            current.set(millis)
+        }
+    }
+
+    /**
+     * 表单开着跨过周一 00:00 → 行必须落在**新的一周**（审查报告 V2-P3-6）。
+     *
+     * 旧实现把归属周在构造期算一次存成 `val`：周日夜里打开、周一凌晨保存的那一条
+     * 会静默进到上一周，而用户在"这一周"的清单里看不到它 —— 今日页与训练页的同型问题
+     * 2026-09-20 修过，这一处当时漏了。
+     */
+    @Test
+    fun weekRolloverWhileTheFormIsOpenLandsInTheNewWeek() =
+        runTest(mainDispatcherRule.testDispatcher) {
+            val sunday: LocalDate = LocalDate(2026, 9, 27) // 周日
+            val monday: LocalDate = LocalDate(2026, 9, 28) // 第二天就是周一
+            val clock = MovingClock(
+                sunday.atStartOfDayIn(TimeZone.UTC).toEpochMilliseconds() + 20L * 3_600_000L,
+            )
+            val vm = viewModel(clock = clock)
+            backgroundScope.launch { vm.uiState.collect { } }
+
+            // 打开表单之后过了午夜：这一下就是"跨周"。
+            clock.advanceTo(monday.atStartOfDayIn(TimeZone.UTC).toEpochMilliseconds() + 60_000L)
+
+            assertEquals(
+                "周日夜里打开、周一凌晨保存：行要落进周一那一周，不能留在上一周",
+                DateUtils.weekStartMon1(monday.toEpochDays().toLong()),
+                saveAndCapture(vm).weekStartEpochDay,
+            )
+        }
 
     private companion object {
         const val ROUTE_WEEK = 20_495L

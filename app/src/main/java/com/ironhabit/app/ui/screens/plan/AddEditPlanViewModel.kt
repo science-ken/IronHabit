@@ -101,19 +101,31 @@ class AddEditPlanViewModel @Inject constructor(
     private val routeWeek: Long =
         savedStateHandle.get<Long>(Destinations.PLAN_ARG_WEEK) ?: Destinations.PLAN_WEEK_UNSPECIFIED
 
-    /** 新增行的归属周：路由带了就用路由的，没带才是当前这一周。 */
-    private val newRowWeek: Long =
-        if (routeWeek > 0L) {
-            routeWeek
-        } else {
-            DateUtils.weekStartMon1(DateUtils.todayEpochDay(clock, timeZone))
-        }
+    /**
+     * 新增行的归属周：路由带了就用路由的（那是用户明确挑的一周），没带就是
+     * **写这一刻**所在的这一周。
+     *
+     * 以前这里是构造期求值一次的 `val newRowWeek`：表单在返回栈里跨过周一 00:00
+     * 之后再点保存，行会落进**上一周**，而用户在"这一周"里根本看不到它。
+     * 今日页/训练页的同型问题 2026-09-20 已修并写进 `TodayClock` 的 KDoc，
+     * 这一处是漏网的第三份（审查报告 V2-P3-6）。
+     *
+     * ⚠️ 残留一条：界面上那行日期区间（`AddEditPlanScreen` 读 `uiState.weekStartEpochDay`）
+     * 在按下保存之前仍是"打开表单那一刻"的那一周。保存时会把 `_form` 同步成真正写入的
+     * 值（见 [onSavePlan] 里的 `weekStart`），所以"标签说上周、行写进本周"不会留在库里，
+     * 但标签是到保存那一刻才跟着跳 —— 要让标签自己跨周跳，得给这个 VM 接 `TodayClock`。
+     */
+    private fun newRowWeek(): Long = if (routeWeek > 0L) {
+        routeWeek
+    } else {
+        DateUtils.weekStartMon1(DateUtils.todayEpochDay(clock, timeZone))
+    }
 
     private val _form = MutableStateFlow(
         AddEditPlanUiState(
             isEditing = planId != 0L,
             dayOfWeek = initialDay,
-            weekStartEpochDay = newRowWeek,
+            weekStartEpochDay = newRowWeek(),
         ),
     )
 
@@ -131,7 +143,7 @@ class AddEditPlanViewModel @Inject constructor(
                 initialValue = AddEditPlanUiState(
                     isEditing = planId != 0L,
                     dayOfWeek = initialDay,
-                    weekStartEpochDay = newRowWeek,
+                    weekStartEpochDay = newRowWeek(),
                 ),
             )
 
@@ -244,6 +256,11 @@ class AddEditPlanViewModel @Inject constructor(
                     null
                 }
                 val nowMillis = clock.now().toEpochMilliseconds()
+                // 归属周在**写入这一刻**算（跨周的残留说明见 `newRowWeek`）。
+                val weekStart: Long = existing?.weekStartEpochDay ?: newRowWeek()
+                if (weekStart != state.weekStartEpochDay) {
+                    _form.update { it.copy(weekStartEpochDay = weekStart) }
+                }
                 val plan = WeekPlan(
                     id = existing?.id ?: 0L,
                     exerciseId = state.selectedExerciseId,
@@ -259,7 +276,7 @@ class AddEditPlanViewModel @Inject constructor(
                     // 不带这一维就会落到 `0`（=「每周相同」那份），于是"我在下周加一个动作"
                     // 会变成"以后每周都多这个动作"，而且用户在"这一周"里根本看不到它。
                     // 编辑已有行时沿用该行自己的周，避免把行"搬"到别的周。
-                    weekStartEpochDay = existing?.weekStartEpochDay ?: newRowWeek,
+                    weekStartEpochDay = weekStart,
                     createdAt = existing?.createdAt?.takeIf { it > 0L } ?: nowMillis,
                 )
                 planRepository.upsert(plan)
