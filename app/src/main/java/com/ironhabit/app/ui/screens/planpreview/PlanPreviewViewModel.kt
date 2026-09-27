@@ -190,66 +190,72 @@ class PlanPreviewViewModel @Inject constructor(
         val dietDrafts: List<ImportedMealDraft> = holder.peekDietDrafts()
         val mealSlots: List<MealSlotSnapshot> = holder.peekMealSlots()
         viewModelScope.launch {
-            val names: Map<Long, String> = exerciseRepository.observeActive().first()
-                .associate { exercise -> exercise.id to exercise.name }
-            val reasons: Map<Pair<Int, Long>, String> = holder.peekReasons()
-            // 顺序有讲究：软删行一定同时 `isUserEdited = true`，所以「不吃」要先判，
-            // 否则那一格会被说成"你改过"，而用户真正的意思是这餐我不吃。
-            val blocked: Map<Pair<Int, MealType>, DietBlock> = mealSlots
-                .filter { slot -> slot.isUserEdited || !slot.isActive }
-                .associate { slot ->
-                    (slot.dayOfWeek to slot.mealType) to
-                        if (!slot.isActive) DietBlock.DECLINED else DietBlock.EDITED
-                }
-            val touchedDays: Set<Int> = mealSlots.filter { slot -> slot.isCompleted }
-                .map { slot -> slot.dayOfWeek }
-                .toSet()
-            _uiState.update { state ->
-                state.copy(
-                    weekRange = weekRangeText(snapshot.weekStartEpochDay),
-                    importNotes = holder.peekImportNotes(),
-                    profileRows = holder.peekProfileDiffs().map { diff -> ProfileRow(diff) },
-                    source = snapshot.source,
-                    fellBackFromRemote = snapshot.fallbackReason != null,
-                    analysis = snapshot.analysis,
-                    preservedCount = snapshot.preservedCount,
-                    days = (MIN_DAY..MAX_DAY).map { day ->
-                        val rows: List<WeekPlan>? = snapshot.draftsByDay[day]
-                        val diet: List<DietRow> = dietDrafts.filter { draft -> draft.dayOfWeek == day }
-                            .map { draft ->
-                                DietRow(
-                                    mealType = draft.mealType,
-                                    lines = draft.entries.map { entry -> "${entry.name} ${entry.grams}g" },
-                                    kcal = draft.kcal,
-                                    proteinG = draft.proteinG.roundToInt(),
-                                    missingCount = draft.unresolvedCount,
-                                    blocked = blocked[day to draft.mealType],
-                                )
-                            }
-                        when {
-                            rows != null || diet.isNotEmpty() -> Day(
-                                dayOfWeek = day,
-                                dateLabel = monthDayText(snapshot.weekStartEpochDay + day - 1),
-                                sets = rows.orEmpty().sumOf { row -> row.targetSets },
-                                items = rows.orEmpty().map { row ->
-                                    Item(
-                                        name = names[row.exerciseId] ?: "-",
-                                        goal = goalOf(row),
-                                        explanation = reasons[day to row.exerciseId],
+            // 这一页在 `init` 里就跑，以前没有任何 catch：动作库那一次读抛出未捕获异常
+            // 的表现是**从导入流程一进预览页就崩**，而用户刚点完"解析并预览"。
+            try {
+                val names: Map<Long, String> = exerciseRepository.observeActive().first()
+                    .associate { exercise -> exercise.id to exercise.name }
+                val reasons: Map<Pair<Int, Long>, String> = holder.peekReasons()
+                // 顺序有讲究：软删行一定同时 `isUserEdited = true`，所以「不吃」要先判，
+                // 否则那一格会被说成"你改过"，而用户真正的意思是这餐我不吃。
+                val blocked: Map<Pair<Int, MealType>, DietBlock> = mealSlots
+                    .filter { slot -> slot.isUserEdited || !slot.isActive }
+                    .associate { slot ->
+                        (slot.dayOfWeek to slot.mealType) to
+                            if (!slot.isActive) DietBlock.DECLINED else DietBlock.EDITED
+                    }
+                val touchedDays: Set<Int> = mealSlots.filter { slot -> slot.isCompleted }
+                    .map { slot -> slot.dayOfWeek }
+                    .toSet()
+                _uiState.update { state ->
+                    state.copy(
+                        weekRange = weekRangeText(snapshot.weekStartEpochDay),
+                        importNotes = holder.peekImportNotes(),
+                        profileRows = holder.peekProfileDiffs().map { diff -> ProfileRow(diff) },
+                        source = snapshot.source,
+                        fellBackFromRemote = snapshot.fallbackReason != null,
+                        analysis = snapshot.analysis,
+                        preservedCount = snapshot.preservedCount,
+                        days = (MIN_DAY..MAX_DAY).map { day ->
+                            val rows: List<WeekPlan>? = snapshot.draftsByDay[day]
+                            val diet: List<DietRow> = dietDrafts.filter { draft -> draft.dayOfWeek == day }
+                                .map { draft ->
+                                    DietRow(
+                                        mealType = draft.mealType,
+                                        lines = draft.entries.map { entry -> "${entry.name} ${entry.grams}g" },
+                                        kcal = draft.kcal,
+                                        proteinG = draft.proteinG.roundToInt(),
+                                        missingCount = draft.unresolvedCount,
+                                        blocked = blocked[day to draft.mealType],
                                     )
-                                },
-                                // 只排了吃、没排练的那天也是可采纳的一天 —— 以前 `rows == null` 直接落 REST，
-                                // 那样那一天的餐次会连"采纳"这个入口都没有。
-                                kind = Kind.DRAFT,
-                                diet = diet,
-                                touchesLoggedHistory = day in touchedDays,
-                            )
+                                }
+                            when {
+                                rows != null || diet.isNotEmpty() -> Day(
+                                    dayOfWeek = day,
+                                    dateLabel = monthDayText(snapshot.weekStartEpochDay + day - 1),
+                                    sets = rows.orEmpty().sumOf { row -> row.targetSets },
+                                    items = rows.orEmpty().map { row ->
+                                        Item(
+                                            name = names[row.exerciseId] ?: "-",
+                                            goal = goalOf(row),
+                                            explanation = reasons[day to row.exerciseId],
+                                        )
+                                    },
+                                    // 只排了吃、没排练的那天也是可采纳的一天 —— 以前 `rows == null` 直接落 REST，
+                                    // 那样那一天的餐次会连"采纳"这个入口都没有。
+                                    kind = Kind.DRAFT,
+                                    diet = diet,
+                                    touchesLoggedHistory = day in touchedDays,
+                                )
 
-                            day in snapshot.templateOwnedDays -> restDay(snapshot, day, Kind.TEMPLATE_OWNED)
-                            else -> restDay(snapshot, day, Kind.REST)
-                        }
-                    },
-                )
+                                day in snapshot.templateOwnedDays -> restDay(snapshot, day, Kind.TEMPLATE_OWNED)
+                                else -> restDay(snapshot, day, Kind.REST)
+                            }
+                        },
+                    )
+                }
+            } catch (throwable: Exception) {
+                _uiState.update { state -> state.copy(snackbarRes = R.string.error_generic) }
             }
         }
     }
@@ -293,26 +299,34 @@ class PlanPreviewViewModel @Inject constructor(
         if (_uiState.value.busy) return
         _uiState.update { state -> state.copy(busy = true) }
         viewModelScope.launch {
-            val summary = generateTrainingPlan.commit(snapshot, days)
-            val diet = adoptMeals(snapshot.weekStartEpochDay, holder.peekDietDrafts(), days)
-            val written: Int = summary.writtenCount + diet.writtenCount
-            if (written == 0) {
-                _uiState.update { state -> state.copy(busy = false, snackbarRes = R.string.msg_plan_nothing_adoptable) }
-                return@launch
-            }
-            _uiState.update { state ->
-                val next = state.days.map { day ->
-                    if (day.dayOfWeek in days && day.adoptable) day.copy(adopted = true) else day
+            try {
+                val summary = generateTrainingPlan.commit(snapshot, days)
+                val diet = adoptMeals(snapshot.weekStartEpochDay, holder.peekDietDrafts(), days)
+                val written: Int = summary.writtenCount + diet.writtenCount
+                if (written == 0) {
+                    _uiState.update { state -> state.copy(busy = false, snackbarRes = R.string.msg_plan_nothing_adoptable) }
+                    return@launch
                 }
-                state.copy(
-                    busy = false,
-                    days = next,
-                    snackbarRes = R.string.msg_plan_adopted_count,
-                    snackbarArg = written.toString(),
-                )
+                _uiState.update { state ->
+                    val next = state.days.map { day ->
+                        if (day.dayOfWeek in days && day.adoptable) day.copy(adopted = true) else day
+                    }
+                    state.copy(
+                        busy = false,
+                        days = next,
+                        snackbarRes = R.string.msg_plan_adopted_count,
+                        snackbarArg = written.toString(),
+                    )
+                }
+                // 草案全部采纳完就把快照丢掉，避免下次进来看到上一轮的陈旧内容。
+                if (_uiState.value.pendingDays == 0) holder.clear()
+            } catch (throwable: Exception) {
+                // 不接的话这里是从 viewModelScope 冒出去的未捕获异常 = **采纳那一刻崩 App**，
+                // 而表现最坏：库可能已经写进去一半，用户只看到"应用闪退"。
+                // `busy` 必须在这一支复位，否则那颗按钮永久点不动。
+                // 只落状态、不记日志：与其余 VM 同形，且单测没有 Robolectric，`Log` 会抛 not mocked。
+                _uiState.update { state -> state.copy(busy = false, snackbarRes = R.string.msg_plan_adopt_failed) }
             }
-            // 草案全部采纳完就把快照丢掉，避免下次进来看到上一轮的陈旧内容。
-            if (_uiState.value.pendingDays == 0) holder.clear()
         }
     }
 
@@ -341,16 +355,22 @@ class PlanPreviewViewModel @Inject constructor(
 
         _uiState.update { it.copy(busy = true) }
         viewModelScope.launch {
-            val applied: Int = applyProfile(checked)
-            _uiState.update { state ->
-                state.copy(
-                    busy = false,
-                    // 改完就把那几行撤下清单：留着它们，第二次点「应用」会把同一批值再写一遍，
-                    // 而界面看起来什么都没发生。
-                    profileRows = state.profileRows.filterNot { row -> row.checked },
-                    snackbarRes = R.string.plan_preview_profile_applied,
-                    snackbarArg = applied.toString(),
-                )
+            try {
+                val applied: Int = applyProfile(checked)
+                _uiState.update { state ->
+                    state.copy(
+                        busy = false,
+                        // 改完就把那几行撤下清单：留着它们，第二次点「应用」会把同一批值再写一遍，
+                        // 而界面看起来什么都没发生。
+                        profileRows = state.profileRows.filterNot { row -> row.checked },
+                        snackbarRes = R.string.plan_preview_profile_applied,
+                        snackbarArg = applied.toString(),
+                    )
+                }
+            } catch (throwable: Exception) {
+                // 逐字段写 DataStore，中途抛错就是"改了一半"。**不清勾**（保持现状）是对的：
+                // 再点一次会把同一批值重写一遍，幂等；而 `busy` 不复位则第二次根本点不动。
+                _uiState.update { state -> state.copy(busy = false, snackbarRes = R.string.error_generic) }
             }
         }
     }

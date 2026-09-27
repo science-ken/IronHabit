@@ -92,6 +92,8 @@
     <string name="plan_preview_rest_day">休息日 · 不排动作</string>
     <string name="plan_preview_template_day">这天由「以后每周都用这份」那一份负责，本次不动它</string>
     <string name="msg_plan_nothing_adoptable">这次没有可采纳的新内容（现有安排都被保留）</string>
+    <!-- 采纳失败要明说"再点一次是安全的"：两边的 upsert 都是幂等槽位写，已成功的那些不会重复写入。 -->
+    <string name="msg_plan_adopt_failed">采纳没写进去 —— 这一天可以再点一次，已排好的不会被重复写</string>
     <string name="msg_plan_adopted_count">已写入 %1$s 条计划</string>
     <string name="plan_preview_empty">没有待采纳的草案了</string>
     <string name="plan_preview_source_local">本地规则</string>

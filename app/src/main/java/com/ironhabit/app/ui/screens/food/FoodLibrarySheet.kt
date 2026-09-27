@@ -584,6 +584,12 @@ private fun FoodFormSection(
         Text(text = stringResource(R.string.action_add_serving))
     }
 
+    // 整体保存失败（重名撞车 / 库写失败）要有地方说：以前那条异常直接冒到这个
+    // `scope.launch` 上，等于一枚「保存」按钮把 App 点崩，连"没存上"都不说。
+    if (formState.saveErrorRes != 0) {
+        FormError(formState.saveErrorRes)
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()

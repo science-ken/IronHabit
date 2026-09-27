@@ -13,6 +13,7 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
+import java.io.IOException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
@@ -349,5 +350,25 @@ class FoodLibraryViewModelTest {
 
             vm.onDeactivate(1L)
             assertTrue(vm.uiState.value.showInactive)
+        }
+
+    /**
+     * 写库失败**不许**把异常冒回调用方（审查报告 P2-9）。
+     *
+     * 「保存」那颗按钮是在 `FoodLibrarySheet` 自己的 `scope.launch` 里 `onSave()` 的，
+     * 原先只有 `finally` 没有 `catch`：一条 IOException 的表现是**点保存崩 App**，
+     * 而崩之前一句"没存上"都没说。现在它必须变成留在表单上的一条错误。
+     * `isSaving` 也要复位 —— 漏了就是"保存失败一次，这颗按钮这辈子点不动了"。
+     */
+    @Test
+    fun repositoryFailureBecomesAnErrorMessageInsteadOfACrash() =
+        runTest(mainDispatcherRule.testDispatcher) {
+            val vm = viewModel()
+            coEvery { repository.upsert(any()) } throws IOException("模拟库写失败")
+            fillValid(vm)
+
+            assertNull("没存成必须报 null，否则表单会被收起 = 假装成功了", vm.onSave())
+            assertEquals(R.string.error_save_failed, vm.formState.value.saveErrorRes)
+            assertFalse("isSaving 没复位的话，保存按钮永久点不动", vm.formState.value.isSaving)
         }
 }

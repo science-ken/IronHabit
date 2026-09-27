@@ -15,6 +15,7 @@ import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
@@ -54,6 +55,13 @@ data class FoodFormState(
     val isBuiltIn: Boolean = false,
     val nameErrorRes: Int = 0,
     val numberErrorRes: Int = 0,
+    /**
+     * 「保存」这一按整体失败（查重与写入之间被别处插进同名行、或库写失败）。
+     *
+     * 刻意与上面两个字段分开：那两条说的是"某一格填错了"，这一条说的是
+     * "每格都对但没能写进去" —— 混进 numberErrorRes 会把人支去改数字。
+     */
+    val saveErrorRes: Int = 0,
     val isSaving: Boolean = false,
 ) {
     val isEditing: Boolean get() = foodId > 0L
@@ -92,7 +100,14 @@ class FoodLibraryViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            foodRepository.observeAll().collect { foods ->
+            foodRepository.observeAll()
+                // Room 流抛异常（库损坏 / 磁盘满 / 某行映射失败）以前是未捕获异常，
+                // 表现是**打开食物库就崩**。这里刻意不再 emit：列表保持上一帧，
+                // 比刷成"库里一条都没有"诚实。
+                // 上面那条 `profile()` 不需要同样的兜底 —— `SettingsDataStore.profile`
+                // 源头已经 `.catch { emit(emptyPreferences()) }`，它抛不出来。
+                .catch { /* 保持上一帧 */ }
+                .collect { foods ->
                 // 启用/停用分两栏而不是混排一栏：整库按拼音排好是用户找东西的依据，
                 // 把停用的混进去会让"牛奶"旁边突然多出一条他已经不要的牛奶。
                 val (active, inactive) = foods.partition { food -> food.isActive }
@@ -206,7 +221,7 @@ class FoodLibraryViewModel @Inject constructor(
         }
         // 防抖：进入即置位，失败路径在 finally 里复位（否则保存失败后按钮永久点不动）。
         if (state.isSaving) return null
-        _formState.update { it.copy(isSaving = true) }
+        _formState.update { it.copy(isSaving = true, saveErrorRes = 0) }
 
         try {
             val name: String = state.name.trim()
@@ -241,6 +256,12 @@ class FoodLibraryViewModel @Inject constructor(
             // 成功不另设提示字段：调用方拿到非 null 的返回值就会收起表单，
             // 表单收起本身就是"存好了"的信号（再叠一条 Snackbar 只会盖住列表变化）。
             return name
+        } catch (throwable: Exception) {
+            // 只有 finally 没有 catch = 异常直接冒到 `FoodLibrarySheet` 那颗按钮的
+            // `scope.launch`，于是一枚「保存」按钮能把 App 点崩。两条真实来源：
+            // 查重与写入之间别处插进了同名行（两处弹层共用同一个 VM）、以及库写失败。
+            _formState.update { it.copy(saveErrorRes = R.string.error_save_failed) }
+            return null
         } finally {
             _formState.update { it.copy(isSaving = false) }
         }
