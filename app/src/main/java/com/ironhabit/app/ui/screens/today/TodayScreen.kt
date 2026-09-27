@@ -50,6 +50,7 @@ import com.ironhabit.app.ui.components.PlanDateStrip
 import com.ironhabit.app.ui.components.SkeletonCard
 import com.ironhabit.app.ui.components.StatusNotice
 import com.ironhabit.app.ui.components.mealTypeLabelRes
+import com.ironhabit.app.ui.components.weekdayFullLabel
 import com.ironhabit.app.ui.screens.checkin.CheckInSheet
 import com.ironhabit.app.ui.screens.food.FoodLibraryEntry
 import com.ironhabit.app.ui.screens.food.FoodLibrarySheet
@@ -65,7 +66,8 @@ import com.ironhabit.app.ui.theme.IronHabitSpacing
  * 三态齐全：加载中 → 骨架屏；加载失败 → 空态 + 「重试」；空数据 → 空态 + 「去创建」。
  * 写操作结果通过全局 [LocalSnackbarHostState] 反馈；补录详情由 [CheckInSheet]（`ModalBottomSheet`）承载。
  *
- * **日期切换**：顶部 [PlanDateStrip] 让用户点日期 chip（或 `‹ ›` 跨周）切换查看的日期；
+ * **日期切换**：顶部 [PlanDateStrip] 让用户点一周 7 天里的任意一天（或 `‹ ›` 跨周）
+ * 切换查看的日期；休息日照常在列，「这周练了哪几天」只是格子上的一个圆点。
  * 切换只改 ViewModel 的日期游标（[TodayViewModel.onSelectEpochDay]），
  * 计划 / 习惯 / 打卡状态随游标经 Room 数据流自动刷新（schema-v2 §6.1 / §6.3 坑 1）。
  *
@@ -110,6 +112,10 @@ fun TodayScreen(
     // 未来日只读：所选日 > 今天（`todayEpochDay` == 0 表示尚未加载，不判定）。
     val isFutureDay: Boolean =
         uiState.todayEpochDay > 0L && uiState.dateEpochDay > uiState.todayEpochDay
+
+    // 日期栏改成一格一天之后，翻到别的日子成了常规操作 —— 页面上凡是说"这一天"的
+    // 文案都得跟着游标走，不能再写死「今天」（休息日提示与训练空态两处共用这一份）。
+    val selectedDayLabel: String = weekdayFullLabel(DateUtils.weekdayMon1(uiState.dateEpochDay))
 
     val snackbarText: String? = uiState.snackbarRes?.let { res ->
         stringResource(res, *uiState.snackbarArgs.toTypedArray())
@@ -186,7 +192,7 @@ fun TodayScreen(
 
                     if (uiState.isRestDay) {
                         StatusNotice(
-                            text = stringResource(R.string.msg_rest_day),
+                            text = stringResource(R.string.msg_rest_day, selectedDayLabel),
                             icon = Icons.Filled.SelfImprovement,
                         )
                     }
@@ -265,7 +271,7 @@ fun TodayScreen(
 
                             uiState.plans.isEmpty() -> {
                                 EmptyState(
-                                    text = stringResource(R.string.empty_today_plan),
+                                    text = stringResource(R.string.empty_today_plan, selectedDayLabel),
                                     actionText = stringResource(R.string.action_create),
                                     onAction = {
                                         sheetTarget = null

@@ -88,6 +88,9 @@ class StringResourcePlaceholderContractTest {
         entry("meal_slot_taken_hint", ArgKind.STRING) // MealEditSheet 被占餐次 chip 灰掉后的说明（实参：餐次名拼接串）
         entry("meal_slot_deleted_hint", ArgKind.STRING) // MealEditSheet 选中"软删过的那一格"时的后果说明（实参：餐次名）
         entry("hint_repeat_plan", ArgKind.STRING) // TodayScreen 模板出口行（repeatPlanRowCount.toString()）
+        // 日期栏改成一格一天后，这两句要说出**游标那一天**，不能再写死「今天」。
+        entry("msg_rest_day", ArgKind.STRING) // TodayScreen 休息日提示（weekdayFullLabel → 「周六」）
+        entry("empty_today_plan", ArgKind.STRING) // TodayScreen 训练弹窗空态（同一个 weekdayFullLabel）
         entry("label_streak_best", ArgKind.NUMERIC) // TodayBento（streak.best）
         entry("label_streak_days_value", ArgKind.NUMERIC) // TodayBento hero 磁贴（streak.current，displaySmall 那一行）
         entry("label_progress_ratio", ArgKind.NUMERIC, ArgKind.NUMERIC) // TodayBento（今日完成、习惯 n/m）

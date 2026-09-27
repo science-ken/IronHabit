@@ -46,6 +46,7 @@ import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -113,6 +114,14 @@ class TodayViewModelDateCursorTest {
     private val dayMillis: Long = 86_400_000L
     private val today: Long = DateUtils.todayEpochDay(clock, timeZone)
     private val futureDay: Long = today + 7 // 「看下周计划」
+
+    /**
+     * 本周里「没排课」的一天：周六。正好赶上今天就是周六时退到周四 ——
+     * 否则这条用例测的就不是"切换"，而是"停在原地"。
+     */
+    private val restDay: Long = DateUtils.weekStartMon1(today).let { start ->
+        if (start + 5L == today) start + 3L else start + 5L
+    }
 
     private val exercise = Exercise(id = 1L, name = "卧推", category = ExerciseCategory.STRENGTH)
     private val plan = WeekPlan(id = 10L, exerciseId = 1L, dayOfWeek = 1, targetSets = 3, targetReps = 10)
@@ -248,6 +257,47 @@ class TodayViewModelDateCursorTest {
         assertEquals("切换后日期游标 = 所选未来日", futureDay, vm.uiState.value.dateEpochDay)
         assertEquals("todayEpochDay 仍为真正今天（游标与今天分离）", today, vm.uiState.value.todayEpochDay)
     }
+
+    /**
+     * 休息日**可达之后**，VM 这一侧必须还认得它。
+     *
+     * 日期栏改版前只渲染排了课的那几天，休息日压根点不到（`‹ ›` 步长 ±7，从周一只能
+     * 翻到周一），所以这三条从来没被真正走到过。改版后一格一天，这里钉住：
+     * - 切到休息日不能把 `hasPlanThisWeek` 冲成 `false` —— 否则这一天会显示
+     *   「这一周还没有训练计划」+「去创建」，而本周明明周一三五都有课；
+     * - `plannedWeekdays` 要原样留着（日期栏的圆点和「24 / 35」的分母都吃它）；
+     * - 写入口落在**所选的那一天**，不是真正的今天。
+     */
+    @Test
+    fun selectingRestDayKeepsWeekPlanAndWritesLandOnThatDay() =
+        runTest(mainDispatcherRule.testDispatcher) {
+            every { getTodayOverview.invoke(restDay) } returns
+                flowOf(TodayOverview(dateEpochDay = restDay, plannedWeekdays = listOf(1, 3, 5)))
+            every { getTodayMeals.invoke(restDay) } returns flowOf(TodayMeals())
+
+            val vm = newViewModel()
+            advanceUntilIdle()
+
+            vm.onSelectEpochDay(restDay)
+            advanceUntilIdle()
+
+            assertEquals("切换后日期游标 = 所选休息日", restDay, vm.uiState.value.dateEpochDay)
+            assertTrue(
+                "本周排了课：切到休息日不能把 hasPlanThisWeek 冲掉",
+                vm.uiState.value.hasPlanThisWeek,
+            )
+            assertTrue("这一天没课也没习惯 → 判为休息日（文案要说它是休息日，不是「没计划」）", vm.uiState.value.isRestDay)
+            assertEquals(
+                "排课的星期要留着：日期栏圆点与本周分母都靠它",
+                listOf(1, 3, 5),
+                vm.uiState.value.plannedWeekdays,
+            )
+
+            vm.onToggleHabit(habitItem)
+            advanceUntilIdle()
+
+            coVerify { toggleHabit(habitId = 5L, epochDay = restDay, done = true) }
+        }
 
     @Test
     fun writeOpsAfterSelectingFutureDayLandOnSelectedFutureDay() =

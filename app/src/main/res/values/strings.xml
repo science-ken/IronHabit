@@ -41,7 +41,9 @@
 
     <!-- ===== 今日页 ===== -->
     <string name="title_today">今日</string>
-    <string name="title_today_train">今日训练</string>
+    <!-- 不写「今日训练」/「今日饮食」：顶部日期栏一格一天，翻到别的日子时
+         弹窗标题跟着说"今日"就成了假话（与上面「习惯」同一口径）。 -->
+    <string name="title_today_train">训练</string>
     <!-- 不写「今日习惯」：磁贴的分母是**全部启用习惯**，不是"今天该做的那几个"
          （按应做日过滤就没法提前或额外勾一天 —— 2026-09-23 拍板保留能力、改标签）。
          周五仍可能显示 0/1，那是设计，不是 bug。 -->
@@ -59,8 +61,8 @@
     <string name="label_today_pending">待完成</string>
     <string name="msg_checkin_done">已完成 ✓</string>
     <string name="msg_streak_broken">已断档，重新开始</string>
-    <string name="msg_rest_day">今天是休息日，好好放松 😌</string>
-    <string name="empty_today_plan">今天还没有安排，去「训练」页添加计划吧</string>
+    <string name="msg_rest_day">%1$s是休息日，好好放松 😌</string>
+    <string name="empty_today_plan">%1$s还没有安排，去「训练」页添加计划吧</string>
 
     <!-- ===== 每周一份计划（P3）===== -->
     <string name="empty_week_plan_title">这一周还没有训练计划</string>
@@ -855,7 +857,7 @@
 
     <!-- ===== 饮食模块（v3 增量 · meals）===== -->
     <!-- 今日页区块 -->
-    <string name="title_today_meals">今日饮食</string>
+    <string name="title_today_meals">饮食</string>
     <string name="empty_today_meals">还没有饮食计划，点下面生成一份吧</string>
     <string name="action_generate_diet">生成饮食计划</string>
     <string name="action_regenerate_diet">重新生成</string>
