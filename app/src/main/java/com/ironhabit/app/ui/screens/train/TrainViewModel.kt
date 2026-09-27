@@ -319,7 +319,12 @@ class TrainViewModel @Inject constructor(
         snackbarRes = local.snackbarRes,
         addToPlanSheetExercise = local.addToPlanSheetExercise ?: data.addToPlanSheetExercise,
         isSubmittingAdd = local.isSubmittingAdd,
-        errorRes = data.errorRes ?: local.errorRes,
+        // 数据帧没报错 = 数据是好的，不能把旧错误续下去：那样整页会一直停在错误分支
+        // （计划/动作库/历史三分段全被隐藏），而断网时 `onAdoptSuggestion` 极易置位。
+        // 代价要说清：`persist` 那条写失败也是落在合并态上的，它会被**下一次数据发射**抹掉
+        // —— 只有"别处改了库"才会触发，所以实际看得见。今日页 `TodayViewModel.applyData`
+        // 早就是这个口径，两处统一比各自最优重要：同一个 App 里"错误什么时候消失"不该有两种答案。
+        errorRes = data.errorRes,
         // ⚠️ 补充动作这五个字段**不在** dataState 里（它是一次性 suspend 拉的，不是响应式流），
         // 不加这一段就会在每次 Room 重emit 时被静默清回默认值 —— 列表闪一下自己变空。
         suggestions = local.suggestions,

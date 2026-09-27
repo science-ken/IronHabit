@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -80,40 +81,64 @@ class BodyMetricsViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(BodyMetricsUiState())
     val uiState: StateFlow<BodyMetricsUiState> = _uiState.asStateFlow()
 
-    private val dataState: StateFlow<BodyMetricsUiState> =
-        combine(
-            typeFlow.flatMapLatest { type ->
-                bodyMetricRepository.observeByType(type).map { records -> type to records }
-            },
-            _form,
-        ) { typeRecords, form ->
-            val type = typeRecords.first
-            val records = typeRecords.second
-            BodyMetricsUiState(
-                isLoading = false,
-                selectedType = type,
-                records = records,
-                latest = bodyMetricRepository.latest(type),
-                valueText = form.valueText,
-                unitText = form.unitText,
-                numberErrorRes = form.numberErrorRes,
-                errorRes = form.errorRes,
-                snackbarRes = form.snackbarRes,
-            )
-        }
-            .catch {
-                emit(BodyMetricsUiState(isLoading = false, errorRes = R.string.error_load_failed))
+    /** 数据流重订阅触发器（失败重试）：自增即让下面的聚合流整体重订阅一次。 */
+    private val retryTrigger = MutableStateFlow(0L)
+
+    private val dataState: StateFlow<BodyMetricsUiState> = retryTrigger
+        .flatMapLatest {
+            combine(
+                typeFlow.flatMapLatest { type ->
+                    bodyMetricRepository.observeByType(type).map { records -> type to records }
+                },
+                _form,
+            ) { typeRecords, form ->
+                val type = typeRecords.first
+                val records = typeRecords.second
+                BodyMetricsUiState(
+                    isLoading = false,
+                    selectedType = type,
+                    records = records,
+                    latest = bodyMetricRepository.latest(type),
+                    valueText = form.valueText,
+                    unitText = form.unitText,
+                    numberErrorRes = form.numberErrorRes,
+                    errorRes = form.errorRes,
+                    snackbarRes = form.snackbarRes,
+                )
             }
-            .stateIn(
-                scope = viewModelScope,
-                started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
-                initialValue = BodyMetricsUiState(),
-            )
+                // 每一帧都从上一帧复制：这一页的状态里混着**用户自己的选择**（指标类型）和
+                // **他正填着的数值框**。重订阅若发一个 `BodyMetricsUiState()` 默认值，
+                // 正在记体脂的人会被弹回「体重」，而填了一半的数字直接消失 —— 那两件事
+                // 都跟"读库失败"无关。`isLoading`/`errorRes` 仍显式覆盖，保证重试帧
+                // 与错误帧不同值（StateFlow 会去重相同值，那样重试点了没反应）。
+                .onStart { emit(_uiState.value.copy(isLoading = true, errorRes = null)) }
+                .catch {
+                    emit(_uiState.value.copy(isLoading = false, errorRes = R.string.error_load_failed))
+                }
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
+            initialValue = BodyMetricsUiState(),
+        )
 
     init {
         viewModelScope.launch {
             dataState.collect { data -> _uiState.value = data }
         }
+    }
+
+    /**
+     * 加载失败后重试（重新订阅数据源）。
+     *
+     * 必须连 [_form] 里的 `errorRes` 一起清：正常帧的 `errorRes` 取的就是 `form.errorRes`
+     * （见上面 combine），只清 `_uiState` 的话下一条 Room 帧会把同一个错误原样续回来，
+     * 表现为"点了重试没反应"。
+     */
+    fun onRetry() {
+        _form.update { form -> form.copy(errorRes = null) }
+        _uiState.update { state -> state.copy(isLoading = true, errorRes = null) }
+        retryTrigger.update { it + 1L }
     }
 
     /** 切换指标类型（同步刷新默认单位）。 */

@@ -20,6 +20,7 @@ import com.ironhabit.app.domain.repository.SettingsRepository
 import com.ironhabit.app.domain.usecase.ScheduleReminderUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -28,7 +29,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -78,6 +81,7 @@ private const val DEFAULT_MINUTE = 0
  * 主题/单位/提醒/档案改动均**即时落 DataStore**（无独立保存按钮）。
  * 提醒开关或时间改动后调用 [ScheduleReminderUseCase]（内部自读最新设置决定排期/取消）。
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
@@ -89,32 +93,40 @@ class SettingsViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
 
+    /** 数据流重订阅触发器（失败重试）：自增即让下面的聚合流整体重订阅一次。 */
+    private val retryTrigger = MutableStateFlow(0L)
+
     /** 最新体重（只读）；无记录为 `null`。 */
     private val latestWeightKg: Flow<Float?> =
         bodyMetricRepository.observeByType(BodyMetricType.WEIGHT)
             .map { metrics -> metrics.maxByOrNull { it.dateEpochDay }?.value }
 
-    private val dataState: StateFlow<SettingsUiState> =
-        combine(
-            settingsRepository.settings(),
-            settingsRepository.profile(),
-            settingsRepository.aiRemoteEnabled(),
-            latestWeightKg,
-        ) { settings: AppSettings, profile: UserProfile, aiRemote: Boolean, weightKg: Float? ->
-            settings.toUiState().copy(
-                profile = profile,
-                currentWeightKg = weightKg,
-                aiRemoteEnabled = aiRemote,
-            )
-        }
-            .catch {
-                emit(SettingsUiState(isLoading = false, errorRes = R.string.error_load_failed))
+    private val dataState: StateFlow<SettingsUiState> = retryTrigger
+        .flatMapLatest {
+            combine(
+                settingsRepository.settings(),
+                settingsRepository.profile(),
+                settingsRepository.aiRemoteEnabled(),
+                latestWeightKg,
+            ) { settings: AppSettings, profile: UserProfile, aiRemote: Boolean, weightKg: Float? ->
+                settings.toUiState().copy(
+                    profile = profile,
+                    currentWeightKg = weightKg,
+                    aiRemoteEnabled = aiRemote,
+                )
             }
-            .stateIn(
-                scope = viewModelScope,
-                started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
-                initialValue = SettingsUiState(),
-            )
+                // 每次（重）订阅都先发一帧「加载中」：否则重试再次失败时，与已缓存的错误态
+                // 完全相同的值会被 StateFlow 去重丢掉，界面会永远卡在重试前的状态。
+                .onStart { emit(SettingsUiState()) }
+                .catch {
+                    emit(SettingsUiState(isLoading = false, errorRes = R.string.error_load_failed))
+                }
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
+            initialValue = SettingsUiState(),
+        )
 
     init {
         viewModelScope.launch {
@@ -126,12 +138,20 @@ class SettingsViewModel @Inject constructor(
                         snackbarArgs = local.snackbarArgs,
                         hasApiKey = local.hasApiKey,
                         aiStorageUnavailable = local.aiStorageUnavailable,
-                        errorRes = data.errorRes ?: local.errorRes,
+                        // 这一帧没报错 = 数据是好的：把旧错误续下去会让整页一直停在错误分支，
+                        // 而那正是"重试"要清掉的东西（见 [onRetry]）。
+                        errorRes = data.errorRes,
                     )
                 }
             }
         }
         refreshAiCredentialSnapshot()
+    }
+
+    /** 加载失败后重试（重新订阅数据源）。 */
+    fun onRetry() {
+        _uiState.update { state -> state.copy(isLoading = true, errorRes = null) }
+        retryTrigger.update { it + 1L }
     }
 
     /**

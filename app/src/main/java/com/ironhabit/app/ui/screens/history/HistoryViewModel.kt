@@ -13,14 +13,18 @@ import com.ironhabit.app.domain.usecase.GetHeatmapUseCase
 import com.ironhabit.app.domain.util.DateUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
@@ -73,7 +77,12 @@ data class HistoryUiState(
  *
  * 以 [CheckInRepository.observeBetween]（近 180 天）+ [ExerciseRepository.observeActive] 组合出分组视图；
  * 热力图与完成率在每次数据变化时重算，保证打卡后自动刷新。
+ *
+ * 读取失败时页面给的是**页内重试**（[onRetry] 重订阅整条聚合流），
+ * 形状照 [com.ironhabit.app.ui.screens.profile.ProfileViewModel] —— 本工程里
+ * "错误态 + 页内重试"只有一种写法，新页面别再发明第二种。
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class HistoryViewModel @Inject constructor(
     private val checkInRepository: CheckInRepository,
@@ -87,46 +96,60 @@ class HistoryViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(HistoryUiState())
     val uiState: StateFlow<HistoryUiState> = _uiState.asStateFlow()
 
-    private val dataState: StateFlow<HistoryUiState> =
-        combine(
-            checkInRepository.observeBetween(rangeStartEpochDay(), todayEpochDay()),
-            exerciseRepository.observeActive(),
-        ) { checkIns, exercises -> checkIns to exercises }
-            .map { (checkIns, exercises) ->
-                val nameById: Map<Long, String> = exercises.associate { it.id to it.name }
-                val days: List<HistoryDayEntry> = checkIns
-                    .groupBy { it.dateEpochDay }
-                    .map { (epochDay, items) ->
-                        HistoryDayEntry(
-                            epochDay = epochDay,
-                            items = items.map { checkIn -> checkIn.toHistoryItem(nameById) },
-                        )
-                    }
-                    .sortedByDescending { it.epochDay }
+    /** 数据流重订阅触发器（失败重试）：自增即让下面的聚合流整体重订阅一次。 */
+    private val retryTrigger = MutableStateFlow(0L)
 
-                HistoryUiState(
-                    isLoading = false,
-                    days = days,
-                    heatmap = getHeatmap(HEATMAP_DAYS),
-                    completionRate = statsRepository.completionRate(
-                        rangeStartEpochDay(),
-                        todayEpochDay(),
-                    ),
-                )
-            }
-            .catch {
-                emit(HistoryUiState(isLoading = false, errorRes = R.string.error_load_failed))
-            }
-            .stateIn(
-                scope = viewModelScope,
-                started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
-                initialValue = HistoryUiState(),
-            )
+    private val dataState: StateFlow<HistoryUiState> = retryTrigger
+        .flatMapLatest {
+            combine(
+                checkInRepository.observeBetween(rangeStartEpochDay(), todayEpochDay()),
+                exerciseRepository.observeActive(),
+            ) { checkIns, exercises -> checkIns to exercises }
+                .map { (checkIns, exercises) ->
+                    val nameById: Map<Long, String> = exercises.associate { it.id to it.name }
+                    val days: List<HistoryDayEntry> = checkIns
+                        .groupBy { it.dateEpochDay }
+                        .map { (epochDay, items) ->
+                            HistoryDayEntry(
+                                epochDay = epochDay,
+                                items = items.map { checkIn -> checkIn.toHistoryItem(nameById) },
+                            )
+                        }
+                        .sortedByDescending { it.epochDay }
+
+                    HistoryUiState(
+                        isLoading = false,
+                        days = days,
+                        heatmap = getHeatmap(HEATMAP_DAYS),
+                        completionRate = statsRepository.completionRate(
+                            rangeStartEpochDay(),
+                            todayEpochDay(),
+                        ),
+                    )
+                }
+                // 每次（重）订阅都先发一帧「加载中」：否则重试再次失败时，与已缓存的错误态
+                // 完全相同的值会被 StateFlow 去重丢掉，界面会永远卡在重试前的状态。
+                .onStart { emit(HistoryUiState()) }
+                .catch {
+                    emit(HistoryUiState(isLoading = false, errorRes = R.string.error_load_failed))
+                }
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
+            initialValue = HistoryUiState(),
+        )
 
     init {
         viewModelScope.launch {
             dataState.collect { data -> _uiState.value = data }
         }
+    }
+
+    /** 加载失败后重试（重新订阅数据源）。 */
+    fun onRetry() {
+        _uiState.update { state -> state.copy(isLoading = true, errorRes = null) }
+        retryTrigger.update { it + 1L }
     }
 
     private fun todayEpochDay(): Long = DateUtils.todayEpochDay(clock, timeZone)

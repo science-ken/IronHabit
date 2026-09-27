@@ -112,7 +112,11 @@ fun BodyMetricsScreen(
             }
 
             errorRes != null -> {
-                EmptyState(text = stringResource(errorRes))
+                EmptyState(
+                    text = stringResource(errorRes),
+                    actionText = stringResource(R.string.action_retry),
+                    onAction = viewModel::onRetry,
+                )
                 AddRecordRow(onClick = { showAddSheet = true })
             }
 

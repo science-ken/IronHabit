@@ -200,7 +200,7 @@ class DisciplineViewModel @Inject constructor(
      *
      * `habitItemsFlow` / `heatmapFlow` / `monthRateFlow` 都是 Room 冷流，
      * 递增 [retryTrigger] 会让 [dataState] 重新订阅并重跑查询；同时先清掉本地错误态，
-     * 否则 [merge] 的 `errorRes = data.errorRes ?: local.errorRes` 会把旧错误一直挂在页面上。
+     * 好让按钮按下去立刻有反应，而不是等新帧到达才收起错误页。
      */
     fun onRetry() {
         _uiState.update { state -> state.copy(errorRes = null) }
@@ -211,7 +211,8 @@ class DisciplineViewModel @Inject constructor(
 
     private fun merge(local: DisciplineUiState, data: DisciplineUiState): DisciplineUiState = data.copy(
         snackbarRes = local.snackbarRes,
-        errorRes = data.errorRes ?: local.errorRes,
+        // 与 `TrainViewModel.merge` 同一条口径：数据帧没报错就不续旧错误（代价与理由见那里）。
+        errorRes = data.errorRes,
         // 展开/收起是用户在这一个页面里的临时视角，数据刷新不该把它弹回去。
         showDeleted = local.showDeleted,
     )

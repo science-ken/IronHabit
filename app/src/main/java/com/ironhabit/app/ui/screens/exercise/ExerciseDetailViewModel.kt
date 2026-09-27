@@ -12,13 +12,17 @@ import com.ironhabit.app.domain.repository.ExerciseRepository
 import com.ironhabit.app.ui.navigation.Destinations
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
@@ -63,48 +67,62 @@ class ExerciseDetailViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(ExerciseDetailUiState(exerciseId = exerciseId))
     val uiState: StateFlow<ExerciseDetailUiState> = _uiState.asStateFlow()
 
-    private val dataState: StateFlow<ExerciseDetailUiState> =
-        checkInRepository.observeByExercise(exerciseId)
-            .map { checkIns ->
-                val exercise = exerciseRepository.getById(exerciseId)
-                if (exercise == null) {
-                    ExerciseDetailUiState(
-                        isLoading = false,
-                        exerciseId = exerciseId,
-                        history = checkIns,
-                        errorRes = R.string.error_load_failed,
-                    )
-                } else {
-                    ExerciseDetailUiState(
-                        isLoading = false,
-                        exerciseId = exercise.id,
-                        exerciseName = exercise.name,
-                        category = exercise.category,
-                        muscleGroup = exercise.primaryMuscleGroup,
-                        timesUsed = exercise.timesUsed,
-                        history = checkIns,
+    /** 数据流重订阅触发器（失败重试）：自增即让下面的流整体重订阅一次。 */
+    private val retryTrigger = MutableStateFlow(0L)
+
+    private val dataState: StateFlow<ExerciseDetailUiState> = retryTrigger
+        .flatMapLatest {
+            checkInRepository.observeByExercise(exerciseId)
+                .map { checkIns ->
+                    val exercise = exerciseRepository.getById(exerciseId)
+                    if (exercise == null) {
+                        ExerciseDetailUiState(
+                            isLoading = false,
+                            exerciseId = exerciseId,
+                            history = checkIns,
+                            errorRes = R.string.error_load_failed,
+                        )
+                    } else {
+                        ExerciseDetailUiState(
+                            isLoading = false,
+                            exerciseId = exercise.id,
+                            exerciseName = exercise.name,
+                            category = exercise.category,
+                            muscleGroup = exercise.primaryMuscleGroup,
+                            timesUsed = exercise.timesUsed,
+                            history = checkIns,
+                        )
+                    }
+                }
+                // 每次（重）订阅都先发一帧「加载中」：否则重试再次失败时，与已缓存的错误态
+                // 完全相同的值会被 StateFlow 去重丢掉，界面会永远卡在重试前的状态。
+                .onStart { emit(ExerciseDetailUiState(exerciseId = exerciseId)) }
+                .catch {
+                    emit(
+                        ExerciseDetailUiState(
+                            isLoading = false,
+                            exerciseId = exerciseId,
+                            errorRes = R.string.error_load_failed,
+                        ),
                     )
                 }
-            }
-            .catch {
-                emit(
-                    ExerciseDetailUiState(
-                        isLoading = false,
-                        exerciseId = exerciseId,
-                        errorRes = R.string.error_load_failed,
-                    ),
-                )
-            }
-            .stateIn(
-                scope = viewModelScope,
-                started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
-                initialValue = ExerciseDetailUiState(exerciseId = exerciseId),
-            )
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
+            initialValue = ExerciseDetailUiState(exerciseId = exerciseId),
+        )
 
     init {
         viewModelScope.launch {
             dataState.collect { data -> _uiState.value = data }
         }
+    }
+
+    /** 加载失败后重试（重新订阅数据源）。 */
+    fun onRetry() {
+        _uiState.update { state -> state.copy(isLoading = true, errorRes = null) }
+        retryTrigger.update { it + 1L }
     }
 
     private companion object {
