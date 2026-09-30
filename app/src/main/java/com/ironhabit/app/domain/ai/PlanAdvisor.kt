@@ -5,7 +5,6 @@ import com.ironhabit.app.domain.model.Exercise
 import com.ironhabit.app.domain.model.ExerciseProgress
 import com.ironhabit.app.domain.model.ExerciseSuggestion
 import com.ironhabit.app.domain.model.PlanProposal
-import com.ironhabit.app.domain.model.RemoteFallbackReason
 import com.ironhabit.app.domain.model.UserProfile
 import com.ironhabit.app.domain.model.WeekPlan
 import kotlinx.datetime.LocalDate
@@ -13,26 +12,18 @@ import kotlinx.datetime.LocalDate
 /**
  * 计划 / 建议来源的统一抽象。
  *
- * 本期**只有一个实现** [LocalRuleAdvisor]（`source = [AdviceSource.LOCAL_RULES]`）；
- * 将来接入联网模型时，新增 `RemoteLlmAdvisor`（`source = [AdviceSource.REMOTE_LLM]`）实现同一接口，
- * **UI 与 UseCase 不改**（依赖注入切换实现即可）。
+ * **当前只有一个实现** [LocalRuleAdvisor]（`source = [AdviceSource.LOCAL_RULES]`）。
+ * 曾经存在过第二个实现 `RemoteLlmAdvisor`（拿用户自填的 API Key 直连 DeepSeek），
+ * 连同 [com.ironhabit.app.domain.ai.DelegatingPlanAdvisor] 那层委托一起在 v2.0.14 删除。
+ * 接口留着是因为 UseCase 全部经注入取用它，而不是因为"将来还要接" ——
+ * 真要接任何远端时，该重新走一遍"要不要联网、发什么数据出去"的决策，而不是插一个实现就完事。
  *
- * ⚠️ 接口刻意保持"**纯函数**"形状：**无 suspend、无 IO、无 Android 依赖、无随机** → 便于 JVM 单测；
- * 联网实现的耗时 / 线程交由 UseCase 层（`withContext(Dispatchers.IO)`）处理。
+ * ⚠️ 接口刻意保持"**纯函数**"形状：**无 suspend、无 IO、无 Android 依赖、无随机** → 便于 JVM 单测。
  */
 interface PlanAdvisor {
 
     /** 建议来源（诚实标注）。 */
     val source: AdviceSource
-
-    /**
-     * 最近一次调用的**回落原因**（联网一期 §6.2 N4）。
-     *
-     * `null` = 未发生回落；非 `null` = 本次结果实际来自本地规则，但原因不是"用户选了本地"。
-     * 默认实现恒为 `null`（[LocalRuleAdvisor] 等本地实现天然不回落）；
-     * 只有 [com.ironhabit.app.domain.ai.DelegatingPlanAdvisor] 会覆写。
-     */
-    val lastFallbackReason: RemoteFallbackReason? get() = null
 
     /**
      * 【纯函数 ①】按档案生成「一周训练计划草案」。

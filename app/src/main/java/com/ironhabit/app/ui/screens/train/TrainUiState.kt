@@ -3,7 +3,6 @@ package com.ironhabit.app.ui.screens.train
 import com.ironhabit.app.domain.model.AdviceSource
 import com.ironhabit.app.domain.model.Exercise
 import com.ironhabit.app.domain.model.ExerciseSuggestion
-import com.ironhabit.app.domain.model.RemoteFallbackReason
 import com.ironhabit.app.domain.model.WeekPlan
 import java.text.Collator
 import java.util.Locale
@@ -36,8 +35,7 @@ data class HistoryEntry(
  * @property suggestions 还能收入的补充动作（**已在动作库里的不会出现**）；从 AI 教练页挪来的，
  *   因为「收入动作库」是维护动作库这件事，不该在教练页发生
  * @property adoptedNames 本次会话已收入过的动作名（幂等提示用：重复点不再写入，但按钮要变灰）
- * @property suggestionSource 这批建议的实际来源（本地规则 / AI 联网）—— 界面要如实标注
- * @property suggestionFallbackReason 走本地时的回落原因（`null` = 没有回落）
+ * @property suggestionSource 这批建议的实际来源 —— 界面据此决定要不要标出处
  * @property isLoadingSuggestions 建议加载中（只在进入「动作库」分段时才要）
  * @property errorRes 页面级错误资源 id
  * @property snackbarRes 一次性 Snackbar 资源 id
@@ -57,7 +55,6 @@ data class TrainUiState(
     val suggestions: List<ExerciseSuggestion> = emptyList(),
     val adoptedNames: Set<String> = emptySet(),
     val suggestionSource: AdviceSource = AdviceSource.LOCAL_RULES,
-    val suggestionFallbackReason: RemoteFallbackReason? = null,
     val isLoadingSuggestions: Boolean = false,
     val errorRes: Int? = null,
     val snackbarRes: Int? = null,

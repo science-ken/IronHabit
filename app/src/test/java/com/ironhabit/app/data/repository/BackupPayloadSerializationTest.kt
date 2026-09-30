@@ -78,7 +78,6 @@ class BackupPayloadSerializationTest {
         assertEquals(setOf(InjuryArea.KNEE.name), settings.injuryAreas)
         assertEquals("左膝旧伤，避免深蹲", settings.injuryNote)
         assertEquals(setOf(DietRestriction.PEANUT.name), settings.dietaryAvoid)
-        assertTrue("AI 联网开关必须随备份往返", settings.aiRemoteEnabled)
 
         // 6 张表的 createdAt 逐项断言：这是 bug (b) 的直接回归守卫。
         assertEquals(1_690_000_000_001L, restored.exercises.single().createdAt)
@@ -149,7 +148,6 @@ class BackupPayloadSerializationTest {
             "\"injuryAreas\"",
             "\"injuryNote\"",
             "\"dietaryAvoid\"",
-            "\"aiRemoteEnabled\"",
             "\"createdAt\"",
             "\"meals\"",
             "\"foods\"",
@@ -186,7 +184,6 @@ class BackupPayloadSerializationTest {
         assertEquals(emptySet<String>(), settings.injuryAreas)
         assertNull(settings.injuryNote)
         assertEquals(emptySet<String>(), settings.dietaryAvoid)
-        assertEquals("v2 无该键 → 默认 false", false, settings.aiRemoteEnabled)
 
         // 老备份的主题/单位/提醒仍按原键还原。
         assertEquals(ThemeMode.DARK.name, settings.themeMode)
@@ -248,6 +245,27 @@ class BackupPayloadSerializationTest {
     // ---------------- 夹具 ----------------
 
     /** v3 全量夹具：档案 11 项 + 6 张表各一行、`createdAt` 各不相同（便于逐项断言）。 */
+    /**
+     * v2.0.14 删掉了 `SettingsBackup.aiRemoteEnabled`，但**用户手上已导出的备份文件里还带着这个键**。
+     *
+     * 这条断言就是"不升 schema 版本"那个决定的守卫：解码器开着 `ignoreUnknownKeys`，
+     * 多出来的键被吞掉 → 老文件照样能恢复。哪天有人把那个开关关掉，这条会立刻红，
+     * 而线上的表现将是"老用户的备份突然导不进来"。
+     */
+    @Test
+    fun staleAiRemoteEnabledKeyInOldBackup_stillDecodes() {
+        val original: String = jsonCodec.encodeToString(BackupPayload.serializer(), fullPayload())
+        val withStaleKey: String =
+            original.replace("\"themeMode\":", "\"aiRemoteEnabled\": true, \"themeMode\":")
+        assertTrue("样例里必须真的注入了那个已删除的键", withStaleKey.contains("\"aiRemoteEnabled\""))
+
+        val restored: BackupPayload =
+            jsonCodec.decodeFromString(BackupPayload.serializer(), withStaleKey)
+
+        assertEquals(fullPayload().settings.reminderHour, restored.settings.reminderHour)
+        assertEquals(fullPayload().settings.equipment, restored.settings.equipment)
+    }
+
     private fun fullPayload(): BackupPayload = BackupPayload(
         schemaVersion = BackupPayload.CURRENT_SCHEMA_VERSION,
         exportedAt = 1_700_000_000_000L,
@@ -351,7 +369,6 @@ class BackupPayloadSerializationTest {
             injuryAreas = setOf(InjuryArea.KNEE.name),
             injuryNote = "左膝旧伤，避免深蹲",
             dietaryAvoid = setOf(DietRestriction.PEANUT.name),
-            aiRemoteEnabled = true,
             trainingDaysPerWeek = 5,
         ),
     )

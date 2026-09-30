@@ -6,7 +6,6 @@ import com.ironhabit.app.domain.model.AdviceSource
 import com.ironhabit.app.domain.model.BodyMetricType
 import com.ironhabit.app.domain.model.PlanBasisItem
 import com.ironhabit.app.domain.model.PlanNote
-import com.ironhabit.app.domain.model.RemoteFallbackReason
 import com.ironhabit.app.domain.model.WeekPlan
 import com.ironhabit.app.domain.repository.BodyMetricRepository
 import com.ironhabit.app.domain.repository.CheckInRepository
@@ -32,8 +31,7 @@ import kotlinx.datetime.toLocalDateTime
  *   不计进这个数。
  * @property retiredCount 本次**被回收的陈旧 AI 行**条数（上版生成、本次不再出现 → 已停用，修复 C2）
  * @property notes "为什么这样排"的确定性理由（`PlanReason` 枚举，文案由界面侧决定要不要摊开）
- * @property source 本次实际使用的来源（本地规则 / AI 联网生成；联网失败回落时为 LOCAL_RULES）
- * @property fallbackReason 走本地规则时的回落原因；`null` = 未发生回落（联网一期 §6.2 N4）
+ * @property source 本次实际使用的来源（内置生成为 LOCAL_RULES；外部导入走另一条路）
  */
 data class GeneratedPlanSummary(
     val writtenCount: Int = 0,
@@ -41,10 +39,9 @@ data class GeneratedPlanSummary(
     val retiredCount: Int = 0,
     val notes: List<PlanNote> = emptyList(),
     val source: AdviceSource = AdviceSource.LOCAL_RULES,
-    val fallbackReason: RemoteFallbackReason? = null,
     /** 本次实际写入的计划条目（**含 星期/组数/次数/重量**），供 UI 以卡片形式摊开看。 */
     val plans: List<WeekPlan> = emptyList(),
-    /** 远端 AI 返回的自由文本分析（仅 REMOTE_LLM 有值；本地规则恒为 null）。 */
+    /** 随草案一起带过来的一段自由文本分析；内置规则不产中文，故外部导入以外恒为 `null`。 */
     val analysis: String? = null,
     /** 本地规则的「生成依据」要点（仅 LOCAL_RULES 有内容）。 */
     val basis: List<PlanBasisItem> = emptyList(),
@@ -70,7 +67,6 @@ data class PlanPreview(
     val preservedCount: Int = 0,
     val notes: List<PlanNote> = emptyList(),
     val source: AdviceSource = AdviceSource.LOCAL_RULES,
-    val fallbackReason: RemoteFallbackReason? = null,
     val analysis: String? = null,
     val basis: List<PlanBasisItem> = emptyList(),
 ) {
@@ -105,12 +101,11 @@ data class PlanPreview(
  *    [PlanRepository.deactivateGenerated] 置 `isActive = false`（**仍是显式 `UPDATE`，无 DELETE**）；
  *    **用户手改行（含软删除行）永不回收**。写入顺序：先 upsert 新计划，再回收陈旧行。
  *
- * ## 联网一期
- * 顾问调用包 `withContext(ioDispatcher)`：本地实现是纯计算（快），远端实现是
- * **阻塞 HTTP**（[com.ironhabit.app.domain.ai.remote.DeepSeekClient]，30s 超时），
- * 必须离开主线程；是否走远端 / 失败回落由 [com.ironhabit.app.domain.ai.DelegatingPlanAdvisor] 决定。
+ * ## 线程
+ * 顾问本身是纯计算，但本用例前后要读数据库（动作库 / 现有周计划 / 最新体重），
+ * 那些是 IO → 整段包 `withContext(ioDispatcher)`。
  *
- * @param advisor 注入接口，不 new 具体实现（本地 / 远端 / 委托切换对本用例透明）
+ * @param advisor 注入接口，不 new 具体实现
  */
 class GenerateTrainingPlanUseCase @Inject constructor(
     private val planRepository: PlanRepository,
@@ -164,7 +159,7 @@ class GenerateTrainingPlanUseCase @Inject constructor(
         // 取不到就是 null（用户没记过体重）→ 规则层会**跳过**体重相关判断，而不是拿 0 去算。
         val bodyWeightKg: Float? = bodyMetricRepository.latest(BodyMetricType.WEIGHT)?.value
 
-        // 本地实现 = 纯计算；远端实现 = 阻塞 HTTP（DeepSeekClient 30s 超时）→ 必须在 IO 上跑。
+        // 规则引擎本身是纯计算，但它吃的 library / history 是刚从仓库读出来的 → 整段留在 IO 上。
         val proposal = withContext(ioDispatcher) {
             advisor.planWeek(
                 profile = profile,
@@ -184,7 +179,6 @@ class GenerateTrainingPlanUseCase @Inject constructor(
             targetWeek = targetWeek,
             weekRows = weekRows,
             templateEditedRows = templateEditedRows,
-            fallbackReason = advisor.lastFallbackReason,
         )
     }
 
@@ -235,7 +229,6 @@ class GenerateTrainingPlanUseCase @Inject constructor(
             retiredCount = retiredCount,
             notes = preview.notes,
             source = preview.source,
-            fallbackReason = preview.fallbackReason,
             plans = drafts,
             analysis = preview.analysis,
             basis = preview.basis,

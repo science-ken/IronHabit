@@ -21,8 +21,7 @@ import kotlinx.datetime.TimeZone
 /**
  * 本周计划的一行摘要（纯数据，供提示词组装）。
  *
- * ⚠️ [exerciseName] 是**用户数据**（动作名），不是界面文案 —— 因此不进 `strings.xml`
- * （与 `RemotePromptBuilder` 里"载荷里的中文是数据"同口径）。
+ * ⚠️ [exerciseName] 是**用户数据**（动作名），不是界面文案 —— 因此不进 `strings.xml`。
  */
 data class CoachPlanLine(
     /** 星期，`1` = 周一 … `7` = 周日。 */
@@ -33,10 +32,11 @@ data class CoachPlanLine(
 )
 
 /**
- * 「教练上下文」—— 问答（子项 A）与进度解读（子项 C）**共用**的一份用户现状快照。
+ * 「教练上下文」—— 「进度解读」用的那份用户现状快照。
  *
- * 纯数据、零文案：远程提示词把它序列化成 JSON 交给 DeepSeek；
- * 本地解读把它渲染成结构化文案（文案一律在 UI 层走 `strings.xml`）。
+ * 纯数据、零文案：由 UI 渲染成结构化文案（文案一律在 UI 层走 `strings.xml`）。
+ * 以前它还有第二个消费者 —— 「问教练」自由问答会把这份快照序列化成 JSON 发给远端模型，
+ * 那条通道连同 API Key 一起在 v2.0.14 删掉了。
  *
  * @property profile 用户身体档案
  * @property weeklyPlan 本周训练计划摘要行

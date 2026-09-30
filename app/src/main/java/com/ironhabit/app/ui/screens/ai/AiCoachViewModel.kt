@@ -4,23 +4,16 @@ import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ironhabit.app.R
-import com.ironhabit.app.data.preferences.AiCredentialsStore
-import com.ironhabit.app.domain.model.DietTarget
-import com.ironhabit.app.domain.model.RemoteFallbackReason
 import com.ironhabit.app.domain.model.UserProfile
 import com.ironhabit.app.domain.model.WeeklyReview
 import com.ironhabit.app.domain.repository.SettingsRepository
-import com.ironhabit.app.domain.usecase.AskCoachUseCase
 import com.ironhabit.app.domain.usecase.BuildWeeklyReviewUseCase
-import com.ironhabit.app.domain.usecase.CoachAnswer
 import com.ironhabit.app.domain.usecase.CoachInsightResult
 import com.ironhabit.app.domain.usecase.CoachInsightUseCase
-import com.ironhabit.app.domain.usecase.ExplainDietUseCase
 import com.ironhabit.app.domain.usecase.ExportWeekPackageUseCase
 import com.ironhabit.app.domain.usecase.GenerateDietPlanUseCase
 import com.ironhabit.app.domain.usecase.PlanPreviewHolder
 import com.ironhabit.app.domain.usecase.GenerateTrainingPlanUseCase
-import com.ironhabit.app.domain.usecase.CoachTurn
 import com.ironhabit.app.domain.util.DateUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -28,7 +21,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
@@ -37,8 +29,7 @@ import kotlinx.datetime.TimeZone
 /**
  * 一次「生成饮食计划」的结果（面向 UI 的纯展示数据，子项 B）。
  *
- * ⚠️ **数值全部来自本地纯函数**（[com.ironhabit.app.domain.diet.DietPlanGenerator]），
- * 远端 AI 只提供文字分析，不参与任何数值计算。
+ * ⚠️ **数值全部来自本地纯函数**（[com.ironhabit.app.domain.diet.DietPlanGenerator]）。
  *
  * @property writtenCount 本次实际写入的餐数
  * @property preservedCount 界面上还看得见的用户手改餐数（删掉的那一餐同样不被覆盖，但不计数）
@@ -62,14 +53,10 @@ data class DietSummaryUi(
  * @property isLoading 首帧加载中
  * @property profile 用户档案（只读展示 + 规则输入）
  * @property isGenerating 生成计划进行中（本地规则为纯计算，通常很快）
- * @property chatMessages 「问教练」最近若干轮消息（**只在内存里，问答不落库**）
- * @property chatInput 「问教练」输入框当前内容
- * @property isAsking 正在等 AI 回答（发送中：输入框与按钮都禁用）
  * @property dietSummary 最近一次「生成饮食」的本地结果（`null` = 本次会话尚未生成过）
  * @property isGeneratingDiet 生成饮食进行中
- * @property dietAnalysis 远端 AI 的「为什么这样吃」分析；`null` = 未联网 / 失败（此时 UI 显示本地依据卡）
- * @property insightResult 进度解读（子项 C）：数字永远来自本地聚合，联网成功时多一段 AI 文案
- * @property isLoadingInsight 进度解读加载中（离线时为本地计算，很快）
+ * @property insightResult 进度解读：数字永远来自本地聚合
+ * @property isLoadingInsight 进度解读加载中
  * @property errorRes 页面级错误资源 id
  * @property snackbarRes 一次性提示资源 id
  * @property snackbarArgs 提示的格式化参数（**类型必须与资源占位符一致**：`%1$d` 传 Int、`%1$s` 传 String；
@@ -81,25 +68,13 @@ data class AiCoachUiState(
     val isGenerating: Boolean = false,
     /** 预览已备好 → 界面跳一次「本周计划预览」页，跳完立即消费掉。 */
     val previewRequested: Boolean = false,
-    /** 「AI 联网增强」开关（默认关）。 */
-    val aiRemoteEnabled: Boolean = false,
-    /** 是否已配置 API Key（快照；加密文件无响应式流，写入后由 ViewModel 手动刷新）。 */
-    val hasApiKey: Boolean = false,
-    /** 「问教练」最近若干轮消息（**内存态**：问答不落库，离开页面即丢弃）。 */
-    val chatMessages: List<CoachChatMessage> = emptyList(),
-    /** 「问教练」输入框内容（内存态）。 */
-    val chatInput: String = "",
-    /** 正在等 AI 回答：发送中禁用输入框与按钮，避免并发发问。 */
-    val isAsking: Boolean = false,
     /** 最近一次「生成饮食」的**本地**结果（`null` = 本次会话尚未生成过）。 */
     val dietSummary: DietSummaryUi? = null,
-    /** 生成饮食进行中（本地生成本身很快，联网分析会稍慢，二者用同一标志）。 */
+    /** 生成饮食进行中。 */
     val isGeneratingDiet: Boolean = false,
-    /** 远端 AI 的「为什么这样吃」分析；`null` = 未联网 / 失败 → UI 显示本地依据卡。 */
-    val dietAnalysis: String? = null,
-    /** 进度解读（子项 C）。`null` = 还没算过；数字来自本地聚合，AI 文案可选。 */
+    /** 进度解读。`null` = 还没算过；数字来自本地聚合。 */
     val insightResult: CoachInsightResult? = null,
-    /** 进度解读进行中（离线只算本地聚合，通常瞬间完成）。 */
+    /** 进度解读进行中（只算本地聚合，通常瞬间完成）。 */
     val isLoadingInsight: Boolean = false,
 
     /**
@@ -126,42 +101,28 @@ data class AiCoachUiState(
     @StringRes val errorRes: Int? = null,
     @StringRes val snackbarRes: Int? = null,
     val snackbarArgs: List<Any> = emptyList(),
-) {
-
-    /**
-     * 是否具备「问教练」的联网条件：**开关已开 且 已配 Key**。
-     *
-     * UI 只认这一个派生值（不要在页面里各写一遍 `aiRemoteEnabled && hasApiKey`）：
-     * `false` → 显示诚实禁用说明、不渲染输入框；`true` → 可用。
-     */
-    val canAskCoach: Boolean
-        get() = aiRemoteEnabled && hasApiKey
-}
+)
 
 /**
- * 「AI 教练」ViewModel（联网可选 · 本地规则兜底）。
+ * 「AI 教练」ViewModel（**全程本地，App 不联网**）。
  *
  * 职责：
  * - 暴露档案流与最新体重（用于「教练解读」的统计口径 / 建议摄入）；
  * - 调 [GenerateTrainingPlanUseCase] 生成计划（**手改行由 UseCase 保证不被覆盖**）；
- * - 调 [GenerateDietPlanUseCase] 生成饮食（数值全部本地算，见 [ExplainDietUseCase] 只补文字）；
- * - 调 [AskCoachUseCase] 做自由问答、[CoachInsightUseCase] 做进度解读。
+ * - 调 [GenerateDietPlanUseCase] 生成饮食（数值全部本地算）；
+ * - 调 [CoachInsightUseCase] 做进度解读、[BuildWeeklyReviewUseCase] 做周复盘。
  *
  * ⚠️ **诚实原则（每条都必须成立）**：
- * 1. 只有**真的调用了 DeepSeek** 才允许显示「AI 分析 / AI 生成」字样（来源由 UseCase 如实回传）；
- * 2. 未联网 / 未配 Key / 调用失败时一律回落本地规则，并**明确标注**是本地规则；
- * 3. 任何数值（热量 / 蛋白质 / 打卡统计）都由本地纯函数计算，远端只提供文字；
- * 4. 自由问答**不落库**，只在内存里保留最近若干轮。
+ * 1. 只有**用户从外部 AI 粘回来并确认采纳**的那份，才标「来自你问的外部 AI」；内置生成不贴来源徽章；
+ * 2. 任何数值（热量 / 蛋白质 / 打卡统计）都由本地纯函数算 —— 删掉远端之前成立，之后同样成立；
+ * 3. 页面上不许出现「AI 正在回答 / 联网中」这类已经不可能发生的状态。
  */
 @HiltViewModel
 class AiCoachViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
-    private val aiCredentialsStore: AiCredentialsStore,
     private val generateTrainingPlan: GenerateTrainingPlanUseCase,
     private val planPreviewHolder: PlanPreviewHolder,
-    private val askCoach: AskCoachUseCase,
     private val generateDietPlan: GenerateDietPlanUseCase,
-    private val explainDiet: ExplainDietUseCase,
     private val coachInsight: CoachInsightUseCase,
     private val buildWeeklyReview: BuildWeeklyReviewUseCase,
     private val exportWeekPackage: ExportWeekPackageUseCase,
@@ -181,33 +142,23 @@ class AiCoachViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            combine(
-                settingsRepository.profile(),
-                settingsRepository.aiRemoteEnabled(),
-            ) { profile: UserProfile, aiRemote: Boolean -> profile to aiRemote }
-                .collect { (profile, aiRemote) ->
-                    _uiState.update {
-                        it.copy(
-                            isLoading = false,
-                            profile = profile,
-                            aiRemoteEnabled = aiRemote,
-                            hasApiKey = aiCredentialsStore.isConfigured(),
-                        )
-                    }
+            settingsRepository.profile().collect { profile ->
+                _uiState.update {
+                    it.copy(isLoading = false, profile = profile)
                 }
+            }
         }
-        // 开屏只自动要这一次远程（解读）；补充动作建议已经搬去「动作库」分段，
+        // 进度解读 + 周复盘都在本地算；补充动作建议已搬去「动作库」分段，
         // 用户真进了那一屏才拉 —— 原来这里发两次，第二次还是没人看的。
         loadInsight()
         loadWeeklyReview()
     }
 
     /**
-     * 进度解读（子项 C）。
+     * 进度解读：页面打开时自动跑一次。
      *
-     * 页面打开时自动跑这一次（开屏唯一自动发出的远程）：离线只做**本地聚合**（瞬间完成，不发网络），
-     * 联网且已配 Key 时额外取一段 AI 文案（[CoachInsightResult.source] 会如实标注来源）。
-     * 失败也会返回带本地数字的结果，因此这里**不会**写 [AiCoachUiState.errorRes]。
+     * 纯本地聚合，不发网络。失败也不写 [AiCoachUiState.errorRes] —— 拿不到数字时这一格
+     * 只是空着，不该弹一个吓人的错误卡。
      *
      * @param windowDays 统计窗口，默认 [CoachInsightUseCase.WINDOW_DAYS]（近 14 天）
      */
@@ -304,16 +255,6 @@ class AiCoachViewModel @Inject constructor(
         _uiState.update { it.copy(snackbarRes = R.string.ai_package_copied) }
     }
 
-    /**
-     * 刷新「是否已配置 Key」快照。
-     *
-     * 加密文件无响应式流：用户在设置页保存/清除 Key 后回到本页时，
-     * DataStore 流不会重发，必须由 UI 在 ON_RESUME 主动调此方法（否则徽标滞留旧状态）。
-     */
-    fun refreshKeyStatus() {
-        _uiState.update { it.copy(hasApiKey = aiCredentialsStore.isConfigured()) }
-    }
-
     /** 预览页已经跳过去了，收掉信号；否则每次回到这一页都会再跳一次。 */
     fun onPreviewConsumed() {
         _uiState.update { it.copy(previewRequested = false) }
@@ -360,12 +301,10 @@ class AiCoachViewModel @Inject constructor(
     }
 
     /**
-     * 生成 / 重新生成**今日饮食计划**（子项 B）。
+     * 生成 / 重新生成**今日饮食计划**。
      *
-     * 分工（**数值一律以本地为准**）：
-     * 1. 先跑本地 [GenerateDietPlanUseCase]（写入今日餐次；用户手改餐不被覆盖，红线）；
-     * 2. 本地写入成功后再尝试远端「为什么这样吃」分析 —— 未联网 / 失败都不影响第 1 步结果，
-     *    UI 自动退回本地「生成依据」卡（不弹错、不阻断）。
+     * **数值一律以本地为准**：跑 [GenerateDietPlanUseCase] 写入今日餐次，
+     * 用户手改过的那一餐不被覆盖（红线）。
      *
      * 提示优先级（与 `TodayViewModel.onGenerateDiet` 同口径）：忌口过滤 > 用了默认目标值 > 生成成功。
      */
@@ -406,13 +345,10 @@ class AiCoachViewModel @Inject constructor(
                                 usedDefaults = summary.target.usedDefaults,
                                 filteredCount = summary.filteredCount,
                             ),
-                            // 每次重新生成都先清掉旧分析，避免「数值已变、解释还是上一版」。
-                            dietAnalysis = null,
                             snackbarRes = hintRes,
                             snackbarArgs = hintArgs,
                         )
                     }
-                    requestDietAnalysis(summary.target)
                 }
                 .onFailure {
                     lastFailedAction = FailedAction.GENERATE_DIET
@@ -420,27 +356,6 @@ class AiCoachViewModel @Inject constructor(
                         it.copy(isGeneratingDiet = false, errorRes = R.string.error_save_failed)
                     }
                 }
-        }
-    }
-
-    /**
-     * 远端「为什么这样吃」分析：**失败只让 [AiCoachUiState.dietAnalysis] 保持 `null`**，
-     * 页面照常用本地的热量 / 蛋白质结果，不弹错、不阻断。
-     */
-    private suspend fun requestDietAnalysis(target: DietTarget) {
-        val answer: CoachAnswer = try {
-            explainDiet(target)
-        } catch (cancellation: CancellationException) {
-            throw cancellation
-        } catch (unexpected: Exception) {
-            CoachAnswer.Failed(RemoteFallbackReason.REMOTE_ERROR)
-        }
-        _uiState.update {
-            when (answer) {
-                is CoachAnswer.Ok -> it.copy(dietAnalysis = answer.text)
-                is CoachAnswer.NeedsNetwork -> it.copy(dietAnalysis = null)
-                is CoachAnswer.Failed -> it.copy(dietAnalysis = null)
-            }
         }
     }
 
@@ -468,63 +383,6 @@ class AiCoachViewModel @Inject constructor(
         _uiState.update { it.copy(snackbarRes = null, snackbarArgs = emptyList()) }
     }
 
-    /** 「问教练」输入框变化（纯内存态，问答不落库）。 */
-    fun onChatInputChange(text: String) {
-        _uiState.update { it.copy(chatInput = text) }
-    }
-
-    /**
-     * 发送一条问题给 AI 教练（**问答不落库**：只在内存里保留最近 [MAX_CHAT_TURNS] 轮）。
-     *
-     * 发出去的不只是这一句：最近几轮**成对**问答会一起进提示词（见 [toCoachTurns]），
-     * 否则"那饮食呢"这种追问模型根本没有上文可接。
-     *
-     * 三态由 [AskCoachUseCase] 的**可识别结果**决定，UI 不做任何猜测：
-     * - [CoachAnswer.Ok] → 正常回答气泡（内容来自 DeepSeek）；
-     * - [CoachAnswer.NeedsNetwork] → 固定的「需要联网」气泡（**绝不本地编造回答冒充 AI**）；
-     * - [CoachAnswer.Failed] → 固定的「联网失败」气泡，用户可以再问一次。
-     *
-     * 发送中（[AiCoachUiState.isAsking]）直接忽略重复调用，避免并发发问与消息乱序。
-     */
-    fun onAskCoach() {
-        val snapshot: AiCoachUiState = _uiState.value
-        if (snapshot.isAsking) return
-        val question: String = snapshot.chatInput.trim()
-        if (question.isEmpty()) return
-
-        viewModelScope.launch {
-            // 历史要在**把这句问题加进气泡之前**取：否则刚问的这句会同时出现在 history 和 question 里。
-            val history: List<CoachTurn> = snapshot.chatMessages.toCoachTurns()
-            _uiState.update {
-                it.copy(
-                    chatInput = "",
-                    isAsking = true,
-                    chatMessages = it.chatMessages.appendChat(
-                        CoachChatMessage(kind = CoachChatKind.USER, text = question),
-                    ),
-                )
-            }
-
-            val answer: CoachAnswer = try {
-                askCoach(question, history)
-            } catch (cancellation: CancellationException) {
-                throw cancellation
-            } catch (unexpected: Exception) {
-                // 兜底：用例内部已把网络/解析失败转成可识别结果，这里只兜住意外异常，绝不冒泡到 UI。
-                CoachAnswer.Failed(RemoteFallbackReason.REMOTE_ERROR)
-            }
-
-            val bubble: CoachChatMessage = when (answer) {
-                is CoachAnswer.Ok -> CoachChatMessage(kind = CoachChatKind.ANSWER, text = answer.text)
-                is CoachAnswer.NeedsNetwork -> CoachChatMessage(kind = CoachChatKind.NEEDS_NETWORK)
-                is CoachAnswer.Failed -> CoachChatMessage(kind = CoachChatKind.FAILED)
-            }
-            _uiState.update {
-                it.copy(isAsking = false, chatMessages = it.chatMessages.appendChat(bubble))
-            }
-        }
-    }
-
 }
 
 /**
@@ -540,51 +398,5 @@ private enum class FailedAction {
     GENERATE_DIET,
 }
 
-/**
- * 「问教练」内存里保留的**轮数**（一问一答算一轮）。
- *
- * 以前是 `MAX_CHAT_MESSAGES = 6` 按**条**截：砍在第 6 条上时，列表和发给模型的历史
- * 第一条可能是上一轮的**回答**——半轮对话没有上文可接，模型只能瞎猜。
- */
-private const val MAX_CHAT_TURNS: Int = 3
-
 /** 一周的天数（周偏移换算用）。 */
 private const val DAYS_PER_WEEK: Int = 7
-
-/**
- * 追加一条消息，保留最近 [MAX_CHAT_TURNS] 轮，并且**永远不以半轮开头**。
- *
- * 问答**不落库**：页面退出即丢弃，因此这里用纯内存截断，不做任何持久化。
- */
-internal fun List<CoachChatMessage>.appendChat(message: CoachChatMessage): List<CoachChatMessage> {
-    val kept: List<CoachChatMessage> = (this + message).takeLast(MAX_CHAT_TURNS * 2)
-    // 截完开头若是"答"，那是上一轮被砍剩的半轮 —— 丢到只剩完整轮次为止。
-    return kept.dropWhile { first -> first.kind != CoachChatKind.USER }
-}
-
-/**
- * 把内存气泡压成**成对轮次**，用来发给模型。
- *
- * ⚠️ 只算"问了、并且模型真答了"的轮次：[CoachChatKind.NEEDS_NETWORK] /
- * [CoachChatKind.FAILED] 是 UI 状态气泡、不是模型输出，把它们当历史发过去
- * 等于告诉模型"你刚才说过这句话"，那是编造。这种轮次整轮丢掉。
- */
-internal fun List<CoachChatMessage>.toCoachTurns(): List<CoachTurn> {
-    val turns = mutableListOf<CoachTurn>()
-    var pending: String? = null
-    forEach { message ->
-        when (message.kind) {
-            CoachChatKind.USER -> pending = message.text
-            CoachChatKind.ANSWER -> {
-                val question: String? = pending
-                if (question != null) {
-                    turns += CoachTurn(question = question, answer = message.text)
-                    pending = null
-                }
-            }
-            // 未联网 / 失败：这一轮没有可信的模型回答，问题也一起作废，不留下悬空的一半。
-            CoachChatKind.NEEDS_NETWORK, CoachChatKind.FAILED -> pending = null
-        }
-    }
-    return turns.takeLast(MAX_CHAT_TURNS)
-}

@@ -1,14 +1,13 @@
 package com.ironhabit.app.domain.usecase
 
 import com.ironhabit.app.domain.model.PlanProposal
-import com.ironhabit.app.domain.model.RemoteFallbackReason
 import com.ironhabit.app.domain.model.WeekPlan
 
 /**
  * 把一份 [PlanProposal]（草案）**投影**成 [PlanPreview] —— 决定「哪些槽位能写、写到哪一周」。
  *
  * ## 为什么单独成函数
- * 生成训练计划现在有**两条来源**：app 内置（本地规则 / DeepSeek）与用户从**外部 AI 粘回来的文档**。
+ * 生成训练计划现在有**两条来源**：app 内置的本地规则，与用户从**外部 AI 粘回来的文档**。
  * 来源可以不同，但保护用户既有数据的规则**必须只有一份实现** —— 所以取数与调顾问留在各自的
  * UseCase 里，投影这一步（下面四条不变量）共享这里。写第二份的必然结果是只改其中一份。
  *
@@ -37,7 +36,6 @@ object PlanDraftProjector {
      * @param weekRows 目标周的全量行（**含软删除行**），既用于挡手改槽位，也用于陈旧行回收
      * @param templateEditedRows 「每周相同」模板里被用户手改过的行（**含软删行**）：只做保护，
      *   不参与回收（见不变量 4）
-     * @param fallbackReason 透传给 [PlanPreview] 的来源补充说明；外部导入这条路恒为 `null`
      * @param retireStaleRows 采纳某天时要不要**停用**该天没再列出的旧 AI 行。
      *   内置生成为 `true`（"完整重排一周"，没列出就是不要了）；
      *   **外部导入必须 `false`**：那份文档多半只写了几天，而且外部 AI 根本看不见用户本周已有
@@ -49,7 +47,6 @@ object PlanDraftProjector {
         targetWeek: Long,
         weekRows: List<WeekPlan>,
         templateEditedRows: List<WeekPlan>,
-        fallbackReason: RemoteFallbackReason? = null,
         retireStaleRows: Boolean = true,
     ): PlanPreview {
         // 🔒 双保险：即使规则层漏判，写入前也再排除一次手改槽位（"天 × 动作"）。
@@ -110,7 +107,6 @@ object PlanDraftProjector {
             preservedCount = proposal.preservedUserEditedIds.count { id -> id in visibleEditedThisWeek },
             notes = proposal.notes,
             source = proposal.source,
-            fallbackReason = fallbackReason,
             analysis = proposal.analysis,
             basis = proposal.basis,
         )

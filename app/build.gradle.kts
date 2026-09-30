@@ -133,13 +133,6 @@ dependencies {
     // ---- DataStore ----
     implementation(libs.androidx.datastore.preferences)
 
-    // ---- 瀹夊叏瀛樺偍锛欴eepSeek API Key 瀛?EncryptedSharedPreferences锛堢粷涓嶈繘 DataStore/澶囦唤/鏃ュ織锛?---
-    // 鈿狅笍 鏆備互瀛楅潰閲忓紩鍏ワ紙鐗堟湰 security-crypto 1.1.0-alpha06锛夛細
-    //    鏇炬寜瑙勮寖鍐欏叆 gradle/libs.versions.toml锛屼絾鏈満鍦ㄣ€宑atalog 鍙樻洿 鈫?Kotlin DSL
-    //    accessors 閲嶆柊鐢熸垚銆嶈繖涓€姝ョǔ瀹氳Е鍙?60s TimeoutException锛堣瑙佹眹鎶ワ級锛?
-    //    涓轰笉闃诲鑱旇皟鏆傞€€鍥炲瓧闈㈤噺锛沞ngineer 宸茬櫥璁帮紝寰呯幆澧冮棶棰樿В闄ゅ悗鍐嶅綊浣?catalog銆?
-    implementation("androidx.security:security-crypto:1.1.0-alpha06")
-
     // ---- 涓氬姟搴擄紙鍧囦负绾湰鍦?绂荤嚎锛?---
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.datetime)

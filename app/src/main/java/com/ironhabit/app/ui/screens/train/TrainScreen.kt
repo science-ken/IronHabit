@@ -531,10 +531,7 @@ private fun AiSuggestionSection(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        SourceLine(
-            source = uiState.suggestionSource,
-            fallback = uiState.suggestionFallbackReason,
-        )
+        SourceLine(source = uiState.suggestionSource)
         when {
             uiState.isLoadingSuggestions -> LoadingSkeleton()
 

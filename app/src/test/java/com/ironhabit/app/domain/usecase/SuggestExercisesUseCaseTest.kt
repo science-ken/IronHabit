@@ -128,8 +128,7 @@ class SuggestExercisesUseCaseTest {
 
         val before = useCase.suggest()
         assertTrue("初始应有可收入的建议", before.suggestions.isNotEmpty())
-        assertEquals("本地规则顾问（开关默认关）→ 来源标注为 LOCAL_RULES", AdviceSource.LOCAL_RULES, before.source)
-        assertEquals("未发生回落 → fallbackReason 为 null", null, before.fallbackReason)
+        assertEquals("本地规则顾问 → 来源标注为 LOCAL_RULES", AdviceSource.LOCAL_RULES, before.source)
 
         val target: String = before.suggestions.first().name
         useCase.adopt(target)

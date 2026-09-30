@@ -32,14 +32,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ironhabit.app.R
 import com.ironhabit.app.domain.ai.external.ImportSection
 import com.ironhabit.app.domain.model.AdviceSource
 import com.ironhabit.app.domain.model.ExerciseSuggestion
-import com.ironhabit.app.domain.model.RemoteFallbackReason
 import com.ironhabit.app.domain.model.SuggestionReason
 import com.ironhabit.app.domain.model.UserProfile
 import com.ironhabit.app.ui.components.AppSnackbarHost
@@ -97,11 +94,6 @@ fun AiCoachScreen(
             importViewModel.onPreviewConsumed()
             onOpenPlanPreview()
         }
-    }
-
-    // 浠庤缃〉鏀瑰畬 Key 鍥炴潵鏃跺埛鏂板窘鏍囷紙鍔犲瘑鏂囦欢鏃犲搷搴斿紡娴侊紝鍙兘涓诲姩鎷夛級銆?
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
-        viewModel.refreshKeyStatus()
     }
 
     // `LaunchedEffect` 无条件创建：放在 `if` 里会让它随分支进出被启停，而 `showSnackbar` 是挂起的 ——
@@ -174,11 +166,7 @@ fun AiCoachScreen(
                 .padding(IronHabitSpacing.lg),
             verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.lg),
         ) {
-            LocalRulesBadge(
-                aiRemoteEnabled = uiState.aiRemoteEnabled,
-                hasApiKey = uiState.hasApiKey,
-                onGoSettings = onEditProfile,
-            )
+            OfflineBadge()
 
             val errorRes: Int? = uiState.errorRes
             if (errorRes != null) {
@@ -204,12 +192,6 @@ fun AiCoachScreen(
                     onWeekChange = viewModel::loadWeeklyReview,
                     onExport = viewModel::onExportPackage,
                     onReloadInsight = viewModel::loadInsight,
-                    // 点 chip = 跳到「问教练」并把带数字的完整问题填进输入框。
-                    // 刻意不直接发出去：用户可能想改两个字再问，替他发就收不回来了。
-                    onAskAbout = { question ->
-                        tab = AiCoachTab.ASK
-                        viewModel.onChatInputChange(question)
-                    },
                 )
 
                 else -> {
@@ -217,8 +199,8 @@ fun AiCoachScreen(
                         uiState = uiState,
                         onEditProfile = onEditProfile,
                     )
-                    // 工具行紧跟在档案下面、对话卡片上面：四枚按钮是"这页能干什么"的入口，
-                    // 而对话是问一句答一句的去处。入口压在对话历史下面，等于每次都要先滑过上一轮的话。
+                    // 工具行紧跟在档案下面：这五枚按钮就是这一屏的全部出口。
+                    // 以前它压在「问教练」卡片上面；卡片删掉之后相对顺序不变。
                     AiCoachToolRow(
                         uiState = uiState,
                         onGeneratePlan = viewModel::generatePlan,
@@ -230,14 +212,6 @@ fun AiCoachScreen(
                         onOpenImportDiet = {
                             importViewModel.open(uiState.weeklyReview, ImportSection.DIET)
                         },
-                    )
-                    CoachChatCard(
-                        canAsk = uiState.canAskCoach,
-                        messages = uiState.chatMessages,
-                        input = uiState.chatInput,
-                        isAsking = uiState.isAsking,
-                        onInputChange = viewModel::onChatInputChange,
-                        onSend = viewModel::onAskCoach,
                     )
                     DietResults(uiState = uiState)
                 }
@@ -341,38 +315,7 @@ private fun DietResults(
             )
         }
 
-        val analysis = uiState.dietAnalysis
-        if (!analysis.isNullOrBlank()) {
-            DietAnalysisCard(analysis = analysis)
-        } else {
-            DietLocalBasisCard()
-        }
-    }
-}
-
-@Composable
-private fun DietAnalysisCard(analysis: String) {
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        ),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(IronHabitSpacing.lg),
-            verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
-        ) {
-            Text(
-                text = stringResource(R.string.ai_diet_analysis_title),
-                style = MaterialTheme.typography.titleSmall,
-            )
-            Text(
-                text = analysis,
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        }
+        DietLocalBasisCard()
     }
 }
 
@@ -403,69 +346,48 @@ private fun DietLocalBasisCard() {
 }
 
 /**
+ * 来源标注：**只有「用户从外部 AI 粘回来的」才显示这一行**。
  *
+ * 内置生成不再贴来源徽章 —— 本地规则是现在唯一的生产者，每次结果都重复喊一句
+ * "我没有联网"不构成信息；那句常驻说明住在设置页的「AI 设置」里。
+ * 外部导入必须标：它不能看起来像 App 替用户排的课。
+ *
+ * `when` 穷尽匹配、不写 `else`：新增来源时忘了想清楚怎么标会编译不过，
+ * 而不是静默落到某个默认值上 —— 把用户从外部 AI 导回来的东西标成规则算出来的，
+ * 是骗人，不是少写一句话。
  */
 @Composable
-internal fun SourceLine(
-    source: AdviceSource,
-    fallback: RemoteFallbackReason?,
-) {
-    // `when (source)` **穷尽匹配、不写 else**：新增来源忘了配文案要编译不过，
-    // 而不是静默落到「本地规则」——把用户从外部 AI 导回来的东西标成规则算出来的，
-    // 是骗人，不是少写一句话。
-    val text: String = if (fallback != null) {
-        stringResource(R.string.ai_source_fallback)
-    } else {
-        when (source) {
-            AdviceSource.LOCAL_RULES -> stringResource(R.string.ai_source_local)
-            AdviceSource.REMOTE_LLM -> stringResource(R.string.ai_source_remote)
-            AdviceSource.EXTERNAL_AI_IMPORT -> stringResource(R.string.ai_source_external)
-        }
+internal fun SourceLine(source: AdviceSource) {
+    val text: String? = when (source) {
+        AdviceSource.LOCAL_RULES -> null
+        AdviceSource.EXTERNAL_AI_IMPORT -> stringResource(R.string.ai_source_external)
     }
-    Text(
-        text = text,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
+    if (text != null) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
 }
 
+/** 页面顶部那一枚固定徽章：App 不联网，这一屏所有数字都在本机算。 */
 @Composable
-private fun LocalRulesBadge(
-    aiRemoteEnabled: Boolean,
-    hasApiKey: Boolean,
-    onGoSettings: () -> Unit,
-) {
+private fun OfflineBadge() {
     Card(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.secondaryContainer,
             contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
         ),
     ) {
-        Row(
+        Text(
+            text = stringResource(R.string.ai_badge_offline),
+            style = MaterialTheme.typography.bodySmall,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = IronHabitSpacing.md, vertical = IronHabitSpacing.xs),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(
-                text = stringResource(badgeRes(aiRemoteEnabled, hasApiKey)),
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.weight(1f),
-            )
-            if (!aiRemoteEnabled || !hasApiKey) {
-                TextButton(onClick = onGoSettings) {
-                    Text(text = stringResource(R.string.ai_action_go_settings))
-                }
-            }
-        }
+        )
     }
-}
-
-private fun badgeRes(aiRemoteEnabled: Boolean, hasApiKey: Boolean): Int = when {
-    aiRemoteEnabled && hasApiKey -> R.string.ai_badge_remote_on
-    aiRemoteEnabled -> R.string.ai_badge_remote_no_key
-    else -> R.string.ai_badge_local
 }
 
 /**
@@ -514,14 +436,16 @@ internal fun SectionTitle(text: String) {
 }
 
 /**
- * 顶部两段：把「打开就有、数字全靠本地算」和「每问一次都要联网」分开。
+ * 顶部两段：「本周复盘」（看已经发生的）与「生成 / 导入」（动手改下周）。
  *
- * ⚠️ 小字刻意**没有**照抄设计稿的「本地 0 token」：教练解读已经并进复盘屏的周卡底部，
- * 那一段文字是联网要来的。标成「0 token」就是谎报，所以改成只声明数字的口径。
+ * 第二格以前叫「问教练」、小字写「每次追问联网」—— 那条 API Key 直连通道已在 v2.0.14 删除，
+ * 这一格现在装的是档案、五枚工具入口和饮食结果，名字跟着内容改。
+ *
+ * ⚠️ 小字刻意**没有**照抄设计稿的「本地 0 token」：只声明数字的口径，不报一个没测过的 token 数。
  */
 private enum class AiCoachTab(@StringRes val labelRes: Int, @StringRes val noteRes: Int) {
     REVIEW(R.string.ai_tab_review, R.string.ai_tab_review_note),
-    ASK(R.string.ai_tab_ask, R.string.ai_tab_ask_note),
+    ACTION(R.string.ai_tab_action, R.string.ai_tab_action_note),
 }
 
 @Composable

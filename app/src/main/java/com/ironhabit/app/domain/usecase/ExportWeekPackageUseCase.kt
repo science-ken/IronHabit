@@ -22,8 +22,7 @@ import kotlinx.serialization.json.Json
 /**
  * **把一周的数据导出成一段 JSON「数据包」**（P2，零联网、零 token）。
  *
- * 用途：用户可以把它复制给**任何** AI 看（不用填 API Key），将来 App 直连 DeepSeek 时也复用同一份结构
- * （`docs/ai-coach-local.md` 的"两条路都开着"）。
+ * 用途：用户可以把它复制给**任何** AI 看 —— App 自己不联网，这条路不需要 API Key。
  *
  * ## 🔒 不变量
  * 1. **只读**：只读档案与动作库，不写任何东西。

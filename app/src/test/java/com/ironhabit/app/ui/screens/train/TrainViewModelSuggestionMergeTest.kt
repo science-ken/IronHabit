@@ -6,7 +6,6 @@ import com.ironhabit.app.domain.model.CheckIn
 import com.ironhabit.app.domain.model.Exercise
 import com.ironhabit.app.domain.model.ExerciseCategory
 import com.ironhabit.app.domain.model.ExerciseSuggestion
-import com.ironhabit.app.domain.model.RemoteFallbackReason
 import com.ironhabit.app.domain.model.SuggestionReason
 import com.ironhabit.app.domain.model.SuggestionResult
 import com.ironhabit.app.domain.model.WeekPlan
@@ -87,8 +86,9 @@ class TrainViewModelSuggestionMergeTest {
         every { checkInRepository.observeBetween(any(), any()) } returns flowOf(emptyList<CheckIn>())
         coEvery { suggestExercises.suggest() } returns SuggestionResult(
             suggestions = listOf(suggestion),
-            source = AdviceSource.REMOTE_LLM,
-            fallbackReason = RemoteFallbackReason.KEY_NOT_CONFIGURED,
+            // 取一个**非默认**的来源值：`LOCAL_RULES` 是字段的默认值，用它当断言输入
+            // 就分不清"合并保住了来源"还是"重置成默认了"。
+            source = AdviceSource.EXTERNAL_AI_IMPORT,
         )
         return TrainViewModel(
             planRepository = planRepository,
@@ -104,12 +104,7 @@ class TrainViewModelSuggestionMergeTest {
     private fun assertSuggestionFieldsWired(vm: TrainViewModel) {
         val state = vm.uiState.value
         assertEquals("建议列表必须还在", listOf(suggestion), state.suggestions)
-        assertEquals("来源标注不能被重置回本地", AdviceSource.REMOTE_LLM, state.suggestionSource)
-        assertEquals(
-            "回落原因不能被重置回 null",
-            RemoteFallbackReason.KEY_NOT_CONFIGURED,
-            state.suggestionFallbackReason,
-        )
+        assertEquals("来源标注不能被重置回默认", AdviceSource.EXTERNAL_AI_IMPORT, state.suggestionSource)
     }
 
     @Test

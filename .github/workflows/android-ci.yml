@@ -39,7 +39,7 @@ jobs:
 
       # 红线校验放在 assembleDebug 之后：权限白名单改为解析**合并后** manifest，
       # 依赖库（如广告/统计 SDK）向 manifest 注入的权限同样逃不过白名单。
-      - name: 网络红线校验（白名单制 · 联网一期口径 · 基于合并后 manifest）
+      - name: 网络红线校验（白名单制 · 零联网口径 · 基于合并后 manifest）
         run: |
           set -euo pipefail
 
@@ -74,7 +74,10 @@ jobs:
           echo "权限白名单校验：$MERGED_MANIFEST"
           # USE_EXACT_ALARM 刻意不在白名单里（2026-09-27 删）：那是 Play 只发给闹钟/日历类应用的特殊权限，
           # 本 App 的提醒是纪律提示，晚几分钟不影响主功能；重新声明它应当让 CI 红，而不是被放行。
-          ALLOWED='android.permission.schedule_exact_alarm|android.permission.post_notifications|android.permission.receive_boot_completed|android.permission.vibrate|android.permission.internet'
+          # INTERNET 同理（2026-09-30 删）：v2.0.14 删掉了「用户自填 API Key 直连 DeepSeek」整条通道，
+          # 全 App 已无任何网络调用。重新声明它应当逼出一轮"要不要联网、把哪些档案字段发出去"的决策，
+          # 而不是被白名单顺手放行。
+          ALLOWED='android.permission.schedule_exact_alarm|android.permission.post_notifications|android.permission.receive_boot_completed|android.permission.vibrate'
           # 只统计 `<uses-permission>`（App 真正「申请」的权限）。
           # 刻意**不**统计组件上的 `android:permission=` 属性——那是访问守卫（声明
           # 「谁才有资格调用我」），不赋予 App 任何能力，语义与 uses-permission 相反。

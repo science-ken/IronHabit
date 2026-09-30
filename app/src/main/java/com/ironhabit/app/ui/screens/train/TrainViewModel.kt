@@ -265,7 +265,6 @@ class TrainViewModel @Inject constructor(
                             isLoadingSuggestions = false,
                             suggestions = result.suggestions,
                             suggestionSource = result.source,
-                            suggestionFallbackReason = result.fallbackReason,
                         )
                     }
                 }
@@ -347,7 +346,6 @@ class TrainViewModel @Inject constructor(
         suggestions = local.suggestions,
         adoptedNames = local.adoptedNames,
         suggestionSource = local.suggestionSource,
-        suggestionFallbackReason = local.suggestionFallbackReason,
         isLoadingSuggestions = local.isLoadingSuggestions,
     )
 

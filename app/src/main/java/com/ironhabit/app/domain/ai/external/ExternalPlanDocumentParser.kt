@@ -1,6 +1,5 @@
 package com.ironhabit.app.domain.ai.external
 
-import com.ironhabit.app.domain.ai.remote.stripCodeFence
 import com.ironhabit.app.domain.model.AdviceSource
 import com.ironhabit.app.domain.model.DietRestriction
 import com.ironhabit.app.domain.model.Equipment
@@ -31,8 +30,8 @@ import kotlinx.serialization.json.JsonObject
  * 用户把 app 生成的提问模板连同数据包一起复制给他自己的 AI（ChatGPT / DeepSeek 网页版…），
  * 拿回一段文档，粘回 app。app 在这里**不联网、不花 token**，只把那段文档读成草案。
  *
- * ## 与内置远端解析（`RemoteLlmAdvisor.parseProposalJson`）的关系
- * - **形状刻意同构**：`days / items` 字段名和内置输出一致，只有 `exerciseId` → `exercise`（名字）。
+ * ## 与内置生成的关系
+ * - **形状刻意同构**：`days / items` 字段名和内置草案一致，只有 `exerciseId` → `exercise`（名字）。
  *   外部 AI 只看得见数据包里的**动作名**（`ironhabit-week-package/v1` 的 `library` 没有 id），
  *   所以回程必须按名字反查；
  * - **防线同一份口径**：组次上限取自 [InputLimits]（与表单校验、打卡位图同源），不另立数字；
@@ -686,6 +685,26 @@ object ExternalPlanDocumentParser {
         } catch (e: IllegalArgumentException) {
             null
         }
+    }
+
+    /**
+     * 容忍模型违规包裹 ```json 围栏（模板里已禁止，但双保险）。
+     *
+     * 原来住在这个文件 import 的 `domain/ai/remote/RemoteLlmAdvisor.kt` 里 —— 那条直连通道
+     * 删除后，这里是唯一的使用方，就搬进来。围栏这件事跟"谁生成的"无关：
+     * 网页里的模型基本都会包一层。
+     */
+    private fun stripCodeFence(raw: String): String {
+        var text: String = raw.trim()
+        if (text.startsWith("```")) {
+            text = text
+                .removePrefix("```json")
+                .removePrefix("```JSON")
+                .removePrefix("```")
+            val closing: Int = text.lastIndexOf("```")
+            if (closing >= 0) text = text.substring(0, closing)
+        }
+        return text.trim()
     }
 
     /**

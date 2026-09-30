@@ -1,7 +1,6 @@
 package com.ironhabit.app.ui.screens.ai
 
 import com.ironhabit.app.R
-import com.ironhabit.app.data.preferences.AiCredentialsStore
 import com.ironhabit.app.domain.model.AdviceSource
 import com.ironhabit.app.domain.model.BodyReview
 import com.ironhabit.app.domain.model.DietReview
@@ -10,10 +9,8 @@ import com.ironhabit.app.domain.model.TrainingReview
 import com.ironhabit.app.domain.model.UserProfile
 import com.ironhabit.app.domain.model.WeeklyReview
 import com.ironhabit.app.domain.repository.SettingsRepository
-import com.ironhabit.app.domain.usecase.AskCoachUseCase
 import com.ironhabit.app.domain.usecase.BuildWeeklyReviewUseCase
 import com.ironhabit.app.domain.usecase.CoachInsightUseCase
-import com.ironhabit.app.domain.usecase.ExplainDietUseCase
 import com.ironhabit.app.domain.usecase.ExportWeekPackageUseCase
 import com.ironhabit.app.domain.usecase.GenerateDietPlanUseCase
 import com.ironhabit.app.domain.usecase.GenerateTrainingPlanUseCase
@@ -55,11 +52,8 @@ class AiCoachViewModelWeeklyReviewTest {
     val mainDispatcherRule = MainDispatcherRule()
 
     private val settingsRepository = mockk<SettingsRepository>()
-    private val credentials = mockk<AiCredentialsStore>(relaxed = true)
     private val generateTrainingPlan = mockk<GenerateTrainingPlanUseCase>(relaxed = true)
-    private val askCoach = mockk<AskCoachUseCase>(relaxed = true)
     private val generateDietPlan = mockk<GenerateDietPlanUseCase>(relaxed = true)
-    private val explainDiet = mockk<ExplainDietUseCase>(relaxed = true)
     private val coachInsight = mockk<CoachInsightUseCase>(relaxed = true)
     private val buildWeeklyReview = mockk<BuildWeeklyReviewUseCase>()
     private val exportWeekPackage = mockk<ExportWeekPackageUseCase>()
@@ -92,8 +86,6 @@ class AiCoachViewModelWeeklyReviewTest {
         json: String = "{\"schema\":\"ironhabit-week-package/v1\"}",
     ): AiCoachViewModel {
         every { settingsRepository.profile() } returns flowOf(UserProfile())
-        every { settingsRepository.aiRemoteEnabled() } returns flowOf(false)
-        every { credentials.isConfigured() } returns false
         // 桩按"被请求的那一周"返回对应的复盘 —— 这样断言结果就等于断言"VM 算对了哪一周"。
         coEvery { buildWeeklyReview(any()) } answers {
             review(firstArg<Long?>() ?: thisWeekStart)
@@ -101,12 +93,9 @@ class AiCoachViewModelWeeklyReviewTest {
         coEvery { exportWeekPackage(any(), any()) } returns json
         return AiCoachViewModel(
             settingsRepository = settingsRepository,
-            aiCredentialsStore = credentials,
             generateTrainingPlan = generateTrainingPlan,
             planPreviewHolder = com.ironhabit.app.domain.usecase.PlanPreviewHolder(),
-            askCoach = askCoach,
             generateDietPlan = generateDietPlan,
-            explainDiet = explainDiet,
             coachInsight = coachInsight,
             buildWeeklyReview = buildWeeklyReview,
             exportWeekPackage = exportWeekPackage,

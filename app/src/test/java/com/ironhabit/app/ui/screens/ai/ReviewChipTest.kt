@@ -76,7 +76,6 @@ class ReviewChipTest {
 
         val chip = chips.first { it.labelRes == R.string.ai_chip_attendance }
         assertEquals(listOf(2, 3), chip.labelArgs)
-        assertEquals("提问里也要带上同样的两个数", listOf(2, 3), chip.questionArgs)
     }
 
     @Test
@@ -107,12 +106,7 @@ class ReviewChipTest {
         )
 
         val chip = chips.first { it.labelRes == R.string.ai_chip_stalled }
-        assertEquals(
-            "取停滞最久的那条，并把动作名一起塞进提问",
-            listOf("深蹲", 5, 25, 55),
-            chip.questionArgs,
-        )
-        assertEquals(listOf(5), chip.labelArgs)
+        assertEquals("取停滞最久的那条", listOf(5), chip.labelArgs)
     }
 
     @Test
@@ -128,7 +122,6 @@ class ReviewChipTest {
         val chip = reviewChips(review(days = days)).first { it.labelRes == R.string.ai_chip_no_rpe }
 
         assertEquals("4 + 2 = 6 组没记 RPE（按组数算，不是按行数算 2）", listOf(6), chip.labelArgs)
-        assertEquals(listOf(6), chip.questionArgs)
     }
 
     @Test

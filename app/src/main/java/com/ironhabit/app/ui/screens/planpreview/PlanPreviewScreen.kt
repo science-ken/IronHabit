@@ -99,20 +99,20 @@ fun PlanPreviewScreen(
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f),
             )
-            // 诚实标注：只有真的走了远端才写「AI 生成」，本地规则必须说清是本地规则。
-            // 诚实标注：「AI 生成」只留给 app 真的联网发出去的那一次请求。
-            // `when` 穷尽、不写 else —— 新增来源忘了配文案要编译不过，而不是被静默归进「本地规则」。
-            Text(
-                text = stringResource(
-                    when (uiState.source) {
-                        AdviceSource.LOCAL_RULES -> R.string.plan_preview_source_local
-                        AdviceSource.REMOTE_LLM -> R.string.plan_preview_source_ai
-                        AdviceSource.EXTERNAL_AI_IMPORT -> R.string.plan_preview_source_external
-                    },
-                ),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            // 诚实标注：只有用户从外部 AI 粘回来的那份才标出处。内置生成不标 ——
+            // 本地规则是现在唯一的生产者，每次结果都重复一句"本地规则"不构成信息。
+            // `when` 穷尽、不写 else：新增来源忘了想清楚怎么标要编译不过，而不是被静默归类。
+            val sourceLabelRes: Int? = when (uiState.source) {
+                AdviceSource.LOCAL_RULES -> null
+                AdviceSource.EXTERNAL_AI_IMPORT -> R.string.plan_preview_source_external
+            }
+            if (sourceLabelRes != null) {
+                Text(
+                    text = stringResource(sourceLabelRes),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         // ⚠️ 标题以下**全部**放进同一个滚动容器。以前顶部这几块（提示 / 覆盖警告 / 清单 /
         // 教练说明）是不滚的固定内容，而下面的计划列表用 `weight(1f)` 只吃剩下的空间 ——
@@ -122,17 +122,6 @@ fun PlanPreviewScreen(
             modifier = Modifier.weight(1f).fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(IronHabitSpacing.md),
         ) {
-            // 断网或远端报错时结果同样是本地规则，而这页原来只写「本地规则」三个字 ——
-            // 用户白等一次超时却读不到原因。AI 教练屏早就有这句话（`SourceLine`），同一件事说同一句。
-            if (uiState.fellBackFromRemote) {
-                item {
-                    Text(
-                        text = stringResource(R.string.ai_source_fallback),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
             item {
                 Text(
                     text = stringResource(R.string.plan_preview_hint),

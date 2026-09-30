@@ -41,8 +41,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import com.ironhabit.app.R
-import com.ironhabit.app.domain.model.AdviceSource
-import com.ironhabit.app.domain.model.RemoteFallbackReason
 import com.ironhabit.app.domain.model.ReviewNote
 import com.ironhabit.app.domain.model.TrainingReview
 import com.ironhabit.app.domain.model.WeeklyReview
@@ -88,7 +86,6 @@ internal fun WeeklyReviewBlock(
     onWeekChange: (Int) -> Unit,
     onExport: () -> Unit,
     onReloadInsight: () -> Unit,
-    onAskAbout: (String) -> Unit,
 ) {
     // 选中哪一格。按周翻篇重置 —— 同一个下标在另一周指的是另一天。
     var selectedDayIndex by remember(uiState.weekOffset) { mutableStateOf<Int?>(null) }
@@ -121,7 +118,7 @@ internal fun WeeklyReviewBlock(
                 onToggleExpanded = { expanded = !expanded },
             )
 
-            AnomalyChips(review = review, onAsk = onAskAbout)
+            AnomalyChips(review = review)
 
 
             val openIndex: Int? = selectedDayIndex
@@ -386,11 +383,8 @@ private fun InsightSection(
 
             else -> {
                 val context = insight.context
-                val fromAi: Boolean = insight.source == AdviceSource.REMOTE_LLM
                 Text(
-                    text = stringResource(
-                        if (fromAi) R.string.ai_insight_remote_title else R.string.ai_insight_local_title,
-                    ),
+                    text = stringResource(R.string.ai_insight_local_title),
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -412,22 +406,10 @@ private fun InsightSection(
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                 }
-
-                val analysis = insight.text
-                if (fromAi && !analysis.isNullOrBlank()) {
-                    Text(text = analysis, style = MaterialTheme.typography.bodyMedium)
-                } else {
-                    Text(
-                        text = stringResource(R.string.ai_insight_local_body),
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    if (insight.fallbackReason == RemoteFallbackReason.REMOTE_ERROR) {
-                        Text(
-                            text = stringResource(R.string.ai_insight_fallback),
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                }
+                Text(
+                    text = stringResource(R.string.ai_insight_local_body),
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
         }
         TextButton(onClick = onReload) {
@@ -573,16 +555,14 @@ internal fun WeekPackageSheet(
 }
 
 /**
- * 一枚异常 chip：短标签 + 点下去塞进提问框的**完整问题（带真实数字）**。
+ * 一枚异常 chip 的短标签（带真实数字）。
  *
- * 标签和提问分开是因为 chip 要短到能横着一排看完，而问模型必须把数字给全 ——
- * 只给一句"这周怎么样"，模型只能回一句更空的。
+ * 以前这里还带一份"点下去塞进提问框的完整问题"—— 那个提问框随 API Key 直连一起删了，
+ * 留着两个没人消费的字段只会让人以为 chip 还可点。
  */
 internal data class ReviewChip(
     @StringRes val labelRes: Int,
     val labelArgs: List<Any>,
-    @StringRes val questionRes: Int,
-    val questionArgs: List<Any>,
 )
 
 /**
@@ -599,8 +579,6 @@ internal fun reviewChips(review: WeeklyReview): List<ReviewChip> {
         chips += ReviewChip(
             labelRes = R.string.ai_chip_attendance,
             labelArgs = listOf(training.completedDays, training.plannedDays),
-            questionRes = R.string.ai_chip_attendance_q,
-            questionArgs = listOf(training.completedDays, training.plannedDays),
         )
     }
 
@@ -608,13 +586,6 @@ internal fun reviewChips(review: WeeklyReview): List<ReviewChip> {
         chips += ReviewChip(
             labelRes = R.string.ai_chip_stalled,
             labelArgs = listOf(trend.stagnantWeeks),
-            questionRes = R.string.ai_chip_stalled_q,
-            questionArgs = listOf(
-                trend.exerciseName,
-                trend.stagnantWeeks,
-                training.totalSets,
-                training.plannedSets,
-            ),
         )
     }
 
@@ -627,8 +598,6 @@ internal fun reviewChips(review: WeeklyReview): List<ReviewChip> {
         chips += ReviewChip(
             labelRes = R.string.ai_chip_no_rpe,
             labelArgs = listOf(setsWithoutRpe),
-            questionRes = R.string.ai_chip_no_rpe_q,
-            questionArgs = listOf(setsWithoutRpe),
         )
     }
 
@@ -636,76 +605,47 @@ internal fun reviewChips(review: WeeklyReview): List<ReviewChip> {
         chips += ReviewChip(
             labelRes = R.string.ai_chip_one_weighin,
             labelArgs = emptyList(),
-            questionRes = R.string.ai_chip_one_weighin_q,
-            questionArgs = emptyList(),
         )
     }
 
     return chips
 }
 
-/** 横向可滚的异常 chip 行；没有异常时只留一枚虚线的"问问教练"。 */
+/**
+ * 横向可滚的异常 chip 行。**纯展示** —— 没有异常时整行不渲染。
+ *
+ * 以前 chip 可点：点一下切到「问教练」并把带数字的完整问题填进输入框。那条通道已删，
+ * 所以这里连 `clickable` 一起摘掉 —— 留着可点的外观、点下去什么都不发生，
+ * 用户读到的是"这 App 点不动"。
+ */
 @Composable
-private fun AnomalyChips(review: WeeklyReview, onAsk: (String) -> Unit) {
+private fun AnomalyChips(review: WeeklyReview) {
     val chips: List<ReviewChip> = reviewChips(review)
+    if (chips.isEmpty()) return
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
     ) {
-        if (chips.isEmpty()) {
-            val fallbackQuestion: String = stringResource(R.string.ai_chip_none_q)
-            Chip(
-                text = stringResource(R.string.ai_chip_none),
-                warn = false,
-                dashed = true,
-                onClick = { onAsk(fallbackQuestion) },
-            )
-        } else {
-            chips.forEach { chip ->
-                // 提问文案要在组合期解好：onClick 不是 @Composable 上下文，
-                // 在里面调 stringResource 编译不过。
-                val question: String =
-                    stringResource(chip.questionRes, *chip.questionArgs.toTypedArray())
-                Chip(
-                    text = stringResource(chip.labelRes, *chip.labelArgs.toTypedArray()),
-                    warn = true,
-                    dashed = false,
-                    onClick = { onAsk(question) },
-                )
-            }
+        chips.forEach { chip ->
+            Chip(text = stringResource(chip.labelRes, *chip.labelArgs.toTypedArray()))
         }
     }
 }
 
 @Composable
-private fun Chip(
-    text: String,
-    warn: Boolean,
-    dashed: Boolean,
-    onClick: () -> Unit,
-) {
-    val background = if (warn) MaterialTheme.colorScheme.tertiaryContainer else Color.Transparent
-    val contentColor = if (warn) MaterialTheme.colorScheme.onTertiaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+private fun Chip(text: String) {
     Box(
         modifier = Modifier
             .clip(IronHabitShapes.full)
-            .background(background)
-            .then(
-                if (dashed) {
-                    Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, IronHabitShapes.full)
-                } else {
-                    Modifier
-                },
-            )
-            .clickable(onClick = onClick)
+            .background(MaterialTheme.colorScheme.tertiaryContainer)
             .padding(horizontal = IronHabitSpacing.lg, vertical = IronHabitSpacing.sm),
     ) {
         Text(
             text = text,
             style = MaterialTheme.typography.labelLarge,
-            color = contentColor,
+            color = MaterialTheme.colorScheme.onTertiaryContainer,
         )
     }
 }

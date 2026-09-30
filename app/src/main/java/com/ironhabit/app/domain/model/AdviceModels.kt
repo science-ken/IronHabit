@@ -11,25 +11,21 @@ package com.ironhabit.app.domain.model
 // 本文件为"模型"文件，类型统一在此声明，故无额外 import（同包引用 [ExerciseCategory]）。
 
 /**
- * 计划 / 建议的**来源**（诚实标注：本地规则 vs 将来的联网模型）。
+ * 计划 / 建议的**来源**（诚实标注：App 自己算的 vs 用户在别处问回来的）。
  *
- * 从第一天起就落在模型里 → 将来 UI 可明确标注"本地规则" / "AI 联网生成"，
- * 不会出现用户分不清是规则还是模型的情况。
+ * 曾经有过第三个值 `REMOTE_LLM`（App 拿用户自填的 API Key 直连 DeepSeek）。
+ * 那条通道连同 `INTERNET` 权限一起在 v2.0.14 整条删除 —— 落库的只有**计划内容**，
+ * 来源从不入库，所以删这个值不影响任何既有数据库行。
  */
 enum class AdviceSource {
-    /** 本地确定性规则（本版唯一实现）。 */
+    /** 本地确定性规则（本版唯一的生产者）。 */
     LOCAL_RULES,
-
-    /** 将来的联网大模型（本期不实现）。 */
-    REMOTE_LLM,
 
     /**
      * 用户拿去**外部 AI**（ChatGPT / DeepSeek 网页版…）问出来、再粘回 app 的文档。
      *
-     * ⚠️ 单独立一个值，不复用 [REMOTE_LLM]：那两条的差别用户看得见也管不着 ——
-     * [REMOTE_LLM] 是 **app 自己发的网络请求**（花用户的钱、受「AI 联网增强」开关与 Key 管），
-     * 而这条路**app 一次网络都没发、一个 token 都没花**。标成"AI 生成"会让人以为
-     * 是 app 排的计划，而它其实是用户在别处聊出来的。
+     * ⚠️ 必须与 [LOCAL_RULES] 分开标：这条路 **app 一次网络都没发、一个 token 都没花**。
+     * 标成"AI 生成"会让人以为是 app 排的计划，而它其实是用户在别处聊出来的。
      */
     EXTERNAL_AI_IMPORT,
 }
@@ -112,33 +108,14 @@ enum class AdoptResult {
 }
 
 /**
- * 远端（DeepSeek）不可用时回落本地规则的原因（联网一期 §6.2 N4）。
- *
- * 由 [com.ironhabit.app.domain.ai.DelegatingPlanAdvisor] 记录，供 UI 显示
- * "本次来自本地规则（联网失败）"之类的**诚实提示**。
- */
-enum class RemoteFallbackReason {
-    /** 用户未开启「AI 联网生成」开关（默认关）。 */
-    REMOTE_DISABLED,
-
-    /** 未配置 API Key（或已清空）。 */
-    KEY_NOT_CONFIGURED,
-
-    /** 远端调用失败：网络 / 超时 / HTTP 非 200 / 响应解析失败。 */
-    REMOTE_ERROR,
-}
-
-/**
- * 补充动作建议 + **来源标注**（联网一期：UI 据此区分"本地规则 / AI 联网生成"）。
+ * 补充动作建议 + **来源标注**（UI 据此区分"本地规则算的"与"外部 AI 问回来的"）。
  *
  * @property suggestions 建议列表（已排除库里已有的）
  * @property source 本次实际使用的来源
- * @property fallbackReason 走本地规则时的回落原因；`null` = 未发生回落
  */
 data class SuggestionResult(
     val suggestions: List<ExerciseSuggestion>,
     val source: AdviceSource,
-    val fallbackReason: RemoteFallbackReason? = null,
 )
 
 /**
@@ -149,7 +126,7 @@ data class SuggestionResult(
  * @property days 各训练日的草案（只含**可写槽位**）
  * @property preservedUserEditedIds 被完整保留的既有**用户手改行** id（**含软删除行**），供 UI 展示"已保留 N 条"
  * @property notes "为什么这样排"的确定性理由
- * @property source 本次草案的实际来源（本地规则 / AI 联网生成；联网失败回落时为 LOCAL_RULES）
+ * @property source 本次草案的实际来源（内置规则生成 = `LOCAL_RULES`；外部 AI 文档导入 = `EXTERNAL_AI_IMPORT`）
  */
 data class PlanProposal(
     val days: List<PlannedDay> = emptyList(),

@@ -307,16 +307,20 @@ data class MealItemBackup(
 )
 
 /**
- * 设置快照（v3 起含**用户档案** + AI 联网开关）。
+ * 设置快照（v3 起含**用户档案**）。
  *
  * 档案同处 `SettingsDataStore`（不落 Room、不需 schema 迁移），但 AI 教练与本地规则引擎都要消费它，
  * 旧版备份不带这些字段 → 恢复后档案被静默抹掉（v3 修复）。
  *
  * **字段携带契约**：全部新增字段都有默认值，老 v2 备份直接解码、不抛异常。
  * 可空字段（`gender` / `age` / `heightCm` / `bodyFatPct` / `goal` / `goalWeightKg` / `injuryNote`）
- * 用 `null` 表示「备份未携带或用户未填」；三个集合字段与 [aiRemoteEnabled] 在 v3 备份里
- * 一定被显式编码（导出 `encodeDefaults = true`），因此「v3 的空集 / false」是**明确快照**
+ * 用 `null` 表示「备份未携带或用户未填」；三个集合字段在 v3 备份里
+ * 一定被显式编码（导出 `encodeDefaults = true`），因此「v3 的空集」是**明确快照**
  * 而非「缺失」；data 层据此决定是否覆盖本地值（见 `BackupRepositoryImpl`）。
+ *
+ * ⚠️ v3 起这里还有一个 `aiRemoteEnabled`（「AI 联网增强」开关），v2.0.14 随该功能一起删除。
+ * 老备份文件里多出来的这个键会被解码器的 `ignoreUnknownKeys` 静默忽略，
+ * 所以**不升 schema 版本**：恢复路径没有结构性变化，升版本只会让新旧判定白白复杂化。
  *
  * 枚举一律存 `name`（不存 ordinal，新增/重排枚举值不会错位）。
  *
@@ -335,7 +339,6 @@ data class MealItemBackup(
  * @property injuryAreas 伤病部位（[InjuryArea.name] 集合，v3 新增）
  * @property injuryNote 伤病备注（自由文本，v3 新增）
  * @property dietaryAvoid 饮食忌口（[DietRestriction.name] 集合，v3 新增）
- * @property aiRemoteEnabled 是否启用「AI 联网生成」（v3 新增；默认 `false` = 纯本地规则）
  * @property trainingDaysPerWeek 每周训练天数（`3..6`，v4 新增；默认 `3` = 与 [UserProfile] 同默认。
  *   v1–v3 备份无该键 → 解码即默认值，data 层按结构版本判定**不写回**，避免覆盖本地已选值）
  */
@@ -356,6 +359,5 @@ data class SettingsBackup(
     val injuryAreas: Set<String> = emptySet(),
     val injuryNote: String? = null,
     val dietaryAvoid: Set<String> = emptySet(),
-    val aiRemoteEnabled: Boolean = false,
     val trainingDaysPerWeek: Int = 3,
 )

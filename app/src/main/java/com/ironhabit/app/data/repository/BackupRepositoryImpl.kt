@@ -107,18 +107,17 @@ class BackupRepositoryImpl @Inject constructor(
     }
 
     /**
-     * 导出。设置 / 档案 / AI 开关同处一个 DataStore 但各自是独立 Flow：
-     * 用 [combine] **一次取齐**（V3 报告 P3-6）—— 三个 `first()` 逐个订阅时，
-     * 两次读取之间发生的并发写入（如恢复流程自身、AI 开关切换）会让导出的 JSON
+     * 导出。设置与档案同处一个 DataStore 但各自是独立 Flow：
+     * 用 [combine] **一次取齐**（V3 报告 P3-6）—— 两个 `first()` 逐个订阅时，
+     * 两次读取之间发生的并发写入（如恢复流程自身）会让导出的 JSON
      * 里 settings 与 profile 来自不同时点，恢复端无从察觉。
      */
     override suspend fun export(): String {
-        val (settings, profile, aiRemoteEnabled) =
+        val (settings, profile) =
             combine(
                 settingsDataStore.settings,
                 settingsDataStore.profile,
-                settingsDataStore.aiRemoteEnabled,
-            ) { settings, profile, aiRemoteEnabled -> Triple(settings, profile, aiRemoteEnabled) }
+            ) { settings, profile -> settings to profile }
                 .first()
         val payload = BackupPayload(
             schemaVersion = BackupPayload.CURRENT_SCHEMA_VERSION,
@@ -133,7 +132,7 @@ class BackupRepositoryImpl @Inject constructor(
             meals = mealDao.getAll().map { it.toBackup() },
             foods = foodDao.getAllWithServings().map { it.toBackup() },
             mealItems = mealItemDao.getAll().map { it.toBackup() },
-            settings = settings.toBackup(profile, aiRemoteEnabled),
+            settings = settings.toBackup(profile),
         )
         return jsonCodec.encodeToString(BackupPayload.serializer(), payload)
     }
@@ -241,14 +240,14 @@ class BackupRepositoryImpl @Inject constructor(
     }
 
     /**
-     * 还原用户档案 + 「AI 联网生成」开关（**只写备份确实携带的字段**）。
+     * 还原用户档案（**只写备份确实携带的字段**）。
      *
      * - 可空字段（性别 / 年龄 / 身高 / 体脂 / 目标 / 目标体重 / 伤病备注）：`null` = 「老备份未携带」
      *   或「用户本就未填」→ **一律跳过**，绝不用 `null` 覆盖本地已有值（宁可少写，不可误抹）。
-     * - 集合字段（器械 / 伤病部位 / 忌口）与 [SettingsBackup.aiRemoteEnabled]：非空默认值，
-     *   无法用「非空」自证携带，故以**结构版本**判定 —— v3+ 备份因导出 `encodeDefaults = true`
-     *   一定显式编码（空集 / `false` 都是明确快照 → 照写）；v1/v2 老备份无该键（解码为默认空集
-     *   / `false`）→ 空集一律视为「未携带」而跳过，避免清空本地已选器械 / 伤病 / 忌口。
+     * - 集合字段（器械 / 伤病部位 / 忌口）：非空默认值，无法用「非空」自证携带，
+     *   故以**结构版本**判定 —— v3+ 备份因导出 `encodeDefaults = true`
+     *   一定显式编码（空集是明确快照 → 照写）；v1/v2 老备份无该键（解码为默认空集）
+     *   → 空集一律视为「未携带」而跳过，避免清空本地已选器械 / 伤病 / 忌口。
      *   若 v2 JSON 被人为填入了非空集合，仍按「显式携带」处理并写回。
      */
     private suspend fun applyProfile(settings: SettingsBackup, schemaVersion: Int) {
@@ -276,9 +275,6 @@ class BackupRepositoryImpl @Inject constructor(
             settingsDataStore.setProfileDietaryAvoid(
                 decodeEnumSet<DietRestriction>(settings.dietaryAvoid),
             )
-        }
-        if (carriesProfile) {
-            settingsDataStore.setAiRemoteEnabled(settings.aiRemoteEnabled)
         }
         // B-6：v4+ 备份才显式携带「每周训练天数」（v1–v3 解码即默认 3，写回会覆盖本地已选值）。
         if (BackupRestoreRules.carriesTrainingDaysPerWeek(schemaVersion)) {
@@ -704,11 +700,8 @@ private fun MealItemBackup.toEntity(createdAtFallback: Long): MealItemEntity = M
     createdAt = BackupRestoreRules.resolveCreatedAt(createdAt, createdAtFallback),
 )
 
-/** 设置 + 用户档案 + AI 联网开关 → 备份快照（枚举一律存 `name`，与 [SettingsDataStore] 同口径）。 */
-private fun AppSettings.toBackup(
-    profile: UserProfile,
-    aiRemoteEnabled: Boolean,
-): SettingsBackup = SettingsBackup(
+/** 设置 + 用户档案 → 备份快照（枚举一律存 `name`，与 [SettingsDataStore] 同口径）。 */
+private fun AppSettings.toBackup(profile: UserProfile): SettingsBackup = SettingsBackup(
     themeMode = themeMode.name,
     unitSystem = unitSystem.name,
     reminderEnabled = reminderEnabled,
@@ -724,7 +717,6 @@ private fun AppSettings.toBackup(
     injuryAreas = encodeEnumSet(profile.injuryAreas),
     injuryNote = profile.injuryNote,
     dietaryAvoid = encodeEnumSet(profile.dietaryAvoid),
-    aiRemoteEnabled = aiRemoteEnabled,
     trainingDaysPerWeek = ProfileLimits.coerceTrainingDaysPerWeek(profile.trainingDaysPerWeek),
 )
 

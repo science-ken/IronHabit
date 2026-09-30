@@ -51,7 +51,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -186,11 +185,8 @@ fun SettingsScreen(
                 )
                 HorizontalDivider()
 
-                // ---- AI 设置（联网增强 · 默认关）----
-                AiSettingsSection(
-                    uiState = uiState,
-                    viewModel = viewModel,
-                )
+                // ---- AI 设置（v2.0.14 起不联网，只剩一段说明）----
+                AiSettingsSection()
                 HorizontalDivider()
 
                 // ---- 每日提醒 ----
@@ -309,98 +305,31 @@ fun SettingsScreen(
     }
 }
 
-// ---------------- AI 设置（联网增强 · v3 增量二期） ----------------
+// ---------------- AI 设置（v2.0.14 起不联网，只留一段说明） ----------------
 
 /**
- * 「AI 设置」区块：联网开关 + DeepSeek API Key + 隐私说明。
+ * 「AI 设置」区块 —— 只剩一段**只读说明**。
  *
- * **诚实原则**：开关默认关；关闭/未填 Key/断网时行为与纯离线版完全一致（自动回落本地规则）。
- * 隐私说明写明"开了发什么给谁"——**宁朴素勿误导**，不许用"智能云服务"之类的模糊措辞。
+ * 这里原来有四样：联网开关、DeepSeek API Key 输入（明文不进 savedInstanceState，故刻意不用
+ * `rememberSaveable`）、Keystore 损坏时的「重置加密存储」出口、以及一段"开了会发什么给谁"的
+ * 隐私说明。整条直连通道已在 v2.0.14 删除 —— 那些控件继续摆着就是在承诺一件不再发生的事。
+ *
+ * 说明常驻本页，因为"App 有没有把我的档案发出去"是个真问题，答案值得一个固定的地方说；
+ * 医疗免责句也搬到这里 —— 它对全 App 成立（排课会读你的伤病字段），不只对某一屏。
  */
 @Composable
-private fun AiSettingsSection(
-    uiState: SettingsUiState,
-    viewModel: SettingsViewModel,
-) {
-    // 密钥输入**不可**用 rememberSaveable：那会把明文 API Key 写进 savedInstanceState
-    // （系统 Bundle 可被备份/转储）。进程重建后重新输入即可——安全 > 便捷。
-    var keyInput by remember { mutableStateOf("") }
-
+private fun AiSettingsSection() {
     SectionLabel(text = stringResource(R.string.settings_section_ai))
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Text(
-            text = stringResource(R.string.settings_ai_remote_enabled),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        Switch(
-            checked = uiState.aiRemoteEnabled,
-            onCheckedChange = viewModel::onAiRemoteEnabledChange,
-        )
-    }
     Text(
-        text = stringResource(R.string.settings_ai_remote_hint),
+        text = stringResource(R.string.settings_ai_offline_note),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-
-    OutlinedTextField(
-        value = keyInput,
-        onValueChange = { keyInput = it },
-        modifier = Modifier.fillMaxWidth(),
-        label = { Text(text = stringResource(R.string.settings_ai_key_label)) },
-        placeholder = { Text(text = stringResource(R.string.settings_ai_key_hint)) },
-        singleLine = true,
-        visualTransformation = PasswordVisualTransformation(),
-        trailingIcon = {
-            TextButton(
-                onClick = {
-                    viewModel.onApiKeySave(keyInput)
-                    keyInput = ""
-                },
-                enabled = keyInput.isNotBlank(),
-            ) {
-                Text(text = stringResource(R.string.action_save))
-            }
-        },
-        supportingText = {
-            Text(
-                text = if (uiState.hasApiKey) {
-                    stringResource(R.string.settings_ai_key_saved)
-                } else {
-                    stringResource(R.string.settings_ai_key_hint)
-                },
-                style = MaterialTheme.typography.bodySmall,
-            )
-        },
-    )
-    if (uiState.hasApiKey) {
-        TextButton(onClick = viewModel::onApiKeyClear) {
-            Text(text = stringResource(R.string.action_clear_key))
-        }
-    }
-    // P0-2：Keystore / 加密存储不可用时的**可自恢复**出口。
-    // 没有这个入口时，用户既存不进 Key 也读不到 Key，设置页只会一直是"未配置"，无从补救。
-    if (uiState.aiStorageUnavailable) {
-        Text(
-            text = stringResource(R.string.settings_ai_storage_unavailable),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.error,
-        )
-        TextButton(onClick = viewModel::onAiStorageReset) {
-            Text(text = stringResource(R.string.action_reset_ai_storage))
-        }
-    }
-
     Text(
-        text = stringResource(R.string.settings_ai_privacy),
+        text = stringResource(R.string.ai_safety_note),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = IronHabitSpacing.sm),
     )
 }
 

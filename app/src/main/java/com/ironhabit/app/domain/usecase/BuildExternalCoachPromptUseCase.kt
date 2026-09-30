@@ -35,7 +35,7 @@ import kotlinx.datetime.LocalDate
  * 投影器的保护规则只挡**手改行**，挡不住这种重复，所以这道该在提示词里做。
  *
  * ## 为什么这里可以有中文
- * 和 `RemotePromptBuilder` 同一条豁免：这是**给模型的指令**，不是界面文案（架构 §7.5 管的是后者）。
+ * 这里豁免架构 §7.5：这是**给模型的指令**，不是界面文案（§7.5 管的是后者）。
  * 用户视角的那几句说明（怎么复制、粘回哪里）在 `strings.xml` 里。
  *
  * ⚠️ 模板里的字段名是**合同**（`schema` / `days` / `meals` / `exercise` / `food` / `grams` / `targetSets`…），

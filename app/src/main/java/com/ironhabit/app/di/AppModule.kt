@@ -2,14 +2,8 @@ package com.ironhabit.app.di
 
 import android.util.Log
 import com.ironhabit.app.BuildConfig
-import com.ironhabit.app.data.preferences.AiCredentialsStore
-import com.ironhabit.app.domain.ai.DelegatingPlanAdvisor
 import com.ironhabit.app.domain.ai.LocalRuleAdvisor
 import com.ironhabit.app.domain.ai.PlanAdvisor
-import com.ironhabit.app.domain.ai.remote.DeepSeekApi
-import com.ironhabit.app.domain.ai.remote.DeepSeekClient
-import com.ironhabit.app.domain.ai.remote.RemoteLlmAdvisor
-import com.ironhabit.app.domain.repository.SettingsRepository
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -83,39 +77,17 @@ object AppModule {
     @AppVersion
     fun provideAppVersion(): String = BuildConfig.VERSION_NAME
 
-    /** DeepSeek HTTP 客户端（`HttpURLConnection`，零第三方 HTTP 依赖）。接口化便于单测注入 fake。 */
-    @Provides
-    @Singleton
-    fun provideDeepSeekApi(): DeepSeekApi = DeepSeekClient()
-
-    /** 远端顾问：解析是纯函数（JVM 单测直接测），本类只负责"提示词 → HTTP → 解析"。 */
-    @Provides
-    @Singleton
-    fun provideRemoteLlmAdvisor(
-        api: DeepSeekApi,
-        credentialsStore: AiCredentialsStore,
-    ): RemoteLlmAdvisor = RemoteLlmAdvisor(api = api, credentials = credentialsStore)
-
     /**
-     * 计划 / 建议来源（联网一期）。
+     * 计划 / 建议的唯一实现：本地确定性规则。
      *
-     * 绑定不变（仍是 [PlanAdvisor] 接口），实现从「直接本地」换成**委托切换**：
-     * [DelegatingPlanAdvisor] 按设置开关 + Key 配置决定走远端（[RemoteLlmAdvisor]）还是
-     * 本地（[LocalRuleAdvisor]），远端任何失败自动回落本地。
-     * UseCase / UI 零改动（这正是当初做 PlanAdvisor 抽象的目的）。
+     * v2.0.14 删掉了「用户自填 API Key 直连 DeepSeek」那条通道，连同按开关与 Key 路由的
+     * 委托层（`DelegatingPlanAdvisor`）一起 —— 所以这里回到**直接绑定**。
+     * 真要再接任何远端，先重新决策"要不要联网、把哪些档案字段发出去"，
+     * 而不是往这个接口上插一个实现就完事。
      */
     @Provides
     @Singleton
-    fun providePlanAdvisor(
-        credentialsStore: AiCredentialsStore,
-        settingsRepository: SettingsRepository,
-        remoteLlmAdvisor: RemoteLlmAdvisor,
-    ): PlanAdvisor = DelegatingPlanAdvisor(
-        local = LocalRuleAdvisor,
-        remote = remoteLlmAdvisor,
-        credentials = credentialsStore,
-        settingsRepository = settingsRepository,
-    )
+    fun providePlanAdvisor(): PlanAdvisor = LocalRuleAdvisor
 }
 
 /** 未捕获协程异常兜底日志的 tag（`logcat -s` 用得上）。 */

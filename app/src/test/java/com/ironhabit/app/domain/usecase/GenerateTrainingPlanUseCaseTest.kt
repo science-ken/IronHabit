@@ -251,7 +251,6 @@ class GenerateTrainingPlanUseCaseTest {
 
         val emptyAdvisor = mockk<PlanAdvisor> {
             every { source } returns AdviceSource.LOCAL_RULES
-            every { lastFallbackReason } returns null
             every {
                 planWeek(any(), any(), any(), any(), any(), any())
             } returns PlanProposal(source = AdviceSource.LOCAL_RULES)

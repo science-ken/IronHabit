@@ -11,9 +11,8 @@ private const val CHECK_IN_MAX_SETS: Int = MAX_SETS
 /**
  * 用户输入数值的**唯一真源**（域层常量 + 纯函数）。
  *
- * 背景（BUG 修复）：远端 AI 路径对自己的输出有钳制（`targetSets` → `1..31`、
- * `targetReps` → `1..100`，见 `RemoteLlmAdvisor` 的「防线 ③」与提示词第 6 条），
- * 而本地表单此前「能 parse 就收」——`sets = 0`、负次数、
+ * 背景（BUG 修复）：机器生成的草案对自己的输出有钳制（`targetSets` → `1..31`、
+ * `targetReps` → `1..100`），而本地表单此前「能 parse 就收」——`sets = 0`、负次数、
  * `weight = -10`、`duration = 0`、荒唐的身体数据全都能落库。两条入口的校验强度必须
  * **对称**，故把边界集中到本文件，由各表单 / 弹层共同引用。
  *
@@ -26,7 +25,7 @@ private const val CHECK_IN_MAX_SETS: Int = MAX_SETS
  *
  * 注意：组数上限取 [MAX_SETS]（= 31）而非经验值，因为逐组勾选的唯一真源是
  * `completed_sets_mask` 这个 `Int` 位图：目标组数一旦超过 31，第 32 组在 mask 里
- * **无处可放**，用户永远勾不满。远端 AI 路径钳到同一个 `31`（`RemoteLlmAdvisor` 的「防线 ③」），两条入口天花板一致。
+ * **无处可放**，用户永远勾不满。
  */
 object InputLimits {
 

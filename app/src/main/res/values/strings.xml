@@ -37,7 +37,6 @@
     <string name="action_share">分享</string>
     <string name="action_create">去创建</string>
     <string name="action_start">开始</string>
-    <string name="action_clear_key">清除 Key</string>
 
     <!-- ===== 今日页 ===== -->
     <string name="title_today">今日</string>
@@ -98,8 +97,6 @@
     <string name="msg_plan_adopt_failed">采纳没写进去 —— 这一天可以再点一次，已排好的不会被重复写</string>
     <string name="msg_plan_adopted_count">已写入 %1$s 条计划</string>
     <string name="plan_preview_empty">没有待采纳的草案了</string>
-    <string name="plan_preview_source_local">本地规则</string>
-    <string name="plan_preview_source_ai">AI 生成</string>
     <!-- 不给「AI 生成」：这三个字在用户那里的意思是"App 替我排的"，而这份是他在别处聊回来的。 -->
     <string name="plan_preview_source_external">外部 AI 导入</string>
     <string name="plan_preview_footer">已采纳 %1$d / %2$d 天 · 共 %3$d 条</string>
@@ -311,7 +308,7 @@
     <!-- 引导条的按钮：以前直接复用页面标题 `title_settings`（「设置」），与本页标题撞词且看不出点了会怎样 -->
     <string name="action_open_notification_settings">去开启</string>
     <string name="settings_version">版本 %1$s</string>
-    <string name="settings_privacy">核心功能（打卡/计划/提醒/备份）完全离线运行；仅当你在「AI 设置」开启联网增强后，AI 相关请求才会联网，数据是否发送由该开关控制</string>
+    <string name="settings_privacy">全部功能（打卡/计划/提醒/备份/教练页）完全离线运行：App 不申请网络权限，你的档案与记录不出这台设备</string>
 
     <!-- ===== 备份页 ===== -->
     <string name="backup_export_title">导出备份</string>
@@ -515,16 +512,6 @@
     <string name="note_ai_goal_support">贴合你的目标方向，用于补强薄弱环节</string>
 
     <!-- 区块⑤：问教练（AI 自由问答 · 联网可选） -->
-    <string name="ai_chat_section_title">问教练（AI 自由问答）</string>
-    <string name="ai_chat_hint">可以问训练、饮食、恢复、坚持相关的问题；回答由 AI 联网生成，仅供参考</string>
-    <string name="ai_chat_empty">还没有对话。比如问：今天练完有点累，明天该怎么调整？</string>
-    <string name="ai_chat_input_placeholder">输入你的问题…</string>
-    <string name="ai_chat_send">发送</string>
-    <string name="ai_chat_in_progress">正在生成回答…</string>
-    <string name="ai_chat_label_you">你</string>
-    <string name="ai_chat_label_coach">教练</string>
-    <string name="ai_chat_needs_network">发问需要联网：请在「我的 → 设置 → AI 设置」开启「AI 联网增强」并填写 Key</string>
-    <string name="ai_chat_failed">联网失败，没能拿到回答；可以改成更短的问题再试一次</string>
 
     <!-- 页面标题 -->
     <string name="title_ai_coach">AI 教练</string>
@@ -535,17 +522,14 @@
     <string name="ai_diet_preserved_hint">已保留你手动改过的 %1$d 餐，不会被覆盖</string>
     <string name="ai_diet_basis_title">本地规则 · 生成依据</string>
     <string name="ai_diet_basis_body">依据体重、性别、年龄、身高估算基础代谢，再按目标与「今天是否训练日」调整；忌口已在候选食物上过滤</string>
-    <string name="ai_diet_analysis_title">AI 分析 · 为什么这样吃</string>
 
     <!-- 区块②C：进度解读（子项 C）—— 数字始终来自本地聚合，联网时另附 AI 解读 -->
     <string name="ai_insight_section">进度解读</string>
-    <string name="ai_insight_hint">基于最近两周的打卡、强度与体重变化；联网时由 AI 给出下一步建议，离线则为本地小结</string>
-    <string name="ai_insight_remote_title">AI 分析 · 最近进展与下一步</string>
+    <string name="ai_insight_hint">基于最近两周的打卡、强度与体重变化，全部在本机算</string>
     <string name="ai_insight_local_title">本地规则 · 最近小结</string>
     <string name="ai_insight_stats">打卡 %1$d 次 · 平均 RPE %2$s · 体重变化 %3$s kg · 连续 %4$d 天</string>
     <string name="ai_insight_unknown">暂无</string>
     <string name="ai_insight_local_body">坚持比强度更重要：按计划出勤、每次训练都记下来，连续天数自然会涨。下一步可以小幅加重或加一组，别一次加太多。</string>
-    <string name="ai_insight_fallback">联网失败，已改用本地小结</string>
     <string name="ai_insight_empty">最近两周还没有打卡记录，先完成一次训练再来解读</string>
     <string name="ai_insight_reload">重新解读</string>
 
@@ -562,35 +546,17 @@
     <string name="focus_cardio_core">有氧 + 核心</string>
 
 
-    <!-- ===== AI 联网（v3 增量二期 · DeepSeek）===== -->
-    <!-- 来源诚实标注 -->
-    <string name="ai_source_local">本次结果来自本地规则（未联网）</string>
-    <string name="ai_source_remote">本次结果由 AI（DeepSeek）生成</string>
-    <string name="ai_source_fallback">联网失败，本次已自动改用本地规则</string>
+    <!-- ===== AI 来源标注与离线说明（v2.0.14 起 App 不联网）===== -->
     <!-- 「未联网、未生成」是这句的全部价值：用户自己聊回来的东西不能写成「AI 生成」，
          那会让人以为是 App 替他排的课。 -->
     <string name="ai_source_external">本次结果来自你问的外部 AI（App 未联网、未生成）</string>
 
-    <!-- 设置页「AI 设置」区块 -->
+    <!-- 设置页「AI 设置」区块：只剩一段只读说明（联网开关与 API Key 整条已删） -->
     <string name="settings_section_ai">AI 设置</string>
-    <string name="settings_ai_remote_enabled">AI 联网增强</string>
-    <string name="settings_ai_remote_hint">开启后「生成计划 / 补充动作」由 AI（DeepSeek）生成；关闭、未填 Key 或断网时自动改用本地规则，App 照常可用</string>
-    <string name="settings_ai_key_label">DeepSeek API Key</string>
-    <string name="settings_ai_key_hint">粘贴 sk- 开头的密钥；加密保存在本机，不上传、不进备份</string>
-    <string name="settings_ai_key_saved">Key 已保存</string>
-    <string name="settings_ai_key_cleared">已清除 Key</string>
-    <string name="settings_ai_key_invalid">Key 格式不对：应以 sk- 开头</string>
-    <string name="settings_ai_storage_unavailable">API Key 存储不可用（系统密钥库异常）：现在既存不进也读不到 Key。可先重置加密存储再重新配置。</string>
-    <string name="action_reset_ai_storage">重置加密存储</string>
-    <string name="settings_ai_storage_reset_done">加密存储已重置，请重新填入 API Key</string>
-    <string name="settings_ai_key_storage_failed">保存失败：API Key 存储不可用</string>
-    <string name="settings_ai_privacy">隐私说明：开启后，你的身体档案（性别/年龄/身高/体重/伤病/目标）与动作库信息会发送给 DeepSeek 用于生成建议；关闭或断网时数据不出设备。是否发送由这个开关控制。</string>
+    <string name="settings_ai_offline_note">AI 教练不联网：计划、饮食与复盘的数字都在你手机上算。想用真 AI 的判断，去「AI 教练」页点「导入训练 / 导入饮食」—— 复制提问模板问你自己的 AI，再把回答粘回来逐天确认。你的档案不会离开这台设备。</string>
 
-    <!-- AI 页动态徽标 -->
-    <string name="ai_badge_local">本地规则版 · 完全离线</string>
-    <string name="ai_badge_remote_on">AI 增强已开启（DeepSeek）· 断网自动回落本地规则</string>
-    <string name="ai_badge_remote_no_key">AI 增强未启用（缺 API Key）· 当前使用本地规则</string>
-    <string name="ai_action_go_settings">去开启</string>
+    <!-- AI 页顶部徽章：以前有三态（本地版 / DeepSeek 已开启 / 缺 API Key），现在只剩一种 -->
+    <string name="ai_badge_offline">完全离线 · 数字都在本机算</string>
 
     <!-- ===== AI 分析 / 本地生成依据（v1.9）===== -->
     <string name="basis_frequency">每周安排 %1$d 个训练日（按你在档案里设的天数），并轮换不同训练重点</string>
@@ -614,8 +580,9 @@
     <!-- ===== 教练页顶部分段 ===== -->
     <string name="ai_tab_review">本周复盘</string>
     <string name="ai_tab_review_note">数字本地算</string>
-    <string name="ai_tab_ask">问教练</string>
-    <string name="ai_tab_ask_note">每次追问联网</string>
+    <!-- 第二格以前叫「问教练 · 每次追问联网」；直连删除后这一格装的是档案 + 工具入口 + 饮食结果 -->
+    <string name="ai_tab_action">生成 / 导入</string>
+    <string name="ai_tab_action_note">App 不联网</string>
     <string name="ai_tool_plan">生成计划</string>
     <string name="ai_tool_plan_note">预览后逐天采纳</string>
     <string name="ai_tool_plan_busy">生成中…</string>
@@ -820,15 +787,9 @@
 
     <!-- ===== 复盘屏的异常 chips（点一下把带数字的问题塞进提问框）===== -->
     <string name="ai_chip_attendance">这周只练了 %1$d/%2$d 天</string>
-    <string name="ai_chip_attendance_q">计划 %2$d 天，实际只练了 %1$d 天，剩下那几天怎么补回来？</string>
     <string name="ai_chip_stalled">有动作连续 %1$d 周没涨</string>
-    <string name="ai_chip_stalled_q">%1$s 已经连续 %2$d 周没涨了，本周组数 %3$d/%4$d。该加重量还是加组数？</string>
     <string name="ai_chip_no_rpe">有 %1$d 组没记 RPE</string>
-    <string name="ai_chip_no_rpe_q">本周有 %1$d 组没记 RPE，加重量的判断是不是就用不上这条了？</string>
     <string name="ai_chip_one_weighin">本周只称了 1 次</string>
-    <string name="ai_chip_one_weighin_q">本周只称了一次体重，算不出变化。现在该看什么指标？</string>
-    <string name="ai_chip_none">这周没有异常 · 问问教练</string>
-    <string name="ai_chip_none_q">这周整体怎么样？</string>
     <!-- 这条只说本页那条的口径。与「今日」页那条（按打卡条数上色）**刻意不同**，
          差异不再写进用户可见文案（走查 #4），要改先两处一起看。 -->
     <string name="ai_review_heat_basis">颜色深浅 = 当天练完的组数</string>
@@ -845,7 +806,7 @@
     <string name="ai_day_shortfall">计划 %1$d 组 · 实际 %2$d 组，还差 %3$d 组</string>
     <string name="ai_day_empty">这天没有记录：计划 0 组、实际 0 组、没称重、没记饮食。</string>
     <string name="ai_day_readonly_note">只读 · 要改这天的训练，去「今日」页</string>
-    <string name="ai_review_export_hint">数据包就是这段 JSON：可以复制给任何 AI 看；App 直连 DeepSeek 时用的也是同一份数据</string>
+    <string name="ai_review_export_hint">数据包就是这段 JSON：可以复制给任何 AI 看，App 自己不联网</string>
     <string name="ai_package_title">AI 会看到什么</string>
     <string name="ai_package_detail_on">明细 + 汇总</string>
     <string name="ai_package_detail_off">只传汇总</string>

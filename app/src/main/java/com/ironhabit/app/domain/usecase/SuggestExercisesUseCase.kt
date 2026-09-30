@@ -42,9 +42,9 @@ class SuggestExercisesUseCase @Inject constructor(
 ) {
 
     /**
-     * 只读：产出"还能收入哪些补充动作"（**带来源标注**，联网一期接口变更）。
+     * 只读：产出"还能收入哪些补充动作"（**带来源标注**）。
      *
-     * 顾问调用包 `withContext(ioDispatcher)`：本地 = 纯计算，远端 = 阻塞 HTTP。
+     * 顾问调用包 `withContext(ioDispatcher)`：规则引擎是纯计算，但候选池与现有库要先从仓库读。
      */
     suspend fun suggest(): SuggestionResult {
         val profile = settingsRepository.profile().first()
@@ -59,7 +59,6 @@ class SuggestExercisesUseCase @Inject constructor(
         return SuggestionResult(
             suggestions = suggestions,
             source = advisor.source,
-            fallbackReason = advisor.lastFallbackReason,
         )
     }
 

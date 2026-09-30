@@ -4,7 +4,6 @@ import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ironhabit.app.R
-import com.ironhabit.app.data.preferences.AiCredentialsStore
 import com.ironhabit.app.domain.model.AppSettings
 import com.ironhabit.app.domain.model.BodyMetricType
 import com.ironhabit.app.domain.model.DietRestriction
@@ -51,9 +50,6 @@ import kotlinx.coroutines.sync.withLock
  * @property reminderMinute 提醒分钟
  * @property profile 用户档案（「我的档案」区块，存 DataStore）
  * @property currentWeightKg 当前体重（只读，来自 `body_metrics` 最新 WEIGHT 值；无记录为 `null`）
- * @property aiRemoteEnabled 「AI 联网增强」开关（默认 false = 纯本地规则，行为与纯离线版一致）
- * @property hasApiKey 是否已配置 DeepSeek API Key（只读快照；存于加密文件，不经 DataStore）
- * @property aiStorageUnavailable 加密存储是否不可用（Keystore 异常等）→ UI 给出「重置加密存储」出口
  * @property errorRes 页面级错误资源 id
  * @property snackbarRes 一次性 Snackbar 资源 id（提醒设置结果）
  * @property snackbarArgs Snackbar 格式化参数（提醒时间）
@@ -67,9 +63,6 @@ data class SettingsUiState(
     val reminderMinute: Int = DEFAULT_MINUTE,
     val profile: UserProfile = UserProfile(),
     val currentWeightKg: Float? = null,
-    val aiRemoteEnabled: Boolean = false,
-    val hasApiKey: Boolean = false,
-    val aiStorageUnavailable: Boolean = false,
     @StringRes val errorRes: Int? = null,
     @StringRes val snackbarRes: Int? = null,
     val snackbarArgs: List<String> = emptyList(),
@@ -90,7 +83,6 @@ private const val DEFAULT_MINUTE = 0
 class SettingsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val bodyMetricRepository: BodyMetricRepository,
-    private val aiCredentialsStore: AiCredentialsStore,
     private val scheduleReminder: ScheduleReminderUseCase,
 ) : ViewModel() {
 
@@ -110,13 +102,11 @@ class SettingsViewModel @Inject constructor(
             combine(
                 settingsRepository.settings(),
                 settingsRepository.profile(),
-                settingsRepository.aiRemoteEnabled(),
                 latestWeightKg,
-            ) { settings: AppSettings, profile: UserProfile, aiRemote: Boolean, weightKg: Float? ->
+            ) { settings: AppSettings, profile: UserProfile, weightKg: Float? ->
                 settings.toUiState().copy(
                     profile = profile,
                     currentWeightKg = weightKg,
-                    aiRemoteEnabled = aiRemote,
                 )
             }
                 // 每次（重）订阅都先发一帧「加载中」：否则重试再次失败时，与已缓存的错误态
@@ -137,11 +127,9 @@ class SettingsViewModel @Inject constructor(
             dataState.collect { data ->
                 _uiState.update { local ->
                     data.copy(
-                        // 本地一次性状态不被数据流覆盖；hasApiKey 不经数据流（加密文件无响应式流）。
+                        // 本地一次性状态不被数据流覆盖。
                         snackbarRes = local.snackbarRes,
                         snackbarArgs = local.snackbarArgs,
-                        hasApiKey = local.hasApiKey,
-                        aiStorageUnavailable = local.aiStorageUnavailable,
                         // 这一帧没报错 = 数据是好的：把旧错误续下去会让整页一直停在错误分支，
                         // 而那正是"重试"要清掉的东西（见 [onRetry]）。
                         errorRes = data.errorRes,
@@ -149,7 +137,6 @@ class SettingsViewModel @Inject constructor(
                 }
             }
         }
-        refreshAiCredentialSnapshot()
     }
 
     /** 加载失败后重试（重新订阅数据源）。 */
@@ -158,124 +145,12 @@ class SettingsViewModel @Inject constructor(
         retryTrigger.update { it + 1L }
     }
 
-    /**
-     * 刷新「是否已配置 Key」与「加密存储是否可用」两个快照。
-     *
-     * ⚠️ P0-2：`AiCredentialsStore` 内部已兜住 Keystore 异常（不再抛），这里再包一层
-     * `runCatching` 属防御性写法。历史实现是直接抛，而本方法在 `init` 里**同步**执行
-     * （不在协程内）→ 一旦抛出即 ViewModel 构造失败，设置页**永远进不去**，
-     * 而诱因仅仅是"这台机器的密钥库有问题"。
-     */
-    private fun refreshAiCredentialSnapshot() {
-        val (configured, storageAvailable) = runCatching {
-            aiCredentialsStore.isConfigured() to aiCredentialsStore.isStorageAvailable()
-        }.getOrDefault(false to false)
-        _uiState.update {
-            it.copy(hasApiKey = configured, aiStorageUnavailable = !storageAvailable)
-        }
-    }
-
     fun onThemeChange(mode: ThemeMode) {
         persist { settingsRepository.setTheme(mode) }
     }
 
     fun onUnitChange(system: UnitSystem) {
         persist { settingsRepository.setUnit(system) }
-    }
-
-    // ---------------- AI 设置（联网增强）----------------
-
-    /** 开关「AI 联网增强」。默认关；关 = 行为与纯离线版完全一致。 */
-    fun onAiRemoteEnabledChange(enabled: Boolean) {
-        persist { settingsRepository.setAiRemoteEnabled(enabled) }
-    }
-
-    /**
-     * 保存 DeepSeek API Key。
-     *
-     * 校验：`sk-` 前缀（DeepSeek 官方格式）；空白输入视为无效（清空请用 [onApiKeyClear]）。
-     * Key 只进加密文件（[AiCredentialsStore]），不落 DataStore/日志/备份。
-     */
-    fun onApiKeySave(rawKey: String) {
-        val key = rawKey.trim()
-        if (!key.startsWith("sk-") || key.length < 10) {
-            _uiState.update {
-                it.copy(snackbarRes = R.string.settings_ai_key_invalid, snackbarArgs = emptyList())
-            }
-            return
-        }
-        viewModelScope.launch {
-            try {
-                // P0-2：`setKey` 现在返回是否写入成功 —— 存储不可用时**如实报错**，
-                // 绝不假装"已保存"（否则用户以为配好了，实际每次都回落本地规则）。
-                if (aiCredentialsStore.setKey(key)) {
-                    _uiState.update {
-                        it.copy(
-                            hasApiKey = true,
-                            snackbarRes = R.string.settings_ai_key_saved,
-                            snackbarArgs = emptyList(),
-                        )
-                    }
-                } else {
-                    _uiState.update {
-                        it.copy(
-                            hasApiKey = false,
-                            aiStorageUnavailable = true,
-                            snackbarRes = R.string.settings_ai_key_storage_failed,
-                            snackbarArgs = emptyList(),
-                        )
-                    }
-                }
-            } catch (cancellation: CancellationException) {
-                throw cancellation
-            } catch (throwable: Throwable) {
-                _uiState.update { it.copy(snackbarRes = R.string.error_generic) }
-            }
-        }
-    }
-
-    /** 清除已保存的 Key（清除后即使开关开着也会自动回落本地规则）。 */
-    fun onApiKeyClear() {
-        viewModelScope.launch {
-            try {
-                if (aiCredentialsStore.setKey(null)) {
-                    _uiState.update {
-                        it.copy(
-                            hasApiKey = false,
-                            snackbarRes = R.string.settings_ai_key_cleared,
-                            snackbarArgs = emptyList(),
-                        )
-                    }
-                } else {
-                    _uiState.update {
-                        it.copy(
-                            hasApiKey = false,
-                            aiStorageUnavailable = true,
-                            snackbarRes = R.string.settings_ai_key_storage_failed,
-                            snackbarArgs = emptyList(),
-                        )
-                    }
-                }
-            } catch (cancellation: CancellationException) {
-                throw cancellation
-            } catch (throwable: Throwable) {
-                _uiState.update { it.copy(snackbarRes = R.string.error_generic) }
-            }
-        }
-    }
-
-    /**
-     * **重置加密存储**（P0-2）：Keystore 损坏导致 Key 读不到 / 存不进时的可自恢复出口。
-     *
-     * 代价：已配置的 Key 会丢失（需重新填写），因此必须由用户**显式点击**触发。
-     * 重置后立刻重试打开一次 → 成功则"存储不可用"提示自动消失。
-     */
-    fun onAiStorageReset() {
-        aiCredentialsStore.resetStorage()
-        refreshAiCredentialSnapshot()
-        _uiState.update {
-            it.copy(snackbarRes = R.string.settings_ai_storage_reset_done, snackbarArgs = emptyList())
-        }
     }
 
     // ---------------- 我的档案（即时落盘，无保存按钮）----------------

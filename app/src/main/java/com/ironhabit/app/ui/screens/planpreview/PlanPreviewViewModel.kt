@@ -127,8 +127,6 @@ class PlanPreviewViewModel @Inject constructor(
          * 既不是 app 联网生成的、也不是本地规则 —— 用布尔它就只能被塞进"本地规则"那一格。
          */
         val source: AdviceSource = AdviceSource.LOCAL_RULES,
-        /** 本次是"想用 AI 但失败了才落到本地规则"，不是"用户本来就关着 AI"。 */
-        val fellBackFromRemote: Boolean = false,
         val days: List<Day> = emptyList(),
         /**
          * 外部 AI 文档导入时"哪些条目没进来、为什么"（内置生成恒为空 → 那一块整块不显示）。
@@ -223,7 +221,6 @@ class PlanPreviewViewModel @Inject constructor(
                         importNotes = holder.peekImportNotes(),
                         profileRows = holder.peekProfileDiffs().map { diff -> ProfileRow(diff) },
                         source = snapshot.source,
-                        fellBackFromRemote = snapshot.fallbackReason != null,
                         analysis = snapshot.analysis,
                         preservedCount = snapshot.preservedCount,
                         days = (MIN_DAY..MAX_DAY).map { day ->

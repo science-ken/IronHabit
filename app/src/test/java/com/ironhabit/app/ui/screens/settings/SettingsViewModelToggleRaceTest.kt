@@ -1,6 +1,5 @@
 package com.ironhabit.app.ui.screens.settings
 
-import com.ironhabit.app.data.preferences.AiCredentialsStore
 import com.ironhabit.app.domain.model.AppSettings
 import com.ironhabit.app.domain.model.BodyMetricType
 import com.ironhabit.app.domain.model.Equipment
@@ -39,7 +38,6 @@ class SettingsViewModelToggleRaceTest {
 
     private val settingsRepository = mockk<SettingsRepository>()
     private val bodyMetricRepository = mockk<BodyMetricRepository>(relaxed = true)
-    private val aiCredentialsStore = mockk<AiCredentialsStore>(relaxed = true)
     private val scheduleReminder = mockk<ScheduleReminderUseCase>(relaxed = true)
 
     private val profileFlow = MutableStateFlow(UserProfile())
@@ -47,7 +45,6 @@ class SettingsViewModelToggleRaceTest {
     private fun newViewModel(): SettingsViewModel {
         every { settingsRepository.settings() } returns flowOf(AppSettings())
         every { settingsRepository.profile() } returns profileFlow
-        every { settingsRepository.aiRemoteEnabled() } returns flowOf(false)
         every { bodyMetricRepository.observeByType(BodyMetricType.WEIGHT) } returns flowOf(emptyList())
         // 落库有耗时（模拟 DataStore 写盘）：给第二个 toggle 创造"在第一个写完前启动"的窗口。
         coEvery { settingsRepository.setProfileEquipment(any()) } coAnswers {
@@ -58,7 +55,6 @@ class SettingsViewModelToggleRaceTest {
         return SettingsViewModel(
             settingsRepository = settingsRepository,
             bodyMetricRepository = bodyMetricRepository,
-            aiCredentialsStore = aiCredentialsStore,
             scheduleReminder = scheduleReminder,
         )
     }
