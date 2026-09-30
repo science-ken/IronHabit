@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -47,7 +48,10 @@ class AddEditPlanViewModelInputLimitsTest {
             savedStateHandle = SavedStateHandle(mapOf(Destinations.PLAN_ARG_ID to 0L)),
             exerciseRepository = exerciseRepository,
             planRepository = planRepository,
-            clock = Clock.System,
+            // 固定时钟（V3 报告 B-3）：本测试无日期断言，固定后无跨午夜 flake 窗口。
+            clock = object : Clock {
+                override fun now(): Instant = Instant.parse("2026-09-20T04:00:00Z")
+            },
             // P3：手动新增计划要落到"当前这一周"，所以 VM 多了一个 timeZone 参数。
             timeZone = TimeZone.UTC,
         )

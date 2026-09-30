@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -39,7 +40,10 @@ class BodyMetricsViewModelInputLimitsTest {
         coEvery { bodyMetricRepository.latest(any()) } returns null
         return BodyMetricsViewModel(
             bodyMetricRepository = bodyMetricRepository,
-            clock = Clock.System,
+            // 固定时钟（V3 报告 B-3）：本测试无日期断言，固定后无跨午夜 flake 窗口。
+            clock = object : Clock {
+                override fun now(): Instant = Instant.parse("2026-09-20T04:00:00Z")
+            },
             timeZone = TimeZone.UTC,
         )
     }

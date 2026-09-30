@@ -21,6 +21,7 @@ import com.ironhabit.app.domain.usecase.ScheduleReminderUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.Locale
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,6 +37,8 @@ import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * 「设置」UI 状态（不可变）。
@@ -223,6 +226,8 @@ class SettingsViewModel @Inject constructor(
                         )
                     }
                 }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
             } catch (throwable: Throwable) {
                 _uiState.update { it.copy(snackbarRes = R.string.error_generic) }
             }
@@ -251,6 +256,8 @@ class SettingsViewModel @Inject constructor(
                         )
                     }
                 }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
             } catch (throwable: Throwable) {
                 _uiState.update { it.copy(snackbarRes = R.string.error_generic) }
             }
@@ -356,6 +363,8 @@ class SettingsViewModel @Inject constructor(
                         it.copy(snackbarRes = R.string.msg_reminder_off, snackbarArgs = emptyList())
                     }
                 }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
             } catch (throwable: Throwable) {
                 _uiState.update { it.copy(snackbarRes = R.string.error_generic) }
             }
@@ -374,6 +383,8 @@ class SettingsViewModel @Inject constructor(
                         snackbarArgs = listOf(formatTime(hour, minute)),
                     )
                 }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
             } catch (throwable: Throwable) {
                 _uiState.update { it.copy(snackbarRes = R.string.error_generic) }
             }
@@ -386,10 +397,20 @@ class SettingsViewModel @Inject constructor(
 
     // ---------------- 内部 ----------------
 
+    /**
+     * 写操作串行闸（V2 报告 V2-P3-4）：器械 / 伤病 / 忌口三处 toggle 都是
+     * "读 profile 最新集合 → 翻转 → 写回"的读改写，两次快速连点如果并行跑，
+     * 各自读到的都是翻转前的旧集合，后写覆盖前写 → 丢一次勾选。
+     * 全部写路径收进同一把 [persistMutex] 后，读改写天然排队，每次读到的都是上一次的落库结果。
+     */
+    private val persistMutex = Mutex()
+
     private fun persist(block: suspend () -> Unit) {
         viewModelScope.launch {
             try {
-                block()
+                persistMutex.withLock { block() }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
             } catch (throwable: Throwable) {
                 _uiState.update { it.copy(snackbarRes = R.string.error_generic) }
             }

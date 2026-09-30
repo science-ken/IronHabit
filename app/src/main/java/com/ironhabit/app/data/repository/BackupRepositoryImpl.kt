@@ -59,6 +59,8 @@ import com.ironhabit.app.domain.repository.BackupRepository
 import com.ironhabit.app.domain.repository.ReminderScheduler
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.Json
@@ -104,11 +106,20 @@ class BackupRepositoryImpl @Inject constructor(
         explicitNulls = true
     }
 
+    /**
+     * 导出。设置 / 档案 / AI 开关同处一个 DataStore 但各自是独立 Flow：
+     * 用 [combine] **一次取齐**（V3 报告 P3-6）—— 三个 `first()` 逐个订阅时，
+     * 两次读取之间发生的并发写入（如恢复流程自身、AI 开关切换）会让导出的 JSON
+     * 里 settings 与 profile 来自不同时点，恢复端无从察觉。
+     */
     override suspend fun export(): String {
-        val settings = settingsDataStore.settings.first()
-        // 档案与 AI 开关同处一个 DataStore，但各自是独立 Flow（读取失败均回落默认值，不崩）。
-        val profile = settingsDataStore.profile.first()
-        val aiRemoteEnabled = settingsDataStore.aiRemoteEnabled.first()
+        val (settings, profile, aiRemoteEnabled) =
+            combine(
+                settingsDataStore.settings,
+                settingsDataStore.profile,
+                settingsDataStore.aiRemoteEnabled,
+            ) { settings, profile, aiRemoteEnabled -> Triple(settings, profile, aiRemoteEnabled) }
+                .first()
         val payload = BackupPayload(
             schemaVersion = BackupPayload.CURRENT_SCHEMA_VERSION,
             exportedAt = clock.now().toEpochMilliseconds(),
@@ -127,7 +138,20 @@ class BackupRepositoryImpl @Inject constructor(
         return jsonCodec.encodeToString(BackupPayload.serializer(), payload)
     }
 
-    override suspend fun import(json: String): Result<BackupImportReport> = runCatching {
+    /**
+     * 导入。`runCatching` 会把 [CancellationException] 一起折叠成 [Result.failure]，
+     * 而 [com.ironhabit.app.domain.usecase.ImportDataUseCase] 专门写了"取消必须透传"
+     * 的约定（协程取消 ≠ 业务失败）—— 这里改成显式 catch 并重抛取消（V3 报告 P3-30）。
+     */
+    override suspend fun import(json: String): Result<BackupImportReport> = try {
+        Result.success(importPayload(json))
+    } catch (cancellation: CancellationException) {
+        throw cancellation
+    } catch (failure: Exception) {
+        Result.failure(failure)
+    }
+
+    private suspend fun importPayload(json: String): BackupImportReport {
         val payload = jsonCodec.decodeFromString(BackupPayload.serializer(), json)
         require(payload.schemaVersion <= BackupPayload.CURRENT_SCHEMA_VERSION) {
             "备份文件版本过高（v${payload.schemaVersion}），请升级 App 后再导入"
@@ -190,7 +214,7 @@ class BackupRepositoryImpl @Inject constructor(
         // 重排一次至少让闹钟与设置对齐，不会比放着不管更糟。
         val alarmsRescheduled: Boolean = runCatching { reminderScheduler.rescheduleAll() }.isSuccess
 
-        BackupImportReport(
+        return BackupImportReport(
             dietSkipped = !BackupRestoreRules.replacesDietTables(payload.schemaVersion),
             settingsApplied = settingsApplied,
             alarmsRescheduled = alarmsRescheduled,
@@ -200,14 +224,19 @@ class BackupRepositoryImpl @Inject constructor(
     /**
      * 把设置快照写回 DataStore。
      *
-     * 主题 / 单位 / 提醒三项沿用「整体替换」（与旧版一致，缺失字段解码即默认值）；
+     * `settings` 快照自 v3 才随备份携带（[BackupRestoreRules.PROFILE_SNAPSHOT_SCHEMA_VERSION]）：
+     * v1/v2 老备份解码出的 theme/unit/reminder 全是**默认值**，无条件写回会把本机的
+     * "提醒已关 / 自定义 07:30 / 深色主题"洗掉 —— 与同文件 B-6「老备份缺的键不覆盖本地」
+     * 的既有口径对齐，补上版本闸（V3 报告 V2-P3-2）。
      * 档案与 AI 开关按 [schemaVersion] 决定写入口径，见 [applyProfile]。
      */
     private suspend fun applySettings(settings: SettingsBackup, schemaVersion: Int) {
-        settingsDataStore.setTheme(parseThemeMode(settings.themeMode))
-        settingsDataStore.setUnit(parseUnitSystem(settings.unitSystem))
-        settingsDataStore.setReminderEnabled(settings.reminderEnabled)
-        settingsDataStore.setReminderTime(settings.reminderHour, settings.reminderMinute)
+        if (schemaVersion >= BackupRestoreRules.PROFILE_SNAPSHOT_SCHEMA_VERSION) {
+            settingsDataStore.setTheme(parseThemeMode(settings.themeMode))
+            settingsDataStore.setUnit(parseUnitSystem(settings.unitSystem))
+            settingsDataStore.setReminderEnabled(settings.reminderEnabled)
+            settingsDataStore.setReminderTime(settings.reminderHour, settings.reminderMinute)
+        }
         applyProfile(settings, schemaVersion)
     }
 

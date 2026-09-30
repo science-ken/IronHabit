@@ -16,6 +16,7 @@ import com.ironhabit.app.domain.util.DateUtils
 import com.ironhabit.app.domain.util.TodayClock
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -235,6 +236,8 @@ class TrainViewModel @Inject constructor(
                         snackbarRes = R.string.msg_plan_updated,
                     )
                 }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
             } catch (throwable: Throwable) {
                 _uiState.update { state ->
                     state.copy(isSubmittingAdd = false, errorRes = R.string.error_generic)
@@ -266,7 +269,8 @@ class TrainViewModel @Inject constructor(
                         )
                     }
                 }
-                .onFailure {
+                .onFailure { throwable ->
+                    if (throwable is CancellationException) throw throwable
                     _uiState.update { state ->
                         state.copy(isLoadingSuggestions = false, errorRes = R.string.error_load_failed)
                     }
@@ -295,7 +299,8 @@ class TrainViewModel @Inject constructor(
                     }
                     loadSuggestions()
                 }
-                .onFailure {
+                .onFailure { throwable ->
+                    if (throwable is CancellationException) throw throwable
                     _uiState.update { state -> state.copy(errorRes = R.string.error_save_failed) }
                 }
         }
@@ -319,6 +324,8 @@ class TrainViewModel @Inject constructor(
             try {
                 block()
                 _uiState.update { state -> state.copy(snackbarRes = successSnackbarRes) }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
             } catch (throwable: Throwable) {
                 _uiState.update { state -> state.copy(errorRes = R.string.error_generic) }
             }

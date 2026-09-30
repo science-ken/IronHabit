@@ -181,6 +181,20 @@ interface WeekPlanDao {
     suspend fun softDelete(id: Long)
 
     /**
+     * 「复制到周」专用清位（V3 报告 P3-4）：目标槽位被**软删行**占据时先物理删掉它，
+     * 随后调用方在**同一事务内**插入复制行 —— 否则 [upsertExplicit] 的槽位兜底
+     * 会把用户明确删掉的槽位"复活"。
+     *
+     * 🔒 这是全工程**唯一**允许 `DELETE` `week_plans` 的地方，且带两道闸：
+     * ① SQL 侧只删 `is_active = 0` 的行（生效行永远走软删）；② 调用方（`copyWeekInto`）
+     * 必须在同一事务内紧接着补插同槽位行 —— 唯一索引保证"删了没补"的中间态不可见。
+     * `week_plans` 无子表外键（`check_ins` 挂 `exercises`、`habit_logs` 挂 `habits`），
+     * 物理删除无级联风险。
+     */
+    @Query("DELETE FROM week_plans WHERE id = :id AND is_active = 0")
+    suspend fun hardDeleteInactiveById(id: Long)
+
+    /**
      * 用户点「恢复为推荐」→ 交还 AI 接管（清掉 `is_user_edited`）。
      *
      * 🔒 **必须带 `is_active = 1`**（补守卫）：软删除行（`is_active = 0`）是"用户明确删掉的槽位"，

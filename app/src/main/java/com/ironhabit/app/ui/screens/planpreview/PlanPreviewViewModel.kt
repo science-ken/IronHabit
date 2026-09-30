@@ -22,6 +22,7 @@ import com.ironhabit.app.ui.components.weekRangeText
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlin.math.roundToInt
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -185,13 +186,22 @@ class PlanPreviewViewModel @Inject constructor(
     }
 
     private fun load() {
-        val snapshot: PlanPreview = holder.peek() ?: return
+        val snapshot: PlanPreview? = holder.peek()
+        if (snapshot == null) {
+            // 进程重建后内存快照必然丢失（本类 KDoc：故意不落盘）。与其把用户晾在
+            // 一张永远空着的预览页上，不如直接送回上一页重新生成（V3 报告 P3-29）。
+            _uiState.update { state -> state.copy(finished = true) }
+            return
+        }
         preview = snapshot
         val dietDrafts: List<ImportedMealDraft> = holder.peekDietDrafts()
         val mealSlots: List<MealSlotSnapshot> = holder.peekMealSlots()
         viewModelScope.launch {
             // 这一页在 `init` 里就跑，以前没有任何 catch：动作库那一次读抛出未捕获异常
             // 的表现是**从导入流程一进预览页就崩**，而用户刚点完"解析并预览"。
+            // 本会话已采纳过的天要标成 adopted：部分采纳后离开再回来，不能把
+            // 已写进库的天再次端成草案（V3 报告 P3-10）。
+            val adoptedDays: Set<Int> = holder.peekAdoptedDays()
             try {
                 val names: Map<Long, String> = exerciseRepository.observeActive().first()
                     .associate { exercise -> exercise.id to exercise.name }
@@ -244,6 +254,7 @@ class PlanPreviewViewModel @Inject constructor(
                                     // 只排了吃、没排练的那天也是可采纳的一天 —— 以前 `rows == null` 直接落 REST，
                                     // 那样那一天的餐次会连"采纳"这个入口都没有。
                                     kind = Kind.DRAFT,
+                                    adopted = day in adoptedDays,
                                     diet = diet,
                                     touchesLoggedHistory = day in touchedDays,
                                 )
@@ -254,6 +265,8 @@ class PlanPreviewViewModel @Inject constructor(
                         },
                     )
                 }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
             } catch (throwable: Exception) {
                 _uiState.update { state -> state.copy(snackbarRes = R.string.error_generic) }
             }
@@ -320,6 +333,11 @@ class PlanPreviewViewModel @Inject constructor(
                 }
                 // 草案全部采纳完就把快照丢掉，避免下次进来看到上一轮的陈旧内容。
                 if (_uiState.value.pendingDays == 0) holder.clear()
+                // 记下这次写进库的天：部分采纳后离开再回来，重渲染时它们显示为「已采纳」
+                // 而不是再次端成草案（V3 报告 P3-10）。
+                else holder.markDaysAdopted(days)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
             } catch (throwable: Exception) {
                 // 不接的话这里是从 viewModelScope 冒出去的未捕获异常 = **采纳那一刻崩 App**，
                 // 而表现最坏：库可能已经写进去一半，用户只看到"应用闪退"。
@@ -367,6 +385,8 @@ class PlanPreviewViewModel @Inject constructor(
                         snackbarArg = applied.toString(),
                     )
                 }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
             } catch (throwable: Exception) {
                 // 逐字段写 DataStore，中途抛错就是"改了一半"。**不清勾**（保持现状）是对的：
                 // 再点一次会把同一批值重写一遍，幂等；而 `busy` 不复位则第二次根本点不动。

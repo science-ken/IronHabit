@@ -12,6 +12,7 @@ import com.ironhabit.app.domain.repository.FoodRepository
 import com.ironhabit.app.domain.repository.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -256,6 +257,9 @@ class FoodLibraryViewModel @Inject constructor(
             // 成功不另设提示字段：调用方拿到非 null 的返回值就会收起表单，
             // 表单收起本身就是"存好了"的信号（再叠一条 Snackbar 只会盖住列表变化）。
             return name
+        } catch (cancellation: CancellationException) {
+            // 取消必须穿透：保存途中关闭弹层 = 协程被取消，不能记成"保存失败"。
+            throw cancellation
         } catch (throwable: Exception) {
             // 只有 finally 没有 catch = 异常直接冒到 `FoodLibrarySheet` 那颗按钮的
             // `scope.launch`，于是一枚「保存」按钮能把 App 点崩。两条真实来源：
@@ -275,13 +279,33 @@ class FoodLibraryViewModel @Inject constructor(
      */
     fun onDeactivate(foodId: Long) {
         _uiState.update { it.copy(showInactive = true) }
-        viewModelScope.launch { foodRepository.deactivate(foodId) }
+        viewModelScope.launch {
+            try {
+                foodRepository.deactivate(foodId)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (throwable: Exception) {
+                // 裸 launch 会让一次库写失败把 App 点崩（V3 报告 V2-P3-3 残余）。
+                _uiState.update { it.copy(errorRes = R.string.error_save_failed) }
+            }
+        }
     }
 
     /** 启用回来（#13：停用必须是双向门）。 */
     fun onActivate(foodId: Long) {
-        viewModelScope.launch { foodRepository.activate(foodId) }
+        viewModelScope.launch {
+            try {
+                foodRepository.activate(foodId)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (throwable: Exception) {
+                _uiState.update { it.copy(errorRes = R.string.error_save_failed) }
+            }
+        }
     }
+
+    /** 消费列表级错误（展示一段时间后由界面回调清掉）。 */
+    fun onConsumeError() = _uiState.update { it.copy(errorRes = 0) }
 
     private fun nowMillis(): Long = clock.now().toEpochMilliseconds()
 

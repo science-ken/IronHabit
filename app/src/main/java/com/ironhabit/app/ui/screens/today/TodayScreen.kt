@@ -421,6 +421,10 @@ fun TodayScreen(
                                 uiState.visibleDeletedMeals.forEach { deleted ->
                                     MealDeletedRow(
                                         meal = deleted,
+                                        // 未来日本应整页只读（同分支的 MealBlock / 重新生成
+                                        // 都有这道门禁）：恢复会把未来某天的软删餐翻回 active，
+                                        // 也是一次写库 —— 照样禁掉（V3 报告 新-P3-1）。
+                                        enabled = !isFutureDay,
                                         onRestore = { viewModel.onRestoreMeal(deleted) },
                                     )
                                 }
@@ -732,6 +736,7 @@ private fun CopyNextWeekConfirmDialog(
 @Composable
 private fun MealDeletedRow(
     meal: Meal,
+    enabled: Boolean,
     onRestore: () -> Unit,
 ) {
     Row(
@@ -753,7 +758,7 @@ private fun MealDeletedRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        TextButton(onClick = onRestore) {
+        TextButton(onClick = onRestore, enabled = enabled) {
             Text(text = stringResource(R.string.action_restore))
         }
     }

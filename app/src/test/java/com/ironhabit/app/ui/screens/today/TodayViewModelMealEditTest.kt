@@ -41,6 +41,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -95,9 +96,12 @@ class TodayViewModelMealEditTest {
         diet = DietReview(loggedDays = 0, avgKcal = null, avgProteinG = null),
     )
 
-    private val clock = Clock.System
+    /** 固定时钟（V3 报告 B-3）：消除"类初始化与运行期跨午夜"的偶发 flake 窗口。 */
+    private val clock: Clock = object : Clock {
+        override fun now(): Instant = Instant.parse("2026-09-20T04:00:00Z")
+    }
     private val timeZone = TimeZone.UTC
-    private val today: Long = DateUtils.todayEpochDay(Clock.System, TimeZone.UTC)
+    private val today: Long = DateUtils.todayEpochDay(clock, timeZone)
     private val pastDay: Long = today - 2
 
     /** 被编辑的那一餐（规则生成的晚餐）。 */
@@ -272,16 +276,21 @@ class TodayViewModelMealEditTest {
         )
     }
 
+    /**
+     * 编辑写回**餐自身的日期**（V3 报告 新-P3-5）：编辑是对那一行的修改，不是"往所选日写一餐"。
+     * 弹层开着跨过 00:00 时游标会跟进新的一天 —— 若跟游标走，整餐会被搬到新的一天。
+     */
     @Test
-    fun saveEdit_writesToSelectedDayNotToday() = runTest(mainDispatcherRule.testDispatcher) {
+    fun saveEdit_writesToTheMealsOwnDay() = runTest(mainDispatcherRule.testDispatcher) {
         coEvery { upsertMeal(any(), any(), any(), any(), any(), any()) } returns 77L
         val viewModel = newViewModel()
         advanceUntilIdle()
 
-        // 切到前几天再编辑：写入口径必须跟「所选日」走（与逐组/习惯/补录一致）。
+        // 切到前几天再编辑该天的一餐：写入口径 = 餐自己的日期（这里恰与所选日一致）。
         viewModel.onSelectEpochDay(pastDay)
         advanceUntilIdle()
-        viewModel.onOpenMealEditor(meal)
+        val pastDayMeal = meal.copy(dateEpochDay = pastDay)
+        viewModel.onOpenMealEditor(pastDayMeal)
         viewModel.onSaveMealEdit(
             mealType = MealType.DINNER,
             items = listOf("鸡胸肉 150g"),
@@ -290,6 +299,43 @@ class TodayViewModelMealEditTest {
         )
         advanceUntilIdle()
 
+        coVerify(exactly = 1) {
+            upsertMeal(
+                id = 77L,
+                epochDay = pastDay,
+                mealType = MealType.DINNER,
+                items = listOf("鸡胸肉 150g"),
+                kcal = 250,
+                proteinG = 40.0,
+            )
+        }
+    }
+
+    /**
+     * 跨午夜场景（V3 报告 新-P3-5）：弹层开着时游标自动跟进新的一天，
+     * 保存仍必须写回**被编辑那一餐自己的日期**，而不是把整餐搬到"今天"。
+     */
+    @Test
+    fun saveEdit_acrossMidnight_staysOnTheMealsOwnDay() = runTest(mainDispatcherRule.testDispatcher) {
+        coEvery { upsertMeal(any(), any(), any(), any(), any(), any()) } returns 77L
+        val viewModel = newViewModel()
+        advanceUntilIdle()
+
+        // 打开编辑的是 pastDay 的一餐；随后游标跨天回到 today（现实里就是过了午夜）。
+        viewModel.onSelectEpochDay(pastDay)
+        advanceUntilIdle()
+        viewModel.onOpenMealEditor(meal.copy(dateEpochDay = pastDay))
+        viewModel.onSelectEpochDay(today)
+        advanceUntilIdle()
+        viewModel.onSaveMealEdit(
+            mealType = MealType.DINNER,
+            items = listOf("鸡胸肉 150g"),
+            kcal = 250,
+            proteinG = 40.0,
+        )
+        advanceUntilIdle()
+
+        // 餐没有跟着游标搬到今天。
         coVerify(exactly = 1) {
             upsertMeal(
                 id = 77L,

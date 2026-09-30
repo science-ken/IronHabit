@@ -13,6 +13,7 @@ import com.ironhabit.app.domain.repository.ReminderScheduler
 import com.ironhabit.app.ui.navigation.Destinations
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -118,8 +119,7 @@ class AddEditHabitViewModel @Inject constructor(
             runCatching {
                 habitRepository.observeActiveHabits().first().firstOrNull { it.id == habitId }
             }
-                .onSuccess { habit ->
-                    if (habit == null) {
+                .onSuccess { habit ->                    if (habit == null) {
                         _uiState.update {
                             it.copy(isLoading = false, errorRes = R.string.error_load_failed)
                         }
@@ -148,7 +148,8 @@ class AddEditHabitViewModel @Inject constructor(
                         }
                     }
                 }
-                .onFailure {
+                .onFailure { throwable ->
+                    if (throwable is CancellationException) throw throwable
                     _uiState.update {
                         it.copy(isLoading = false, errorRes = R.string.error_load_failed)
                     }
@@ -279,6 +280,8 @@ class AddEditHabitViewModel @Inject constructor(
                 }
 
                 _uiState.update { it.copy(snackbarRes = R.string.msg_saved, saved = true) }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
             } catch (throwable: Throwable) {
                 _uiState.update { it.copy(snackbarRes = R.string.error_save_failed) }
             } finally {

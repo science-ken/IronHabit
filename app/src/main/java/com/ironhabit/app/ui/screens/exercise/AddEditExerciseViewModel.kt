@@ -13,6 +13,7 @@ import com.ironhabit.app.domain.repository.ExerciseRepository
 import com.ironhabit.app.ui.navigation.Destinations
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -225,6 +226,8 @@ class AddEditExerciseViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(snackbarRes = R.string.msg_saved, saved = true)
                 }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
             } catch (throwable: Throwable) {
                 _uiState.update { it.copy(snackbarRes = R.string.error_save_failed) }
             } finally {

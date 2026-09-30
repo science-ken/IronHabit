@@ -482,7 +482,9 @@ class TodayViewModel @Inject constructor(
      * 保存某一餐的编辑结果（条目 / 热量 / 蛋白质）。
      *
      * - 只对**当前打开的那一餐**（[TodayUiState.editingMeal]）生效，避免 UI 传错 id；
-     * - 写入口径 = **所选日**（与逐组 / RPE / 习惯 / 补录一致）；
+     * - 日期口径 = **被编辑那一餐自己的日期**（[Meal.dateEpochDay] 快照）：编辑是对那一行
+     *   的修改，不是"往所选日写一餐"。用实时游标的话，弹层开着跨过 00:00 会把整餐
+     *   连明细一起搬进新的一天（V3 报告 新-P3-5）；
      * - 走 [UpsertMealUseCase] → 置 `isUserEdited = true`：**重新生成饮食时整行跳过**，
      *   用户改过的分量不会被规则覆盖（红线）；
      * - **成功后才关闭弹层**：失败时弹层留在原地、输入不丢，可直接重试。
@@ -496,14 +498,22 @@ class TodayViewModel @Inject constructor(
         val target: Meal = _uiState.value.editingMeal ?: return
         viewModelScope.launch {
             try {
-                upsertMeal(
+                val newId: Long = upsertMeal(
                     id = target.id,
-                    epochDay = currentEpochDay(),
+                    epochDay = target.dateEpochDay,
                     mealType = mealType,
                     items = items,
                     kcal = kcal,
                     proteinG = proteinG,
                 )
+                if (newId == -1L) {
+                    // 用例层兜底（清洗后没有条目）：不落库、不关弹层，按输入错误处理
+                    // （V3 报告 P3-13；界面侧的前置校验见 MealEditSheet 的 error_meal_items_empty）。
+                    _uiState.update { state ->
+                        state.copy(errorRes = R.string.error_meal_items_empty)
+                    }
+                    return@launch
+                }
                 _uiState.update { state ->
                     state.copy(
                         editingMeal = null,
@@ -511,6 +521,8 @@ class TodayViewModel @Inject constructor(
                         snackbarArgs = emptyList(),
                     )
                 }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
             } catch (throwable: Throwable) {
                 // 「编辑早餐 → 餐次改成午餐」而那天已经有午餐时，`meals` 的
                 // UNIQUE(date_epoch_day, meal_type) 会抛约束冲突（软删行也占槽）。
@@ -561,6 +573,8 @@ class TodayViewModel @Inject constructor(
                 _uiState.update { state ->
                     state.copy(snackbarRes = hintRes, snackbarArgs = hintArgs)
                 }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
             } catch (throwable: Throwable) {
                 _uiState.update { state -> state.copy(errorRes = R.string.error_generic) }
             }
@@ -758,6 +772,9 @@ class TodayViewModel @Inject constructor(
                 _uiState.update { state ->
                     state.copy(snackbarRes = baseSnackbarRes, snackbarArgs = emptyList())
                 }
+            } catch (cancellation: CancellationException) {
+                // 取消必须穿透：VM 清理/页面切走都靠它，吞掉 = 取消静默失效（P3-22）。
+                throw cancellation
             } catch (throwable: Throwable) {
                 _uiState.update { state -> state.copy(errorRes = R.string.error_generic) }
             }
@@ -769,6 +786,8 @@ class TodayViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 block()
+            } catch (cancellation: CancellationException) {
+                throw cancellation
             } catch (throwable: Throwable) {
                 _uiState.update { state -> state.copy(errorRes = R.string.error_generic) }
             }

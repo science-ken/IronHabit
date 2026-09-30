@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -34,7 +35,10 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class StreakDirtyDataTest {
 
-    private val clock = Clock.System
+    /** 固定时钟（V3 报告 B-3）：消除"类初始化与运行期跨午夜"的偶发 flake 窗口。 */
+    private val clock = object : Clock {
+        override fun now(): Instant = Instant.parse("2026-09-20T04:00:00Z")
+    }
     private val timeZone = TimeZone.UTC
     private val today = DateUtils.todayEpochDay(clock, timeZone)
     private val tomorrow = today + 7

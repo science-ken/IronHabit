@@ -203,6 +203,24 @@ object DietPlanGenerator {
         templates: List<List<BuiltInMealTemplates.TaggedItem>> = BuiltInMealTemplates.forType(mealType),
     ): MealDraft {
         val size: Int = templates.size
+        // 空模板库防御（V3 报告 P3-20）：生产路径的内置模板恒非空，但函数签名允许注入
+        // （KDoc 自述"单测可注入"）—— 注入空列表时 `floorMod(x, 0)` 会抛 ArithmeticException。
+        // 空库 = 没得排 → 返回空草案（不删餐次、不崩），与下面"全空保留空条目"同口径。
+        if (size == 0) {
+            return MealDraft(
+                meal = Meal(
+                    dateEpochDay = epochDay,
+                    mealType = mealType,
+                    items = emptyList(),
+                    kcal = 0,
+                    proteinG = 0.0,
+                    isCompleted = false,
+                    sortOrder = mealType.ordinal,
+                    createdAt = createdAt,
+                ),
+                filteredCount = 0,
+            )
+        }
         // Math.floorMod 正确处理负的 epochDay（1970 前），保证下标恒落 [0, size)。
         val startIndex: Int = Math.floorMod(epochDay + mealType.ordinal, size)
         val primary: List<BuiltInMealTemplates.TaggedItem> = templates[startIndex]

@@ -892,7 +892,7 @@
     <!-- 编辑一餐时被占用的槽位会灰掉；不说明原因，用户读到的就是"这 App 点不动"（审查报告 P2-1）。 -->
     <string name="meal_slot_taken_hint">%1$s已经有一餐了 —— 想改它就先编辑那一餐，或换一个空着的餐次</string>
     <!-- 软删行仍占唯一索引槽位，而它在列表里**看不见**：这一格允许点，但点完要当场说清后果。 -->
-    <string name="meal_slot_deleted_hint">%1$s你之前删过 —— 改过来会恢复那一餐，并换成现在填的内容</string>
+    <string name="meal_slot_deleted_hint">%1$s你之前删过 —— 改过来会恢复那一餐、换成现在填的内容，原来记下的食物明细也会一并跟过去</string>
     <string name="hint_meal_items">食物条目（每行一条）</string>
     <string name="hint_meal_kcal">整餐热量（kcal）</string>
     <string name="hint_meal_protein">整餐蛋白质（g，可留空）</string>

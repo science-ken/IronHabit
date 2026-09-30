@@ -11,6 +11,7 @@ import com.ironhabit.app.domain.usecase.BackupImportFailure
 import com.ironhabit.app.domain.usecase.ImportDataUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -91,6 +92,8 @@ class BackupViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(isBusy = false, exportUri = uri, snackbarRes = R.string.msg_export_success)
                 }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
             } catch (throwable: Throwable) {
                 _uiState.update { it.copy(isBusy = false, snackbarRes = R.string.msg_export_failed) }
             }
@@ -130,6 +133,8 @@ class BackupViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(isBusy = false, pendingImportUri = null, snackbarRes = snackbarRes)
                 }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
             } catch (throwable: Throwable) {
                 _uiState.update {
                     it.copy(

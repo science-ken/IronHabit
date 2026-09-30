@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -37,12 +38,19 @@ import org.junit.Test
 class CheckInRpeUpsertTest {
 
     private val dao = FakeCheckInDao()
-    private val clock = Clock.System
+
+    /**
+     * 固定时钟（V3 报告 B-3）：`Clock.System` 让类初始化时算出的 `today` 与运行期
+     * 的"现在"可能落在午夜两侧 —— CI 在 UTC 午夜前后跑会偶发红。固定后无 flake 窗口。
+     */
+    private val clock = object : Clock {
+        override fun now(): Instant = Instant.parse("2026-09-20T04:00:00Z")
+    }
     private val timeZone = TimeZone.UTC
     private val repository = CheckInRepositoryImpl(dao, clock, timeZone, UnconfinedTestDispatcher())
     private val exerciseRepository = mockk<ExerciseRepository>(relaxed = true)
 
-    private val today = DateUtils.todayEpochDay(Clock.System, TimeZone.UTC)
+    private val today = DateUtils.todayEpochDay(clock, timeZone)
     private val plan = WeekPlan(id = 1L, exerciseId = 1L, dayOfWeek = 1, targetSets = 3, targetReps = 10)
 
     // ---- 显式 upsert 本意：不应重建主键 id ----

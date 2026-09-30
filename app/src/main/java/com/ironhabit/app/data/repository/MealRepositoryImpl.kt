@@ -3,7 +3,9 @@ package com.ironhabit.app.data.repository
 import androidx.room.withTransaction
 import com.ironhabit.app.data.local.AppDatabase
 import com.ironhabit.app.data.local.dao.MealDao
+import com.ironhabit.app.data.local.dao.MealItemDao
 import com.ironhabit.app.data.local.dto.DietTallyRaw
+import com.ironhabit.app.data.local.entity.MealEntity
 import com.ironhabit.app.data.mapper.MealMapper
 import com.ironhabit.app.di.IoDispatcher
 import com.ironhabit.app.domain.model.DietTally
@@ -28,6 +30,7 @@ import kotlinx.coroutines.flow.map
 class MealRepositoryImpl @Inject constructor(
     private val database: AppDatabase,
     private val mealDao: MealDao,
+    private val mealItemDao: MealItemDao,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : MealRepository {
 
@@ -80,8 +83,26 @@ class MealRepositoryImpl @Inject constructor(
             meals.size
         }
 
-    override suspend fun upsert(meal: Meal): Long =
-        mealDao.upsertUser(MealMapper.toEntity(meal).copy(isUserEdited = true))
+    /**
+     * 用户编辑 upsert。换槽分支（目标餐次被软删行占用 → 内容搬进占位行、原行转软删）时，
+     * 原餐名下的 `meal_items` 必须**跟着搬**到占位行，否则这些明细会挂在被软删的旧餐上，
+     * 从当日摄入与 `dietTally` 里消失（V3 报告 新-P2）。
+     *
+     * 换槽分支的判别：`MealDao.upsertUser` 仅在"内容搬进另一行"时返回**不同于入参 id** 的
+     * 占位行 id，其余分支（同 id 更新 / 新插入 / 槽位兜底且 `id=0`）都返回入参 id 或 `id=0`
+     * 入参 —— 因此 `newId != sourceId && sourceId != 0L` 即换槽。两步收在同一个
+     * `withTransaction` 里，条目迁移与餐行互换要么同时生效要么同时回滚。
+     */
+    override suspend fun upsert(meal: Meal): Long = database.withTransaction {
+        val entity: MealEntity =
+            MealMapper.toEntity(meal).copy(isUserEdited = true)
+        val sourceId: Long = entity.id
+        val newId: Long = mealDao.upsertUser(entity)
+        if (sourceId != 0L && newId != sourceId) {
+            mealItemDao.migrateAllItems(fromMealId = sourceId, toMealId = newId)
+        }
+        newId
+    }
 
     override suspend fun setCompleted(id: Long, done: Boolean) {
         mealDao.setCompleted(id, done)

@@ -101,11 +101,20 @@ class PlanRepositoryImpl @Inject constructor(
                         .map(PlanMapper::toDomain)
                         .associateBy { plan -> plan.dayOfWeek to plan.exerciseId }
                 for (plan in weekRows) {
+                    val existing = existingBySlot[plan.dayOfWeek to plan.exerciseId]
+                    // V3 报告 P3-4：目标槽位被**软删行**占着时，先物理清位再插入 ——
+                    // 否则 `upsertExplicit` 的槽位兜底会把用户明确删掉的槽位复活，
+                    // 且确认框计数（只数生效行）与实际波及面不符。语义（BUGFIX_PLAN B2）：
+                    // 「复制 = 以源周为准覆盖目标周」，被删槽位也属于被覆盖的范围。
+                    // 生效行维持原合并口径（保手改标记 / createdAt，见 [RepeatWeeklyRules]）。
+                    if (existing != null && !existing.isActive) {
+                        weekPlanDao.hardDeleteInactiveById(existing.id)
+                    }
                     weekPlanDao.upsertExplicit(
                         PlanMapper.toEntity(
                             RepeatWeeklyRules.copyIntoWeek(
                                 source = plan,
-                                existing = existingBySlot[plan.dayOfWeek to plan.exerciseId],
+                                existing = if (existing?.isActive == true) existing else null,
                                 weekStartEpochDay = targetWeekStartEpochDay,
                             ),
                         ),

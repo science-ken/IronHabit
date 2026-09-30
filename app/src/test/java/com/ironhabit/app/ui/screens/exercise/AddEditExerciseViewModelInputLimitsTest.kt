@@ -13,6 +13,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Rule
@@ -39,7 +40,10 @@ class AddEditExerciseViewModelInputLimitsTest {
         return AddEditExerciseViewModel(
             savedStateHandle = SavedStateHandle(mapOf(Destinations.EXERCISE_ADD_EDIT_ARG to 0L)),
             exerciseRepository = exerciseRepository,
-            clock = Clock.System,
+            // 固定时钟（V3 报告 B-3）：clock 只用于 createdAt 戳，固定后无跨午夜 flake 窗口。
+            clock = object : Clock {
+                override fun now(): Instant = Instant.parse("2026-09-20T04:00:00Z")
+            },
         )
     }
 

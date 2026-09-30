@@ -51,8 +51,11 @@ class ChangeMealItemPortionUseCase @Inject constructor(
 
         val updated = existing.copy(
             grams = newGrams,
-            servingUnit = serving?.unit,
-            servingCount = serving?.let { servingCount },
+            // 按克数路径（`serving == null`）≠ "用户声明这一条没有份量"：沿用既有快照，
+            // 否则"1.5 碗"这类份量身份被静默抹掉（V3 报告 P3-12；口径照
+            // `AddMealItemUseCase` 的"份优先于克，克路径回落"）。
+            servingUnit = serving?.unit ?: existing.servingUnit,
+            servingCount = serving?.let { servingCount } ?: existing.servingCount,
             nutrition = nutrition,
         )
         mealItemRepository.upsert(updated)

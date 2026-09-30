@@ -15,6 +15,7 @@ import com.ironhabit.app.domain.util.DateUtils
 import com.ironhabit.app.ui.navigation.Destinations
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -180,7 +181,8 @@ class AddEditPlanViewModel @Inject constructor(
                         }
                     }
                 }
-                .onFailure {
+                .onFailure { throwable ->
+                    if (throwable is CancellationException) throw throwable
                     _form.update {
                         it.copy(isLoading = false, errorRes = R.string.error_load_failed)
                     }
@@ -281,6 +283,8 @@ class AddEditPlanViewModel @Inject constructor(
                 )
                 planRepository.upsert(plan)
                 _form.update { it.copy(snackbarRes = R.string.msg_saved, saved = true) }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
             } catch (throwable: Throwable) {
                 // 改动作/星期时若目标 (天,动作) 槽位已被另一条计划占用 → Room 抛 UNIQUE 冲突，
                 // 给更精准的提示而非笼统"保存失败"。

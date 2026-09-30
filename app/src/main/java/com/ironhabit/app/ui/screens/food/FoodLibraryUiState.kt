@@ -26,6 +26,11 @@ data class FoodLibraryUiState(
     val showRestricted: Boolean = false,
     /** 正在新建/编辑的食物 id；`null` = 列表态。 */
     val editingFoodId: Long? = null,
+    /**
+     * 列表态的整页级错误（停用 / 启用的库写失败）。`0` = 无。
+     * 与 [FoodFormState.saveErrorRes] 分开：那是表单里的"没存上"，这是列表操作没成功。
+     */
+    val errorRes: Int = 0,
 ) {
     /** 当前显示给用户的启用条目。挑选模式只用这一条（见 [visibleInactiveFoods]）。 */
     val visibleFoods: List<Food> get() = searchFoods(allFoods.filterNot { isBlockedByAvoid(it, dietaryAvoid) }, query)

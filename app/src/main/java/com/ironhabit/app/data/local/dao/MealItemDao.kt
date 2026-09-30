@@ -117,4 +117,30 @@ interface MealItemDao {
     /** 备份恢复用（调用方已在恢复事务里先 [clearAll]，无行可级联，安全）。 */
     @Query("DELETE FROM meal_items")
     suspend fun clearAll()
+
+    /**
+     * 整餐换槽时把原餐名下的**全部条目**迁到新餐（追加到目标餐现有条目末尾）。
+     *
+     * 背景（V3 报告 新-P2）：`MealDao.upsertUser` 的换槽分支把内容搬进软删占位行并软删原行，
+     * 条目若不跟着搬，就会挂在被软删的旧餐上，从当日摄入（`observeByDate` 的 `is_active = 1`
+     * JOIN）与 `dietTally` 里同时消失。
+     *
+     * 两步（先整体后移 `sort_order` 腾位、再改归属）收在同一个事务里：并发读者看不到
+     * "条目挂两餐"或"序号撞号"的中间态。调用方（`MealRepositoryImpl.upsert`）已把本方法
+     * 与 `MealDao.upsertUser` 包进同一个 `database.withTransaction`。
+     */
+    @Transaction
+    suspend fun migrateAllItems(fromMealId: Long, toMealId: Long) {
+        if (fromMealId == toMealId) return
+        shiftSortOrdersBack(fromMealId, countByMeal(toMealId))
+        reassignToMeal(fromMealId, toMealId)
+    }
+
+    /** 把 [mealId] 名下条目的 `sort_order` 整体平移 [offset]，给迁入条目腾出末尾区段。 */
+    @Query("UPDATE meal_items SET sort_order = sort_order + :offset WHERE meal_id = :mealId")
+    suspend fun shiftSortOrdersBack(mealId: Long, offset: Int)
+
+    /** 条目归属整批改挂到 [toMealId]（`created_at` / 克数 / 份量快照一律不动）。 */
+    @Query("UPDATE meal_items SET meal_id = :toMealId WHERE meal_id = :fromMealId")
+    suspend fun reassignToMeal(fromMealId: Long, toMealId: Long)
 }

@@ -11,6 +11,7 @@ import com.ironhabit.app.domain.repository.BodyMetricRepository
 import com.ironhabit.app.domain.util.DateUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -180,6 +181,8 @@ class BodyMetricsViewModel @Inject constructor(
                 )
                 bodyMetricRepository.upsert(metric)
                 _form.update { it.copy(valueText = "", snackbarRes = R.string.msg_saved) }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
             } catch (throwable: Throwable) {
                 _form.update { it.copy(snackbarRes = R.string.error_save_failed) }
             }
@@ -192,6 +195,8 @@ class BodyMetricsViewModel @Inject constructor(
             try {
                 bodyMetricRepository.delete(id)
                 _form.update { it.copy(snackbarRes = R.string.msg_deleted) }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
             } catch (throwable: Throwable) {
                 _form.update { it.copy(snackbarRes = R.string.error_generic) }
             }

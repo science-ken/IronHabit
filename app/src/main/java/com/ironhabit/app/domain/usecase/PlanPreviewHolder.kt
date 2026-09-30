@@ -49,6 +49,15 @@ class PlanPreviewHolder @Inject constructor() {
     /** 目标周**现在**的餐次状态：预览页那两句「保留不动 / 改了它历史会变」的判据。 */
     private var mealSlots: List<MealSlotSnapshot> = emptyList()
 
+    /**
+     * 本次会话里**已采纳**的星期几（V3 报告 P3-10）。
+     *
+     * 部分采纳后用户离开再回来，页面会从 [peek] 重渲染：没有这份记录，
+     * 已写进库的天会被再次当成草案展示。跟着快照走同一份生命周期：
+     * `set()` 换新草案时清零，`clear()` 一起清。
+     */
+    private var adoptedDays: Set<Int> = emptySet()
+
     fun set(
         preview: PlanPreview,
         importNotes: List<ExternalPlanNote> = emptyList(),
@@ -63,6 +72,7 @@ class PlanPreviewHolder @Inject constructor() {
         this.reasons = reasons
         this.dietDrafts = dietDrafts
         this.mealSlots = mealSlots
+        this.adoptedDays = emptySet()
     }
 
     /** 取出当前快照但不消耗它（页面重建、配置变更时还要能再渲染一次）。 */
@@ -79,6 +89,14 @@ class PlanPreviewHolder @Inject constructor() {
 
     fun peekMealSlots(): List<MealSlotSnapshot> = mealSlots
 
+    /** 本会话已采纳的天（预览页重渲染时据此把那些天显示为「已采纳」而非草案）。 */
+    fun peekAdoptedDays(): Set<Int> = adoptedDays
+
+    /** 记录一批刚写进库的天（幂等：重复标记无副作用）。 */
+    fun markDaysAdopted(days: Set<Int>) {
+        adoptedDays = adoptedDays + days
+    }
+
     /** 采纳完 / 取消完必须清掉，避免下一次进来看到上一次的陈旧草案。 */
     fun clear() {
         current = null
@@ -87,5 +105,6 @@ class PlanPreviewHolder @Inject constructor() {
         reasons = emptyMap()
         dietDrafts = emptyList()
         mealSlots = emptyList()
+        adoptedDays = emptySet()
     }
 }

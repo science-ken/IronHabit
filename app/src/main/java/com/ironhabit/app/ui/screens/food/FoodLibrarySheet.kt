@@ -28,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -46,6 +47,7 @@ import com.ironhabit.app.domain.model.FoodSource
 import com.ironhabit.app.ui.components.dietRestrictionLabelRes
 import com.ironhabit.app.ui.theme.IronHabitShapes
 import com.ironhabit.app.ui.theme.IronHabitSpacing
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -154,6 +156,20 @@ fun FoodLibrarySheet(
                     onSaved = { viewModel.onFormDismiss() },
                 )
             } else {
+                // 停用/启用的库写失败（罕见）要有一句可见的落点：以前异常直接冒到
+                // `scope.launch` 上把 App 点崩，现在落库失败自会在这里说一声（V2-P3-3）。
+                if (uiState.errorRes != 0) {
+                    Text(
+                        text = stringResource(uiState.errorRes),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    LaunchedEffect(uiState.errorRes) {
+                        delay(ERROR_MESSAGE_MILLIS)
+                        viewModel.onConsumeError()
+                    }
+                }
                 FoodListSection(
                     uiState = uiState,
                     viewModel = viewModel,
@@ -663,3 +679,6 @@ private fun servingSummaryText(servings: List<FoodServing>): String =
  * 卡片高度反而追平了旧版一条一行占的垂直空间。
  */
 private const val GRID_COLUMNS = 2
+
+/** 列表级错误（停用/启用失败）的展示时长，过后自动消失。 */
+private const val ERROR_MESSAGE_MILLIS = 3_000L

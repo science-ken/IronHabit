@@ -17,6 +17,7 @@ import com.ironhabit.app.domain.usecase.ToggleHabitUseCase
 import com.ironhabit.app.domain.util.TodayClock
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -156,6 +157,9 @@ class DisciplineViewModel @Inject constructor(
             try {
                 toggleHabit(habitId = habitId, epochDay = epochDay, done = done)
                 _uiState.update { state -> state.copy(snackbarRes = R.string.msg_saved) }
+            } catch (cancellation: CancellationException) {
+                // 取消必须穿透：吞掉会让 VM 清理/页面切走的协程取消静默失效（P3-22）。
+                throw cancellation
             } catch (throwable: Throwable) {
                 _uiState.update { state -> state.copy(errorRes = R.string.error_generic) }
             }
@@ -172,6 +176,9 @@ class DisciplineViewModel @Inject constructor(
                 _uiState.update { state ->
                     state.copy(snackbarRes = R.string.msg_deleted, showDeleted = true)
                 }
+            } catch (cancellation: CancellationException) {
+                // 取消必须穿透：吞掉会让 VM 清理/页面切走的协程取消静默失效（P3-22）。
+                throw cancellation
             } catch (throwable: Throwable) {
                 _uiState.update { state -> state.copy(errorRes = R.string.error_generic) }
             }
@@ -189,6 +196,9 @@ class DisciplineViewModel @Inject constructor(
             try {
                 restoreHabit(habitId)
                 _uiState.update { state -> state.copy(snackbarRes = R.string.msg_restored) }
+            } catch (cancellation: CancellationException) {
+                // 取消必须穿透：吞掉会让 VM 清理/页面切走的协程取消静默失效（P3-22）。
+                throw cancellation
             } catch (throwable: Throwable) {
                 _uiState.update { state -> state.copy(errorRes = R.string.error_generic) }
             }

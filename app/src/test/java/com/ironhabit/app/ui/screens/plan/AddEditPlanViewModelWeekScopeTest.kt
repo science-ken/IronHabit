@@ -47,11 +47,16 @@ class AddEditPlanViewModelWeekScopeTest {
     private val exerciseRepository = mockk<ExerciseRepository>(relaxed = true)
     private val planRepository = mockk<PlanRepository>(relaxed = true)
 
-    /** @param clock 默认沿用真实时钟；只有跨周那条测试需要拨动它。 */
+    /** 固定时钟（V3 报告 B-3）：消除"断言口径与 VM 内部取值跨午夜不一致"的偶发 flake 窗口。 */
+    private val fixedClock: Clock = object : Clock {
+        override fun now(): Instant = Instant.parse("2026-09-20T04:00:00Z")
+    }
+
+    /** @param clock 默认用固定时钟；只有跨周那条测试需要拨动它。 */
     private fun viewModel(
         planId: Long = 0L,
         week: Long? = null,
-        clock: Clock = Clock.System,
+        clock: Clock = fixedClock,
     ): AddEditPlanViewModel {
         every { exerciseRepository.observeActive() } returns flowOf(emptyList())
         every { planRepository.observeAll() } returns flowOf(existingRows(planId))
@@ -108,7 +113,7 @@ class AddEditPlanViewModelWeekScopeTest {
     fun newPlanWithoutRouteWeekFallsBackToCurrentWeek() = runTest(mainDispatcherRule.testDispatcher) {
         val vm = viewModel()
         backgroundScope.launch { vm.uiState.collect { } }
-        val expected = DateUtils.weekStartMon1(DateUtils.todayEpochDay(Clock.System, TimeZone.UTC))
+        val expected = DateUtils.weekStartMon1(DateUtils.todayEpochDay(fixedClock, TimeZone.UTC))
         assertEquals(expected, saveAndCapture(vm).weekStartEpochDay)
     }
 
@@ -116,7 +121,7 @@ class AddEditPlanViewModelWeekScopeTest {
     fun templateSentinelZeroNeverReachesTheDatabase() = runTest(mainDispatcherRule.testDispatcher) {
         val vm = viewModel(week = 0L)
         backgroundScope.launch { vm.uiState.collect { } }
-        val expected = DateUtils.weekStartMon1(DateUtils.todayEpochDay(Clock.System, TimeZone.UTC))
+        val expected = DateUtils.weekStartMon1(DateUtils.todayEpochDay(fixedClock, TimeZone.UTC))
         assertEquals(
             "week=0 是「每周相同」的哨兵值，路由上出现它只能当「没指定」，写进库就是在改模板",
             expected,

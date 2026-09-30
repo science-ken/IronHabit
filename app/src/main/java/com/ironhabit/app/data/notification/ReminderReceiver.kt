@@ -67,8 +67,12 @@ class ReminderReceiver : BroadcastReceiver() {
                 // 习惯提醒要写习惯名，所以要查一次库；训练提醒不需要。
                 val habit = habitId?.let { id -> habitRepository.getHabit(id) }
 
-                if (type == ReminderType.HABIT && habit == null) {
-                    // 习惯在这条闹钟触发前已被删除 → 不发通知，也不再续排
+                // ⚠️ 删除是**软删**（`getById` 不过滤 `is_active`），所以"行还在"不等于
+                // "习惯还在"。只判 `habit == null` 时，删除与触发的竞态（触发后协程里
+                // `scheduleHabitNext` 晚于 `cancelHabit` 落地）会给已删习惯再续一命，
+                // 产生每天响到下次冷启动才自愈的孤儿闹钟（V3 报告 P3-5）。
+                if (type == ReminderType.HABIT && habit?.isActive != true) {
+                    // 习惯不存在或已软删 → 不发通知，也不再续排
                     // （续排下去就是一个永远没人撤的孤儿闹钟）。
                     habitId?.let { id -> reminderScheduler.cancelHabit(id) }
                     return@launch

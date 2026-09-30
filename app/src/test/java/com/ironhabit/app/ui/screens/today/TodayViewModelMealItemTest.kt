@@ -50,6 +50,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -89,7 +90,12 @@ class TodayViewModelMealItemTest {
     private val buildWeeklyReview = mockk<BuildWeeklyReviewUseCase>()
     private val statsRepository = mockk<StatsRepository>(relaxed = true)
 
-    private val today: Long = DateUtils.todayEpochDay(Clock.System, TimeZone.UTC)
+    /** 固定时钟（V3 报告 B-3）：消除"类初始化与运行期跨午夜"的偶发 flake 窗口。 */
+    private val fixedClock: Clock = object : Clock {
+        override fun now(): Instant = Instant.parse("2026-09-20T04:00:00Z")
+    }
+
+    private val today: Long = DateUtils.todayEpochDay(fixedClock, TimeZone.UTC)
 
     private val meal = Meal(
         id = 77L,
@@ -179,7 +185,7 @@ class TodayViewModelMealItemTest {
             planRepository = planRepository,
             buildWeeklyReview = buildWeeklyReview,
             statsRepository = statsRepository,
-            todayClock = todayClockFor(Clock.System, TimeZone.UTC),
+            todayClock = todayClockFor(fixedClock, TimeZone.UTC),
         )
     }
 
