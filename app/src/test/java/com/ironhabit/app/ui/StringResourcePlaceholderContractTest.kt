@@ -138,9 +138,6 @@ class StringResourcePlaceholderContractTest {
         entry("ai_profile_equipment", ArgKind.STRING) // 档案行器械：joinToString 出来的中文器械名
         entry("ai_profile_weekly_days", ArgKind.NUMERIC) // 档案行「每周 N 练」（trainingDaysPerWeek: Int）
         entry("ai_day_shortfall", ArgKind.NUMERIC, ArgKind.NUMERIC, ArgKind.NUMERIC) // 日卡：计划 / 实际 / 差几组
-        entry("ai_chip_attendance", ArgKind.NUMERIC, ArgKind.NUMERIC) // 复盘屏 chip：实际/计划天数
-        entry("ai_chip_stalled", ArgKind.NUMERIC) // 复盘屏 chip：停滞周数
-        entry("ai_chip_no_rpe", ArgKind.NUMERIC) // 复盘屏 chip：没记 RPE 的组数（下界）
 
         // 「我的」页 J 版首屏（档案卡 / 四联）
         entry("value_profile_fraction", ArgKind.NUMERIC, ArgKind.NUMERIC) // ProfileCompletenessRing 环中央「4/6」

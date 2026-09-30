@@ -786,10 +786,6 @@
     <string name="ai_profile_weekly_days">每周 %1$d 练</string>
 
     <!-- ===== 复盘屏的异常 chips（点一下把带数字的问题塞进提问框）===== -->
-    <string name="ai_chip_attendance">这周只练了 %1$d/%2$d 天</string>
-    <string name="ai_chip_stalled">有动作连续 %1$d 周没涨</string>
-    <string name="ai_chip_no_rpe">有 %1$d 组没记 RPE</string>
-    <string name="ai_chip_one_weighin">本周只称了 1 次</string>
     <!-- 这条只说本页那条的口径。与「今日」页那条（按打卡条数上色）**刻意不同**，
          差异不再写进用户可见文案（走查 #4），要改先两处一起看。 -->
     <string name="ai_review_heat_basis">颜色深浅 = 当天练完的组数</string>

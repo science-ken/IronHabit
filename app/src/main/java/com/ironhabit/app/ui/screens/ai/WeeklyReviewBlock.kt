@@ -60,7 +60,6 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.draw.scale
 import com.ironhabit.app.domain.model.WeekDayDetail
-import androidx.annotation.StringRes
 import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.saveable.rememberSaveable
 
@@ -117,9 +116,6 @@ internal fun WeeklyReviewBlock(
                 expanded = expanded,
                 onToggleExpanded = { expanded = !expanded },
             )
-
-            AnomalyChips(review = review)
-
 
             val openIndex: Int? = selectedDayIndex
             val day: WeekDayDetail? = openIndex?.let { review.days.getOrNull(it) }
@@ -551,102 +547,6 @@ internal fun WeekPackageSheet(
                 }
             }
         }
-    }
-}
-
-/**
- * 一枚异常 chip 的短标签（带真实数字）。
- *
- * 以前这里还带一份"点下去塞进提问框的完整问题"—— 那个提问框随 API Key 直连一起删了，
- * 留着两个没人消费的字段只会让人以为 chip 还可点。
- */
-internal data class ReviewChip(
-    @StringRes val labelRes: Int,
-    val labelArgs: List<Any>,
-)
-
-/**
- * 由周复盘的**异常**驱动 chip（不是每个数字都可点 —— 12 个入口太密）。
- *
- * ⚠️ 每条 chip 的数字都必须从 [WeeklyReview] 里算出来，不许写死：
- * 没数据支撑的 chip 干脆不出现，全周干净就只剩一枚"没有异常"的虚线 chip。
- */
-internal fun reviewChips(review: WeeklyReview): List<ReviewChip> {
-    val chips = mutableListOf<ReviewChip>()
-    val training = review.training
-
-    if (training.plannedDays > 0 && training.completedDays < training.plannedDays) {
-        chips += ReviewChip(
-            labelRes = R.string.ai_chip_attendance,
-            labelArgs = listOf(training.completedDays, training.plannedDays),
-        )
-    }
-
-    training.stalled.maxByOrNull { trend -> trend.stagnantWeeks }?.let { trend ->
-        chips += ReviewChip(
-            labelRes = R.string.ai_chip_stalled,
-            labelArgs = listOf(trend.stagnantWeeks),
-        )
-    }
-
-    // 没记 RPE 的组数：只统计得上动作名的那些行（查不到名字的行本来就不进 items），
-    // 所以这是个**下界** —— 宁可少报，也不报一个算不出来的数。
-    val setsWithoutRpe: Int = review.days.sumOf { day ->
-        day.items.filter { item -> item.rpe == null }.sumOf { item -> item.sets }
-    }
-    if (setsWithoutRpe > 0) {
-        chips += ReviewChip(
-            labelRes = R.string.ai_chip_no_rpe,
-            labelArgs = listOf(setsWithoutRpe),
-        )
-    }
-
-    if (review.body.sampleCount == 1) {
-        chips += ReviewChip(
-            labelRes = R.string.ai_chip_one_weighin,
-            labelArgs = emptyList(),
-        )
-    }
-
-    return chips
-}
-
-/**
- * 横向可滚的异常 chip 行。**纯展示** —— 没有异常时整行不渲染。
- *
- * 以前 chip 可点：点一下切到「问教练」并把带数字的完整问题填进输入框。那条通道已删，
- * 所以这里连 `clickable` 一起摘掉 —— 留着可点的外观、点下去什么都不发生，
- * 用户读到的是"这 App 点不动"。
- */
-@Composable
-private fun AnomalyChips(review: WeeklyReview) {
-    val chips: List<ReviewChip> = reviewChips(review)
-    if (chips.isEmpty()) return
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(IronHabitSpacing.sm),
-    ) {
-        chips.forEach { chip ->
-            Chip(text = stringResource(chip.labelRes, *chip.labelArgs.toTypedArray()))
-        }
-    }
-}
-
-@Composable
-private fun Chip(text: String) {
-    Box(
-        modifier = Modifier
-            .clip(IronHabitShapes.full)
-            .background(MaterialTheme.colorScheme.tertiaryContainer)
-            .padding(horizontal = IronHabitSpacing.lg, vertical = IronHabitSpacing.sm),
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onTertiaryContainer,
-        )
     }
 }
 
