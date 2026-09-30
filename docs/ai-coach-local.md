@@ -526,6 +526,14 @@ fun providePlanAdvisor(): PlanAdvisor =
 
 ### 6.4 联网一期的口径更正（**全库扫描结论**）
 
+> ⚠️ **撤销记录（2026-09-30 · v2.0.14）**：下面这张表连同 §6.1–§6.3、§6.5 的 N1–N8 **全部作废**，
+> 但**原文一律保留不改** —— 它们记的是"当时为什么那样决定"，抹掉会让后来的人以为联网从没被想过。
+> 联网一期整条已于 commit `53a7a26` 删除：`domain/ai/remote/` 四个文件、`AiCredentialsStore`、
+> `DelegatingPlanAdvisor`、`INTERNET` 权限、`androidx.security:security-crypto`、
+> `ai_remote_enabled` 偏好键、`SettingsBackup.aiRemoteEnabled` 一起走，App 回到**零联网**。
+> 当前真相见 `docs/ARCHITECTURE.md` §7.7 与 §2.13 的撤销记录。
+> 表里"更正后"那一列描述的是**已经不存在的行为**，不要照它改代码。
+
 | 位置 | 原表述 | 更正后 |
 |------|--------|--------|
 | `ARCHITECTURE.md` 头部"定位" | 单机离线 | **单机优先 · 可选联网**（AI 教练联网一期；默认关闭，无 Key 时与纯离线一致） |

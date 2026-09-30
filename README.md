@@ -1,6 +1,6 @@
 # IronHabit（自律健身）· 单机离线 Android App
 
-> 个人自用 · 单机离线（可选联网：默认关闭，仅 AI 教练） · 仅 Android · 无账号无广告 · 不上架
+> 个人自用 · 单机完全离线 · 仅 Android · 无账号无广告 · 不上架
 > 包名：`com.ironhabit.app` ｜ 语言：简体中文 ｜ 技术栈：Kotlin + Jetpack Compose(M3) + Hilt + Room
 
 ## 这是什么
@@ -12,7 +12,7 @@
 - **自律**：习惯追踪（每日/每周）、日历热力图、连续天数。
 - **我的**：近 30 天趋势图 + 分类占比图、身体数据、设置（主题/单位/提醒/备份）。
 
-**核心红线：核心链路纯离线运行。** 打卡 / 统计 / 提醒 / 备份全部数据落本地 Room，飞行模式下功能完整。联网是**可选**能力（AI 教练一期 · DeepSeek · 用户自填 Key · **默认关闭**）：关闭、未配 Key 或断网时自动回落本地规则，功能完整；详见 `docs/ARCHITECTURE.md` §7.7。
+**核心红线：零联网。** 打卡 / 统计 / 提醒 / 备份 / 教练页全部数据落本地 Room，App 不申请网络权限，飞行模式下功能完整。曾经有过一条「用户自填 API Key 直连 DeepSeek」的可选联网通道，连同 `INTERNET` 权限与密钥存储在 v2.0.14 整条删除；详见 `docs/ARCHITECTURE.md` §7.7。想用真 AI 的判断，走「导入训练 / 导入饮食」那条离线回程：App 生成提问模板 → 用户在自己手机外面问 AI → 把回答粘回来逐天确认，App 一次网络都不发。
 
 ## 快速导航
 
@@ -54,7 +54,7 @@ IronHabit/
 │   ├─ build.gradle.kts         # 模块构建 + 签名配置
 │   ├─ proguard-rules.pro       # R8 保留规则
 │   └─ src/main/
-│       ├─ AndroidManifest.xml  # 权限白名单：本地能力 + INTERNET（仅 AI 教练，默认关闭）
+│       ├─ AndroidManifest.xml  # 权限白名单：全部为本地能力，无 INTERNET
 │       ├─ java/com/ironhabit/app/
 │       │   ├─ IronHabitApp.kt  # @HiltAndroidApp 入口
 │       │   ├─ MainActivity.kt  # @AndroidEntryPoint
@@ -75,22 +75,22 @@ IronHabit/
 
 ## 网络红线校验（CI 自动执行）
 
-联网是**可选**能力，红线由 `android-ci.yml` 的**权限白名单**守住（push / PR 自动执行）：
+零联网是硬约束，红线由 `android-ci.yml` 两道检查守住（push / PR 自动执行）：
 
 ```bash
-# ① 依赖红线：不得引入任何网络 / 云服务库（核心链路只允许 HttpURLConnection 直连）
-grep -RE "retrofit|okhttp|ktor|firebase|play-services|volley" \
-     app/build.gradle.kts gradle/libs.versions.toml       # 期望：无输出（命中即 ::error:: 失败）
+# ① 依赖红线：现扫全部构建脚本，不得出现任何网络 / 云服务库（-i 堵大小写变体）
+grep -iHE 'retrofit|okhttp|ktor|firebase|play-services|volley' $BUILD_FILES
+#   grep 退出码：0=命中（违规）1=未命中（放行）2+=脚本异常（一律按违规处理）
 
-# ② 权限白名单：AndroidManifest 只允许下面 6 个权限，多一个即失败
-ALLOWED='android.permission.SCHEDULE_EXACT_ALARM|android.permission.USE_EXACT_ALARM|android.permission.POST_NOTIFICATIONS|android.permission.RECEIVE_BOOT_COMPLETED|android.permission.VIBRATE|android.permission.INTERNET'
-BAD=$(grep -oE 'android\.permission\.[A-Z_]+' app/src/main/AndroidManifest.xml | sort -u \
-      | grep -Ev "^($ALLOWED)$" || true)
-[ -z "$BAD" ] || { echo "发现白名单之外的权限：$BAD"; exit 1; }
+# ② 权限白名单：解析**合并后**的 manifest（依赖库注入的权限同样逃不过白名单）
+ALLOWED='android.permission.schedule_exact_alarm|android.permission.post_notifications|android.permission.receive_boot_completed|android.permission.vibrate'
 ```
 
-> 即：`INTERNET` **已放行，但仅限 AI 教练**；账号 / 云同步 / 广告类权限一律不得新增（白名单之外 = CI 红叉）。
-> 关闭联网、未配 Key 或断网时 App 功能完整（自动回落本地规则），打卡 / 统计 / 提醒 / 备份始终不依赖网络。
+> 白名单是**子集判定**：声明了表外的权限 = CI 红。`INTERNET` 与 `USE_EXACT_ALARM` 都**刻意不在表里** ——
+> 前者随 v2.0.14 删掉「用户自填 API Key 直连 DeepSeek」那条通道一起摘除，后者是 Play 只发给
+> 闹钟 / 日历类应用的特殊权限。重新声明它们应当逼出一轮决策，而不是被白名单顺手放行。
+> 只统计 `<uses-permission>`：组件上的 `android:permission=` 是访问守卫（"谁才有资格调用我"），
+> 不赋予 App 任何能力 —— 早先的写法把它算进来过，判成 `DUMP` 假阳性。
 
 ## 许可
 

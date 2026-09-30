@@ -1,3 +1,6 @@
+> ⚠️ **历史审查/修复记录（2026-09）。其中「联网一期 / DeepSeek / API Key / INTERNET 权限」相关条目已于 v2.0.14 整条撤销** —— 见 docs/ARCHITECTURE.md §2.13 的撤销记录。文中登记为「已修复」的 P0-2 / V2-P3-5（Keystore 兜底、加密存储主线程）等条目随 AiCredentialsStore 一起删除，不要再按本文去代码里找它们。
+>
+
 # IronHabit（自律健身）App 代码检验报告
 
 | 项目 | 内容 |
